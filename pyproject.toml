@@ -3,7 +3,12 @@ name = "excel-analysis"
 version = "0.8.0"
 description = ""
 readme = "README.md"
-authors = ["David Duran <dadch1404@gmail.com>"]
+
+authors = [
+    { name = "David Duran", email = "dadch1404@gmail.com" }
+]
+
+requires-python = ">=3.10"
 dependencies = [
     "datareader>=0.0.9",
     "pandas-datareader>=0.10.0",
@@ -23,6 +28,13 @@ dev = [
 
 [project.scripts]
 start = "excel_analysis.stock_processing:main"
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.ruff]
 extend-exclude = ["web"]
