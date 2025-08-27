@@ -1,0 +1,31 @@
+[settings.python]
+uv_venv_auto = true
+
+[tools]
+python = "3.13.7"
+uv = "0.8.13"
+ruff = "0.12.10"
+bun = "1.2.21"
+node = "24.6.0"
+
+[tasks.install]
+description = "Install dependencies"
+alias = "i"
+run = "uv sync --all-groups"
+
+[tasks.export]
+description = "Export deps to requirements.txt"
+run = "uv export --format requirements-txt --no-hashes --no-header --no-dev --no-annotate --output-file requirements.txt"
+
+[tasks.fix]
+description = "Lint & format (fix by default)"
+alias = "f"
+run = [
+    "uv run ruff format . --config pyproject.toml",
+    "uv run ruff check --fix --unsafe-fixes . --config pyproject.toml",
+]
+
+[tasks.mypy]
+description = "Type check with mypy"
+alias = "m"
+run = "uv run mypy megaloader --config-file pyproject.toml"
