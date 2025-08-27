@@ -21,7 +21,7 @@ dev = [
     "pre-commit>=3.6.0",
 ]
 
-[tool.poetry.scripts]
+[project.scripts]
 start = "excel_analysis.stock_processing:main"
 
 [tool.ruff]
@@ -68,4 +68,5 @@ enable_error_code = [
 ]
 
 [[tool.mypy.overrides]]
+module = ["requests.*"]
 ignore_missing_imports = true
