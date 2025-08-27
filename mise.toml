@@ -2,7 +2,7 @@
 uv_venv_auto = true
 
 [tools]
-python = "3.13.7"
+python = "3.10.18"
 uv = "0.8.13"
 ruff = "0.12.10"
 bun = "1.2.21"
