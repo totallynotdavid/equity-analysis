@@ -28,7 +28,7 @@ start = "excel_analysis.stock_processing:main"
 extend-exclude = ["web"]
 fix = true
 line-length = 88
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 extend-select = [
@@ -67,6 +67,6 @@ enable_error_code = [
     "truthy-bool",
 ]
 
-[[tool.mypy.overrides]]
-module = ["requests.*"]
-ignore_missing_imports = true
+# [[tool.mypy.overrides]]
+# module = ["requests.*"]
+# ignore_missing_imports = true
