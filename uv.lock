@@ -433,7 +433,7 @@ wheels = [
 [[package]]
 name = "excel-analysis"
 version = "0.8.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "datareader" },
     { name = "openpyxl" },
