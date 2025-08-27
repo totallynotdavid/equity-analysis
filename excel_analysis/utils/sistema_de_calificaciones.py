@@ -1,5 +1,4 @@
 import numpy as np
-from excel_analysis.constants import COLUMN_NAMES
 
 
 def compute_predicted_return(model, X_test):
@@ -16,7 +15,7 @@ def compute_predicted_return(model, X_test):
     return np.sum(model.predict(X_test))
 
 
-def clean_daily_returns(stock_data):
+def clean_daily_returns(stock_data, price_column):
     """
     Procesar los datos de la acción para calcular los retornos diarios y manejar valores NaN o infinitos.
 
@@ -26,7 +25,7 @@ def clean_daily_returns(stock_data):
     Retorna:
     - Retornos diarios de la acción limpios.
     """
-    daily_returns = stock_data[COLUMN_NAMES["price"]].pct_change().dropna()
+    daily_returns = stock_data[price_column].pct_change().dropna()
     daily_returns.replace([np.inf, -np.inf], np.nan, inplace=True)
     daily_returns.interpolate(inplace=True)
     daily_returns.fillna(method="ffill", inplace=True)
@@ -52,7 +51,7 @@ def assign_grade_from_quantiles(value, cuantiles, grades):
     return grades[-1]
 
 
-def assign_stock_grade(stock_data, y_pred, Y_test):
+def assign_stock_grade(stock_data, y_pred, Y_test, price_column):
     """
     Asignar una calificación a la acción basada en el error de predicción y la volatilidad.
 
@@ -65,7 +64,7 @@ def assign_stock_grade(stock_data, y_pred, Y_test):
     - Grade (A, B, C, D, E).
     """
     prediction_error = np.mean(np.abs(y_pred - Y_test))
-    volatility = clean_daily_returns(stock_data).std()
+    volatility = clean_daily_returns(stock_data, price_column).std()
 
     error_quantiles = [0.4, 0.5, 0.6, 0.7]
     volatility_quantiles = [0.6, 0.8, 1.0, 1.2]
@@ -141,3 +140,21 @@ def assign_final_value_grade(final_values):
     grades = ["A", "B", "C", "D", "E"]
 
     return [assign_grade_from_quantiles(fv, cuantiles, grades) for fv in final_values]
+
+
+def asignar_calificaciones_y_actualizar_resultados(results):
+    # Calcular el rendimiento esperado de cada acción
+    predicted_returns = [result.predicted_return for result in results]
+    performance_grades = assign_performance_grade(predicted_returns)
+
+    # Asignar una calificación utilizando el valor final de cada acción
+    final_value_grades = assign_final_value_grade(
+        [result.final_value for result in results]
+    )
+
+    for index, result in enumerate(results):
+        updated_result = result._replace(
+            performance_grade=performance_grades[index],
+            final_value_grade=final_value_grades[index],
+        )
+        results[index] = updated_result

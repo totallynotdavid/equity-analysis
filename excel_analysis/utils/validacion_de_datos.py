@@ -1,3 +1,6 @@
+import logging
+
+
 def validar_dataframe(df, columnas_requeridas):
     """
     Valida el DataFrame antes de procesar.
@@ -11,4 +14,13 @@ def validar_dataframe(df, columnas_requeridas):
     if df.empty or df.isnull().any().any():
         return False
 
+    return True
+
+
+def validar_datos_hoja(df, sheet_name, columnas_requeridas):
+    if not validar_dataframe(df, columnas_requeridas):
+        logging.warning(
+            f"La hoja '{sheet_name}' contiene datos inconsistentes o vacíos. Ignorando esta hoja."
+        )
+        return False
     return True

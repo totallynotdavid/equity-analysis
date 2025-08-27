@@ -1,7 +1,6 @@
 # Archivos
 poetry.lock
 ORIGINAL.ipynb
-stock_results.json
 
 # Directorios
 .pytest_cache/
@@ -11,4 +10,5 @@ stock_results.json
 # Tipos de archivos
 *.xlsx
 *.log
+*.json
 node_modules

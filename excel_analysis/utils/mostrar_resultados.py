@@ -1,3 +1,9 @@
+import logging
+
+from excel_analysis.store_data import store_results_to_json, store_results_to_excel
+from excel_analysis.constants import RESULTS_BASE_FILE_NAME
+
+
 def mostrar_distribucion_puntaje(results):
     """
     Mostar la distribución de las calificaciones de rendimiento.
@@ -60,3 +66,29 @@ def mostrar_top_stocks(resultados_ordenados, valid_sheets):
         mensaje_stocks += "\n\nLas 10 peores 📉:\n" + peores_10
 
     return mensaje_stocks
+
+
+def almacenar_y_mostrar_resultados(results, valid_sheets, output_file_prefix):
+    # Ordenando los resultados
+    resultados_ordenados = sorted(results, key=lambda x: x.final_value, reverse=True)
+
+    json_filename = f"{RESULTS_BASE_FILE_NAME}.json"
+    excel_filename = f"{RESULTS_BASE_FILE_NAME}.xlsx"
+
+    store_results_to_json(
+        resultados_ordenados, filename=json_filename, key=output_file_prefix
+    )
+    store_results_to_excel(
+        resultados_ordenados,
+        filename=excel_filename,
+        sheet_name=output_file_prefix,
+    )
+    logging.info(
+        f"📒 Resultados guardados en los archivos {json_filename} y {excel_filename}"
+    )
+
+    mensaje_distribucion_puntaje = mostrar_distribucion_puntaje(results)
+    logging.info(mensaje_distribucion_puntaje)
+
+    mensaje_top_stocks = mostrar_top_stocks(resultados_ordenados, valid_sheets)
+    print(f"{mensaje_top_stocks}")

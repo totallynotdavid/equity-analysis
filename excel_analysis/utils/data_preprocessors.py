@@ -1,5 +1,4 @@
 import pandas as pd
-from excel_analysis.constants import COLUMN_NAMES
 
 
 def ensure_float64(df, columns_to_check):
@@ -31,18 +30,19 @@ def handle_non_numeric_values(df, columns_to_check):
     df.fillna(method="bfill", inplace=True)
 
 
-def normalize_data(df):
+def normalize_data(df, columns_to_normalize):
     """
     Normalizar los datos para las columnas especificadas en el DataFrame.
     """
-    columns_to_normalize = [COLUMN_NAMES["price"]] + COLUMN_NAMES["features"]
     for column in columns_to_normalize:
         df[column] = (df[column] - df[column].min()) / (
             df[column].max() - df[column].min()
         )
 
 
-def dividir_datos_entrenamiento_prueba(df, train_test_split_ratio):
+def dividir_datos_entrenamiento_prueba(
+    df, feature_columns, detail_column, train_test_split_ratio
+):
     """
     Dividir los datos en conjuntos de entrenamiento y prueba basados en el ratio definido en constants.
     """
@@ -50,11 +50,10 @@ def dividir_datos_entrenamiento_prueba(df, train_test_split_ratio):
     datos_entrenamiento = df.iloc[:train_size]
     datos_prueba = df.iloc[train_size:]
 
-    feature_cols = COLUMN_NAMES["features"]
-    X_train = datos_entrenamiento[feature_cols].values
-    Y_train = datos_entrenamiento[COLUMN_NAMES["detail"]].values.astype("float")
+    X_train = datos_entrenamiento[feature_columns].values
+    Y_train = datos_entrenamiento[detail_column].values.astype("float")
 
-    X_test = datos_prueba[feature_cols].values
-    Y_test = datos_prueba[COLUMN_NAMES["detail"]].values.astype("float")
+    X_test = datos_prueba[feature_columns].values
+    Y_test = datos_prueba[detail_column].values.astype("float")
 
     return X_train, Y_train, X_test, Y_test
