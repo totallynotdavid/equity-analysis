@@ -37,7 +37,7 @@ def store_results_to_excel(results, filename, sheet_name="Sheet1"):
     - results (lista): Lista de resultados.
     - filename (str): Nombre del archivo donde guardar los resultados.
     """
-    df = pd.DataFrame([result._asdict() for result in results])
+    df = pd.DataFrame([r if isinstance(r, dict) else r._asdict() for r in results])
 
     file_exists = os.path.isfile(filename)
 
