@@ -1,14 +1,62 @@
 version: 2
 updates:
+  # === Python Packages ===
+
   - package-ecosystem: "pip"
-    directory: "/"
+    directory: "/packages/core/"
     schedule:
       interval: "daily"
     target-branch: "master"
     commit-message:
-      prefix: "chore"
+      prefix: "chore(deps)"
       include: "scope"
-    reviewers:
-      - "totallynotdavid"
     labels:
       - "dependencies"
+    groups:
+      python-core:
+        patterns: ["*"]
+
+  - package-ecosystem: "pip"
+    directory: "/packages/cli/"
+    schedule:
+      interval: "daily"
+    target-branch: "master"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
+    groups:
+      python-cli:
+        patterns: ["*"]
+
+  - package-ecosystem: "pip"
+    directory: "/packages/api/"
+    schedule:
+      interval: "daily"
+    target-branch: "master"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
+    groups:
+      python-api:
+        patterns: ["*"]
+
+  # === Frontend Package ===
+
+  - package-ecosystem: "npm"
+    directory: "/web/"
+    schedule:
+      interval: "daily"
+    target-branch: "master"
+    commit-message:
+      prefix: "chore(deps-js)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "javascript"
+    groups:
+      frontend:
+        patterns: ["*"]
