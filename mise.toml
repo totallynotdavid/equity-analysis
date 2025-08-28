@@ -1,31 +1,47 @@
-[settings.python]
+[settings]
 uv_venv_auto = true
 
 [tools]
-python = "3.10.18"
-uv = "0.8.13"
-ruff = "0.12.10"
-bun = "1.2.21"
-node = "24.6.0"
+python = "3.11.9"
+uv = "0.1.41"
+ruff = "0.4.4"
+bun = "1.1.8"
 
 [tasks.install]
-description = "Install dependencies"
+description = "Install all workspace packages and dependencies from uv.lock"
 alias = "i"
-run = "uv sync --all-groups"
-
-[tasks.export]
-description = "Export deps to requirements.txt"
-run = "uv export --format requirements-txt --no-hashes --no-header --no-dev --no-annotate --output-file requirements.txt"
+run = "uv sync --dev"
 
 [tasks.fix]
-description = "Lint & format (fix by default)"
+description = "Lint & format all .py files"
 alias = "f"
 run = [
-    "uv run ruff format . --config pyproject.toml",
-    "uv run ruff check --fix --unsafe-fixes . --config pyproject.toml",
+    "uv run ruff format .",
+    "uv run ruff check . --fix --unsafe-fixes",
+]
+
+[tasks.check]
+description = "Check for linting and formatting errors without fixing"
+alias = "c"
+run = [
+    "uv run ruff format . --check",
+    "uv run ruff check .",
 ]
 
 [tasks.mypy]
-description = "Type check with mypy"
+description = "Type check the entire codebase with mypy"
 alias = "m"
-run = "uv run mypy excel_analysis --config-file pyproject.toml"
+run = "uv run mypy ."
+
+[tasks.cli]
+description = "Run the CLI application with default arguments"
+# usage example: `mise run cli -- --debug`
+run = "uv run run-analysis -- {{args}}"
+
+[tasks.api]
+description = "Start the FastAPI development server"
+run = "uv run uvicorn equity_analyzer_api.main:app --reload --app-dir ./packages/api/src/"
+
+# [tasks.web]
+# description = "Start the Bun/Astro development server for the web frontend"
+# run = "bun --cwd ./web dev"
