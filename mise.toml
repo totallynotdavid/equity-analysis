@@ -10,7 +10,10 @@ bun = "1.2.21"
 [tasks.install]
 description = "Install all workspace packages and dependencies from uv.lock"
 alias = "i"
-run = "uv pip install -e ./packages/core -e ./packages/cli -e ./packages/api"
+run = [
+    "uv pip install -e ./packages/core -e ./packages/cli -e ./packages/api",
+    "cd web && bun install",
+]
 
 [tasks.fix]
 description = "Lint & format all .py files"
@@ -34,6 +37,6 @@ run = "uv run run-analysis"
 description = "Start the FastAPI development server"
 run = "uv run uvicorn equity_analyzer_api.main:app --reload --app-dir ./packages/api/"
 
-# [tasks.web]
-# description = "Start the Bun/Astro development server for the web frontend"
-# run = "bun --cwd ./web dev"
+[tasks.web]
+description = "Start the Bun/Astro development server for the web frontend"
+run = "bun --cwd ./web dev"
