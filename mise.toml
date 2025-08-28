@@ -10,7 +10,7 @@ bun = "1.2.21"
 [tasks.install]
 description = "Install all workspace packages and dependencies from uv.lock"
 alias = "i"
-run = "uv sync --dev"
+run = "uv sync --all-packages"
 
 [tasks.fix]
 description = "Lint & format all .py files"
