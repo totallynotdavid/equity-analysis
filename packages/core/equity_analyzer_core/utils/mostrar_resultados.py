@@ -1,7 +1,10 @@
 import logging
 
-from excel_analysis.constants import RESULTS_BASE_FILE_NAME
-from excel_analysis.store_data import store_results_to_excel, store_results_to_json
+from equity_analyzer_core.constants import RESULTS_BASE_FILE_NAME
+from equity_analyzer_core.store_data import (
+    store_results_to_excel,
+    store_results_to_json,
+)
 
 
 def mostrar_distribucion_puntaje(results):

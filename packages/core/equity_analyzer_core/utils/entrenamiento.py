@@ -1,7 +1,7 @@
 import pandas as pd
 
-from excel_analysis.models.neural_networks import entrenar_regresor_mlp
-from excel_analysis.utils.data_preprocessors import (
+from equity_analyzer_core.models.neural_networks import entrenar_regresor_mlp
+from equity_analyzer_core.utils.data_preprocessors import (
     dividir_datos_entrenamiento_prueba,
     ensure_float64,
     handle_non_numeric_values,

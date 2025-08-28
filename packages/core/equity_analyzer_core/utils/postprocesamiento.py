@@ -1,12 +1,11 @@
 import numpy as np
 import pandas as pd
 
-from excel_analysis.constants import WEIGHTS, SheetResult
-from excel_analysis.models.neural_networks import obtener_threshold_optimo
-from excel_analysis.utils.sistema_de_calificaciones import (
-    assign_stock_grade,
-)
 from openpyxl import load_workbook
+
+from equity_analyzer_core.constants import WEIGHTS, SheetResult
+from equity_analyzer_core.models.neural_networks import obtener_threshold_optimo
+from equity_analyzer_core.utils.sistema_de_calificaciones import assign_stock_grade
 
 
 def calcular_calificaciones_y_umbral(df, y_pred, Y_test, price_column, sheet_name):
