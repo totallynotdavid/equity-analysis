@@ -3,12 +3,13 @@ poetry.lock
 ORIGINAL.ipynb
 
 # Directorios
-.pytest_cache/
 **/__pycache__/
-.ipynb_checkpoints/
+.pytest_cache
+.ipynb_checkpoints
+node_modules
 
 # Tipos de archivos
+/*.json
 *.xlsx
 *.log
-*.json
-node_modules
+*.ps1
