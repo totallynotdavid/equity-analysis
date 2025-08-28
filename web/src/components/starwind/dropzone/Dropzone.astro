@@ -14,7 +14,12 @@ type Props = HTMLAttributes<"input"> & {
 };
 
 // extract id separately so it can be used in the label. The input will get the same id with "-input" suffix.
-const { class: className, id, isUploading = false, ...rest } = Astro.props as Props;
+const {
+  class: className,
+  id,
+  isUploading = false,
+  ...rest
+} = Astro.props as Props;
 
 const root = tv({
   base: [
@@ -59,13 +64,16 @@ const root = tv({
 
     constructor(label: HTMLLabelElement, idx: number) {
       this.label = label;
-      const maybeInput = label.querySelector<HTMLInputElement>('input[type="file"]');
+      const maybeInput =
+        label.querySelector<HTMLInputElement>('input[type="file"]');
       if (!maybeInput) {
         throw new Error("No file input found inside starwind-dropzone");
       }
       this.input = maybeInput;
       this.uploadIndicator = label.querySelector(".starwind-upload-indicator");
-      this.loadingIndicator = label.querySelector(".starwind-loading-indicator");
+      this.loadingIndicator = label.querySelector(
+        ".starwind-loading-indicator",
+      );
       this.filesList = label.querySelector(".starwind-files-list");
 
       // generate ID
@@ -91,7 +99,10 @@ const root = tv({
     private observeAttributeChanges() {
       this.observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
-          if (mutation.type === "attributes" && mutation.attributeName === "data-is-uploading") {
+          if (
+            mutation.type === "attributes" &&
+            mutation.attributeName === "data-is-uploading"
+          ) {
             this.handleAttributeChange();
           }
         });
@@ -216,15 +227,17 @@ const root = tv({
   const fileInputInstances = new WeakMap<HTMLElement, FileInputHandler>();
 
   const setupFileInputs = () => {
-    document.querySelectorAll<HTMLLabelElement>(".starwind-dropzone").forEach((label, idx) => {
-      if (!fileInputInstances.has(label)) {
-        try {
-          fileInputInstances.set(label, new FileInputHandler(label, idx));
-        } catch {
-          /* ignore labels without inputs */
+    document
+      .querySelectorAll<HTMLLabelElement>(".starwind-dropzone")
+      .forEach((label, idx) => {
+        if (!fileInputInstances.has(label)) {
+          try {
+            fileInputInstances.set(label, new FileInputHandler(label, idx));
+          } catch {
+            /* ignore labels without inputs */
+          }
         }
-      }
-    });
+      });
   };
 
   setupFileInputs();

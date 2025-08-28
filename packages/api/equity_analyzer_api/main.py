@@ -2,11 +2,11 @@ import logging
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from fastapi.middleware.cors import CORSMiddleware  # 1. Import CORSMiddleware
 
 from equity_analyzer_api.workflows import analysis_workflow
 
 
-# Configure logging for the API
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -14,6 +14,19 @@ app = FastAPI(
     title="Equity Analysis API",
     description="Upload Excel files to run stock analysis.",
     version="1.0.0",
+)
+
+origins = [
+    "http://localhost:4321",
+    "http://127.0.0.1:4321",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -27,17 +40,13 @@ async def analyze_excel_files(files: list[UploadFile]):
     """
     required_files = {"MEXBOL.xlsx", "IFMEXICO.xlsx", "IEMEXICO.xlsx"}
     uploaded_filenames = {file.filename for file in files}
-
     if not required_files.issubset(uploaded_filenames):
         missing = required_files - uploaded_filenames
         raise HTTPException(
             status_code=400,
             detail=f"Missing required files. Please upload all of: {', '.join(missing)}",
         )
-
     try:
-        # Since the core analysis function is synchronous (CPU-bound),
-        # run it in a threadpool to avoid blocking the server's event loop.
         results = await run_in_threadpool(
             analysis_workflow.process_uploaded_files, files=files
         )
