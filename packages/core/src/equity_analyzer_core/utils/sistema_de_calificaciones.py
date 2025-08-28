@@ -45,7 +45,7 @@ def assign_grade_from_quantiles(value, cuantiles, grades):
     Retorna:
     - Grado asignado.
     """
-    for q, grade in zip(cuantiles, grades):
+    for q, grade in zip(cuantiles, grades, strict=False):
         if value <= q:
             return grade
     return grades[-1]
@@ -91,7 +91,7 @@ def assign_stock_grade(stock_data, y_pred, Y_test, price_column):
 
     grades = ["A", "B", "C", "D", "E"]
 
-    for condition, grade in zip(conditions, grades):
+    for condition, grade in zip(conditions, grades, strict=False):
         if condition:
             return grade
 

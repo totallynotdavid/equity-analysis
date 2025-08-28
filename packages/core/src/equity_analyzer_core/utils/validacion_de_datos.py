@@ -11,10 +11,7 @@ def validar_dataframe(df, columnas_requeridas):
 
     df.dropna(subset=columnas_requeridas, inplace=True)
 
-    if df.empty or df.isnull().any().any():
-        return False
-
-    return True
+    return not (df.empty or df.isnull().any().any())
 
 
 def validar_datos_hoja(df, sheet_name, columnas_requeridas):

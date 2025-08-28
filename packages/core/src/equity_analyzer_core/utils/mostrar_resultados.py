@@ -1,7 +1,7 @@
 import logging
 
-from excel_analysis.store_data import store_results_to_json, store_results_to_excel
 from excel_analysis.constants import RESULTS_BASE_FILE_NAME
+from excel_analysis.store_data import store_results_to_excel, store_results_to_json
 
 
 def mostrar_distribucion_puntaje(results):
@@ -90,5 +90,4 @@ def almacenar_y_mostrar_resultados(results, valid_sheets, output_file_prefix):
     mensaje_distribucion_puntaje = mostrar_distribucion_puntaje(results)
     logging.info(mensaje_distribucion_puntaje)
 
-    mensaje_top_stocks = mostrar_top_stocks(resultados_ordenados, valid_sheets)
-    print(f"{mensaje_top_stocks}")
+    mostrar_top_stocks(resultados_ordenados, valid_sheets)

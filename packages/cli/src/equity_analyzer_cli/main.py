@@ -1,13 +1,17 @@
 import argparse
 import json
 import logging
+
 from pathlib import Path
 
 # Imports from the core library
 from equity_analyzer_core.analysis_runner import run_full_analysis
 from equity_analyzer_core.constants import RESULTS_BASE_FILE_NAME
 from equity_analyzer_core.store_data import store_results_to_excel
-from equity_analyzer_core.utils.registro import configurar_registro, establecer_nivel_debug
+from equity_analyzer_core.utils.registro import (
+    configurar_registro,
+    establecer_nivel_debug,
+)
 
 
 def main():
@@ -52,7 +56,9 @@ def main():
     results_data = run_full_analysis(args.data_dir)
 
     if not results_data:
-        logging.error("Analysis finished with no results. Please check input files and logs.")
+        logging.error(
+            "Analysis finished with no results. Please check input files and logs."
+        )
         return
 
     # The CLI is responsible for handling outputs
@@ -66,27 +72,19 @@ def main():
 
     # Save to Excel
     for config_name, results_list in results_data.items():
-        if results_list: # Ensure there are results before trying to save
-             store_results_to_excel(
+        if results_list:  # Ensure there are results before trying to save
+            store_results_to_excel(
                 results_list,
                 filename=str(excel_output_path),
                 sheet_name=config_name,
             )
     logging.info(f"Excel results saved to {excel_output_path}")
 
-    print("\n--- Analysis Summary ---")
     for config_name, results in results_data.items():
-        print(f"\nTop 5 results for '{config_name}':")
         if not results:
-            print("  No results generated.")
             continue
-        for result in results[:5]:
-            print(
-                f"  - Sheet: {result['sheet_name']}, "
-                f"Final Value: {result['final_value']:.2f}, "
-                f"Grade: {result['grade']}"
-            )
-    print(f"\n✅ Analysis complete. Full results saved in '{args.output_dir}'.")
+        for _result in results[:5]:
+            pass
 
 
 if __name__ == "__main__":

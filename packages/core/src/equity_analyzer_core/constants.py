@@ -1,5 +1,6 @@
 from collections import namedtuple
 
+
 RESULTS_BASE_FILE_NAME = "resultados"  # Nombre base para los archivos de resultados
 
 INDEX_COLUMN = "FECHA"

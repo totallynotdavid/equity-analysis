@@ -4,6 +4,7 @@ Fecha de creación: 05/08/2023
 Fecha de moficación: 14/01/2024
 Este paquete se utiliza para comprobar si cierta acción va a subir o bajar usando machine learning.
 """
+
 import logging
 
 from equity_analyzer_core.constants import TRAIN_TEST_SPLIT_RATIO

@@ -1,5 +1,6 @@
-import os
 import json
+import os
+
 import pandas as pd
 
 
@@ -13,7 +14,7 @@ def store_results_to_json(results, filename, key="Default"):
     - key (str): Key representando el nombre original del archivo.
     """
     if os.path.exists(filename):
-        with open(filename, "r") as file:
+        with open(filename) as file:
             data = json.load(file)
     else:
         data = {}
@@ -26,8 +27,6 @@ def store_results_to_json(results, filename, key="Default"):
 
     with open(filename, "w") as file:
         json.dump(data, file, ensure_ascii=False, indent=4)
-
-    print(f"Resultados guardados en el archivo JSON {filename} bajo la clave '{key}'.")
 
 
 def store_results_to_excel(results, filename, sheet_name="Sheet1"):

@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
-from openpyxl import load_workbook
 
+from excel_analysis.constants import WEIGHTS, SheetResult
+from excel_analysis.models.neural_networks import obtener_threshold_optimo
 from excel_analysis.utils.sistema_de_calificaciones import (
     assign_stock_grade,
 )
-from excel_analysis.models.neural_networks import obtener_threshold_optimo
-from excel_analysis.constants import SheetResult, WEIGHTS
+from openpyxl import load_workbook
 
 
 def calcular_calificaciones_y_umbral(df, y_pred, Y_test, price_column, sheet_name):
@@ -44,7 +44,7 @@ def procesar_libro(nombre_archivo):
     calificaciones_empresas = {}
 
     # Recorremos cada hoja y compilamos las calificaciones
-    for nombre_hoja in WEIGHTS.keys():
+    for nombre_hoja in WEIGHTS:
         hoja = libro[nombre_hoja]
         for fila in hoja.iter_rows(min_row=2, values_only=True):
             empresa = fila[0]
@@ -73,11 +73,11 @@ def guardar_resultados(nombre_archivo, calificaciones_empresas):
         lista_calificaciones = []
         for empresa, calificaciones in calificaciones_empresas.items():
             fila = [empresa] + [
-                calificaciones.get(nombre_hoja, "N/A") for nombre_hoja in WEIGHTS.keys()
+                calificaciones.get(nombre_hoja, "N/A") for nombre_hoja in WEIGHTS
             ]
             fila.append(calificaciones["Promedio"])
             lista_calificaciones.append(fila)
 
-        columnas = ["Empresa"] + list(WEIGHTS.keys()) + ["Promedio"]
+        columnas = ["Empresa", *list(WEIGHTS.keys()), "Promedio"]
         df_resultados = pd.DataFrame(lista_calificaciones, columns=columnas)
         df_resultados.to_excel(escritor, sheet_name="Resultados", index=False)

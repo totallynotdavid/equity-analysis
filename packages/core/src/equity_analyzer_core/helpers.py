@@ -19,4 +19,4 @@ def get_column_names(df):
 
 
 def get_head(df, price_column, features, number_of_rows=5):
-    return df[[price_column] + features].head(number_of_rows)
+    return df[[price_column, *features]].head(number_of_rows)

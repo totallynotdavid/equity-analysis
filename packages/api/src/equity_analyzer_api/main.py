@@ -1,10 +1,10 @@
 import logging
-from typing import List
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 
 from equity_analyzer_api.workflows import analysis_workflow
+
 
 # Configure logging for the API
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +18,7 @@ app = FastAPI(
 
 
 @app.post("/analyze/")
-async def analyze_excel_files(files: List[UploadFile]):
+async def analyze_excel_files(files: list[UploadFile]):
     """
     Accepts a list of Excel files, runs the analysis, and returns the results.
 
@@ -38,7 +38,9 @@ async def analyze_excel_files(files: List[UploadFile]):
     try:
         # Since the core analysis function is synchronous (CPU-bound),
         # run it in a threadpool to avoid blocking the server's event loop.
-        results = await run_in_threadpool(analysis_workflow.process_uploaded_files, files=files)
+        results = await run_in_threadpool(
+            analysis_workflow.process_uploaded_files, files=files
+        )
         if not results:
             raise HTTPException(
                 status_code=422,

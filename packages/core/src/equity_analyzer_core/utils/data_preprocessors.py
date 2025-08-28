@@ -19,8 +19,8 @@ def handle_non_numeric_values(df, columns_to_check):
         if is_non_numeric.sum() > 0:
             # Handle non-numeric values found in the column
             non_numeric_rows = df[is_non_numeric][column]
-            for idx, value in non_numeric_rows.items():
-                print(f"Fila: {idx}, Valor: {value}")
+            for _idx, _value in non_numeric_rows.items():
+                pass
 
         df[column] = pd.to_numeric(df[column], errors="coerce")
         if df[column].dtype != "float64":

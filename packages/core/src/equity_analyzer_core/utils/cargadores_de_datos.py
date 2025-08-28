@@ -1,4 +1,5 @@
 import logging
+
 import pandas as pd
 
 
@@ -47,7 +48,7 @@ def get_valid_sheets(file_name, index_column):
 
     except Exception as e:
         logging.error(
-            f"No se puede leer las cabeceras del archivo '{file_name}'. Error: {str(e)}"
+            f"No se puede leer las cabeceras del archivo '{file_name}'. Error: {e!s}"
         )
         return []
 
@@ -86,7 +87,7 @@ def load_data(file_name, index_column, sheets_to_load=None, single_sheet=False):
             )
             return None
 
-        first_sheet_key = list(data.keys())[0]
+        first_sheet_key = next(iter(data.keys()))
         if single_sheet:
             return {first_sheet_key: data[first_sheet_key]}
         return data
@@ -97,5 +98,5 @@ def load_data(file_name, index_column, sheets_to_load=None, single_sheet=False):
         )
         return None
     except Exception as e:
-        logging.error(f"No se puede abrir el archivo '{file_name}'. Error: {str(e)}")
+        logging.error(f"No se puede abrir el archivo '{file_name}'. Error: {e!s}")
         return None

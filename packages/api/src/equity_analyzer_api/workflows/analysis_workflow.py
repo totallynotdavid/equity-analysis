@@ -1,14 +1,14 @@
 import logging
 import shutil
 import tempfile
+
 from pathlib import Path
-from typing import List
 
 from equity_analyzer_core.analysis_runner import run_full_analysis
 from fastapi import UploadFile
 
 
-def process_uploaded_files(files: List[UploadFile]):
+def process_uploaded_files(files: list[UploadFile]):
     """
     Saves uploaded files to a temporary directory and runs the core analysis.
 

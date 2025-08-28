@@ -1,4 +1,5 @@
 import logging
+
 from pathlib import Path
 
 from equity_analyzer_core.constants import EXCEL_CONFIGURATIONS, INDEX_COLUMN
