@@ -150,5 +150,5 @@ The root `pyproject.toml` acts as the central configuration. Its
 `[tool.uv.workspace]` section defines the monorepo members and centralizes tool
 settings for consistency. Each package has its own `pyproject.toml`, declaring
 dependencies and referencing local packages (e.g. `equity-analyzer-core`)
-[1](packages\api\pyproject.toml?plain=1#L13)
-[2](packages\cli\pyproject.toml?plain=1#L14).
+[1](packages/api/pyproject.toml?plain=1#L13)
+[2](packages/cli/pyproject.toml?plain=1#L14).
