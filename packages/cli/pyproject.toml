@@ -1,0 +1,12 @@
+[project]
+name = "equity-analyzer-cli"
+version = "0.1.0"
+description = "A command-line interface for the Equity Analysis tool."
+dependencies = [
+    # This declares a dependency on the local 'core' package in the workspace
+    "equity-analyzer-core @ file:///${PROJECT_ROOT}/packages/core"
+]
+
+[project.scripts]
+# This makes the 'run-analysis' command available in the environment
+run-analysis = "equity_analyzer_cli.main:main"
