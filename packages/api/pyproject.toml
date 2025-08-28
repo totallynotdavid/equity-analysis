@@ -9,3 +9,6 @@ dependencies = [
     "uvicorn[standard]",
     "python-multipart", # Required for file uploads
 ]
+
+[tool.uv.sources]
+equity-analyzer-core = { workspace = true }
