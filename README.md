@@ -2,9 +2,9 @@
 
 <!-- prettier-ignore -->
 > [!WARNING]
-> This is an internal tool. While the repo is public, it’s unlikely to be
-> useful out of the box. It relies on proprietary data and a specific Excel
-> structure; without that, the tool won’t work.
+> This is an internal tool. While the repository is public, it depends on
+> proprietary data and a specific Excel format, so it is unlikely to work out of the
+> box.
 
 This monorepo provides tools for analyzing stock market data from Excel files
 using machine learning. It includes a command-line interface for automation and
@@ -127,7 +127,6 @@ computer’s IP address.
 The monorepo structure:
 
 ```
-/
 ├── .mise.toml                      # Tool versions and task definitions
 ├── pyproject.toml                  # Workspace configuration, ruff and mypy settings
 ├── packages/
