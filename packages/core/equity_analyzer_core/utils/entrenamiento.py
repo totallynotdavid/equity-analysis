@@ -14,11 +14,11 @@ def entrenar_y_predecir(df, feature_columns, detail_column, train_test_split_rat
     Entrena el modelo y predice usando el dataframe.
     Retorna el modelo, las predicciones, y Y_test.
     """
-    handle_non_numeric_values(df, feature_columns + [detail_column])
-    normalize_data(df, feature_columns + [detail_column])
+    handle_non_numeric_values(df, [*feature_columns, detail_column])
+    normalize_data(df, [*feature_columns, detail_column])
     df = df[pd.to_numeric(df[detail_column], errors="coerce").notnull()]
     df.loc[:, detail_column] = df[detail_column].astype("float")
-    ensure_float64(df, feature_columns + [detail_column])
+    ensure_float64(df, [*feature_columns, detail_column])
 
     X_train, Y_train, X_test, Y_test = dividir_datos_entrenamiento_prueba(
         df, feature_columns, detail_column, train_test_split_ratio
