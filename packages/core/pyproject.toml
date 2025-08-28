@@ -1,0 +1,13 @@
+[project]
+name = "equity-analyzer-core"
+version = "0.1.0"
+description = "Core logic for stock analysis from Excel files."
+dependencies = [
+    "pandas>=2.0.3",
+    "scikit-learn>=1.3.0",
+    "openpyxl>=3.1.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

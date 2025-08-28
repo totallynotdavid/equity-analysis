@@ -1,14 +1,18 @@
-# Archivos
-poetry.lock
-ORIGINAL.ipynb
+.venv/
+.env
+.env.*
+!.env.example
 
-# Directorios
+__pycache__/
+*.pyc
+.mypy_cache/
 .pytest_cache/
-**/__pycache__/
-.ipynb_checkpoints/
+.ruff_cache/
 
-# Tipos de archivos
-*.xlsx
-*.log
-*.json
-node_modules
+build/
+dist/
+*.egg-info/
+
+/data/
+/outputs/
+*.ps1

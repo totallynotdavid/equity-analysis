@@ -1,0 +1,14 @@
+[project]
+name = "equity-analyzer-cli"
+version = "0.1.0"
+description = "A command-line interface for the Equity Analysis tool."
+dependencies = [
+    "equity-analyzer-core"
+]
+
+[project.scripts]
+run-analysis = "equity_analyzer_cli.main:main"
+
+
+[tool.uv.sources]
+equity-analyzer-core = { workspace = true }

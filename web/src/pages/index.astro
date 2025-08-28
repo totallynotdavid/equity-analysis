@@ -1,25 +1,319 @@
 ---
-import BaseHead from '../components/BaseHead.astro';
-import Header from '../components/Header.astro';
-import Footer from '../components/Footer.astro';
-import { SITE_TITLE, SITE_DESCRIPTION } from '../consts';
-import stockResults from '../../../stock_results.json';
+import Layout from "@/layouts/Layout.astro";
 
-import StockTable from '../components/react/StockTable.jsx';
+import { Button } from "@/components/starwind/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/starwind/card";
+import {
+  Dropzone,
+  DropzoneFilesList,
+  DropzoneUploadIndicator,
+} from "@/components/starwind/dropzone";
+import { Skeleton } from "@/components/starwind/skeleton";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/starwind/tabs";
 ---
 
-<!doctype html>
-<html lang="en">
-    <head>
-        <BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
-    </head>
-    <body>
-        <Header title={SITE_TITLE} />
-        <main>
-            <p>Aquí le ofrecemos información basada en nuestro análisis utilizando aprendizaje automático.</p>
+<Layout>
+  <main class="container mx-auto max-w-4xl px-4 py-12 sm:py-24">
+    <div class="flex flex-col items-center justify-center text-center">
+      <h1
+        class="from-primary to-foreground/80 bg-gradient-to-br bg-clip-text text-5xl font-bold tracking-tight text-transparent sm:text-6xl"
+      >
+        Equity Analysis Processor
+      </h1>
+      <p class="text-muted-foreground mt-3 max-w-md text-base">
+        Upload your Excel files to instantly view a processed equity analysis.
+      </p>
 
-            <StockTable stockResults={stockResults} client:visible />
-        </main>
-        <Footer />
-    </body>
-</html>
+      <div id="app-state-container" class="mt-10 w-full">
+        <!-- Uploader Section -->
+        <div id="uploader-section" class="app-section">
+          <Card class="shadow-sm">
+            <CardHeader>
+              <CardTitle class="text-xl">Upload files</CardTitle>
+              <CardDescription>
+                Upload all required files to begin: MEXBOL.xlsx, IFMEXICO.xlsx,
+                and IEMEXICO.xlsx.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form id="upload-form">
+                <Dropzone name="files" accept=".xlsx,.xls" required multiple>
+                  <DropzoneUploadIndicator>
+                    <div
+                      class="my-6 flex flex-col items-center justify-center gap-3 text-base"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="48"
+                        height="48"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        class="text-muted-foreground"
+                      >
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                        ></path><polyline points="17 8 12 3 7 8"
+                        ></polyline><line x1="12" x2="12" y1="3" y2="15"></line>
+                      </svg>
+                      <span>Drop Excel files here or click to upload</span>
+                    </div>
+                  </DropzoneUploadIndicator>
+                  <DropzoneFilesList />
+                </Dropzone>
+                <div
+                  id="error-message"
+                  class="border-error/50 bg-error/10 text-error mt-4 hidden rounded-md border p-3 text-sm"
+                >
+                </div>
+                <Button
+                  type="submit"
+                  class="mt-4 w-full transition-transform duration-200 hover:scale-[1.01]"
+                  >Analyze Files</Button
+                >
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        <!-- Loading Section -->
+        <div id="loading-section" class="app-section hidden">
+          <Card class="shadow-sm">
+            <CardHeader>
+              <Skeleton class="h-6 w-48" />
+              <Skeleton class="mt-2 h-4 w-full max-w-sm" />
+            </CardHeader>
+            <CardContent class="space-y-4">
+              <div class="flex space-x-4">
+                <Skeleton class="h-10 w-24 rounded-md" />
+                <Skeleton class="h-10 w-24 rounded-md" />
+                <Skeleton class="h-10 w-24 rounded-md" />
+              </div>
+              <div class="space-y-3 pt-4">
+                <Skeleton class="h-8 w-full animate-pulse" />
+                <Skeleton
+                  class="h-8 w-full animate-pulse"
+                  style="animation-delay: 0.2s;"
+                />
+                <Skeleton
+                  class="h-8 w-full animate-pulse"
+                  style="animation-delay: 0.4s;"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results-section" class="app-section hidden">
+          <Tabs defaultValue="data_diaria">
+            <TabsList class="grid w-full grid-cols-3">
+              <TabsTrigger value="data_diaria">Daily</TabsTrigger>
+              <TabsTrigger value="data_mensual">Monthly</TabsTrigger>
+              <TabsTrigger value="data_mensual_macro"
+                >Monthly + Macro</TabsTrigger
+              >
+            </TabsList>
+
+            <TabsContent value="data_diaria">
+              <div id="daily-table"></div>
+            </TabsContent>
+            <TabsContent value="data_mensual">
+              <div id="monthly-table"></div>
+            </TabsContent>
+            <TabsContent value="data_mensual_macro">
+              <div id="monthly-macro-table"></div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .app-section {
+    transition:
+      opacity 0.4s ease-in-out,
+      transform 0.4s ease-in-out;
+  }
+  .app-section.hidden {
+    opacity: 0;
+    transform: scale(0.98);
+    pointer-events: none;
+  }
+</style>
+
+<script>
+  const uploaderSection = document.getElementById("uploader-section");
+  const loadingSection = document.getElementById("loading-section");
+  const resultsSection = document.getElementById("results-section");
+  const uploadForm = document.getElementById("upload-form");
+  const errorMessage = document.getElementById("error-message");
+
+  // Initial state: ensure only the uploader is visible on load.
+  loadingSection.style.display = "none";
+  resultsSection.style.display = "none";
+  uploaderSection.classList.remove("hidden");
+
+  /** Switches the visible section with a smooth fade transition. */
+  function switchSection(targetSection) {
+    const sections = [uploaderSection, loadingSection, resultsSection];
+    sections.forEach((section) => {
+      if (section !== targetSection && !section.classList.contains("hidden")) {
+        section.classList.add("hidden");
+        section.addEventListener(
+          "transitionend",
+          () => {
+            section.style.display = "none";
+          },
+          { once: true },
+        );
+      }
+    });
+
+    targetSection.style.display = "";
+    // Use requestAnimationFrame to ensure the display change renders before the transition starts.
+    requestAnimationFrame(() => {
+      targetSection.classList.remove("hidden");
+    });
+  }
+
+  /** Returns Tailwind CSS classes for a given grade letter. */
+  function getGradeClasses(grade) {
+    const gradeColors = {
+      A: "border-success/30 bg-success/20 text-green-800",
+      B: "border-sky-500/30 bg-sky-500/20 text-sky-800",
+      C: "border-warning/30 bg-warning/20 text-amber-800",
+      D: "border-orange-500/30 bg-orange-500/20 text-orange-800",
+      E: "border-error/30 bg-error/20 text-red-800",
+    };
+    return gradeColors[grade] || "border-border bg-muted text-muted-foreground";
+  }
+
+  /** Populates a table with analysis data. */
+  function populateTable(containerId, data) {
+    const tableContainer = document.getElementById(containerId);
+    if (!tableContainer) return;
+
+    let rowsHtml = "";
+    if (!data || data.length === 0) {
+      rowsHtml =
+        '<tr><td colspan="5" class="p-6 text-center text-muted-foreground">No data available for this category.</td></tr>';
+    } else {
+      rowsHtml = data
+        .map((record) => {
+          const gradeClasses = getGradeClasses(record.grade);
+          const perfGradeClasses = getGradeClasses(record.performance_grade);
+          return `
+					<tr class="border-b transition-colors hover:bg-muted/50 even:bg-muted/30">
+						<td class="p-4 align-middle font-medium text-foreground">${record.sheet_name}</td>
+						<td class="p-4 align-middle text-right">${record.final_value.toFixed(2)}</td>
+						<td class="p-4 align-middle text-center">
+							<span class="inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${gradeClasses}">
+								${record.grade}
+							</span>
+						</td>
+						<td class="p-4 align-middle text-center">
+							<span class="inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${perfGradeClasses}">
+								${record.performance_grade}
+							</span>
+						</td>
+						<td class="p-4 align-middle text-right">${record.predicted_return.toFixed(2)}%</td>
+					</tr>
+				`;
+        })
+        .join("");
+    }
+
+    tableContainer.innerHTML = `
+			<div class="mt-4 overflow-hidden rounded-[var(--radius)] border">
+				<table class="w-full text-sm">
+					<thead class="[&_tr]:border-b">
+						<tr class="border-b bg-muted/80 transition-colors">
+							<th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Ticker</th>
+							<th class="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Final Value</th>
+							<th class="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Vol. Grade</th>
+							<th class="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Model Perf.</th>
+							<th class="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Predicted Return</th>
+						</tr>
+					</thead>
+					<tbody class="[&_tr:last-child]:border-0">
+						${rowsHtml}
+					</tbody>
+				</table>
+			</div>
+		`;
+  }
+
+  /** Handles the form submission, API call, and UI updates. */
+  async function handleFormSubmit(event) {
+    event.preventDefault();
+    errorMessage.classList.add("hidden");
+
+    const fileInput = uploadForm.querySelector('input[type="file"]');
+    const files = fileInput.files;
+
+    const requiredFiles = ["MEXBOL.xlsx", "IFMEXICO.xlsx", "IEMEXICO.xlsx"];
+    const uploadedFileNames = Array.from(files).map((f) => f.name);
+    const missingFiles = requiredFiles.filter(
+      (rf) => !uploadedFileNames.includes(rf),
+    );
+
+    if (missingFiles.length > 0) {
+      errorMessage.textContent = `Missing required files: ${missingFiles.join(", ")}`;
+      errorMessage.classList.remove("hidden");
+      return;
+    }
+
+    switchSection(loadingSection);
+
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append("files", file);
+    }
+
+    try {
+      const response = await fetch("http://localhost:8000/analyze/", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.detail || `HTTP error! Status: ${response.status}`,
+        );
+      }
+
+      const data = await response.json();
+
+      populateTable("daily-table", data.data_diaria);
+      populateTable("monthly-table", data.data_mensual);
+      populateTable("monthly-macro-table", data.data_mensual_macro);
+
+      // A small delay makes the transition to results feel more deliberate.
+      setTimeout(() => switchSection(resultsSection), 300);
+    } catch (error) {
+      console.error("Analysis failed:", error);
+      errorMessage.textContent = `Error: ${error.message}`;
+      errorMessage.classList.remove("hidden");
+      switchSection(uploaderSection);
+    }
+  }
+
+  uploadForm.addEventListener("submit", handleFormSubmit);
+</script>
