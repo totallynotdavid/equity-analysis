@@ -1,66 +1,46 @@
 [project]
-name = "excel-analysis"
-version = "0.8.0"
-description = ""
-readme = "README.md"
-
-authors = [
-    { name = "David Duran", email = "dadch1404@gmail.com" }
-]
-
+name = "equity-analysis"
+version = "1.0.0"
+description = "A monorepo containing the core library, CLI, and API client."
 requires-python = ">=3.10"
-dependencies = [
-    "datareader>=0.0.9",
-    "pandas-datareader>=0.10.0",
-    "yfinance>=0.2.26",
-    "scikit-learn>=1.3.0",
-    "openpyxl>=3.1.2",
-    "pandas>=2.0.3",
+
+[tool.uv.workspace]
+members = [
+    "packages/core",
+    "packages/cli",
+    "packages/api"
 ]
 
-[dependency-groups]
-dev = [
-    "mypy>=1.17.1",
-    "pytest>=7.4.0",
-    "pylint>=3.0.2",
-    "pre-commit>=3.6.0",
-]
-
-[project.scripts]
-start = "excel_analysis.stock_processing:main"
-
-[tool.uv]
-package = true
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+# ==========================================================
+#           SHARED DEVELOPMENT TOOL CONFIGURATIONS
+# ==========================================================
 
 [tool.ruff]
-extend-exclude = ["web"]
 fix = true
 line-length = 88
-target-version = "py313"
+target-version = "py311" # Adjusted to a stable Python version, you can use "py313" if you wish.
 
 [tool.ruff.lint]
+# Re-instating your strict rule selection.
 extend-select = [
-    "B",
-    "C4",
-    "ERA",
-    "I",
-    "N",
-    "PIE",
-    "PGH",
-    "RUF",
-    "SIM",
-    "T20",
-    "TC",
-    "TID",
-    "UP",
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "ERA", # eradicate
+    "I",   # isort
+    "N",   # pep8-naming
+    "PIE", # flake8-pie
+    "PGH", # pygrep-hooks
+    "RUF", # Ruff-specific rules
+    "SIM", # flake8-simplify
+    "T20", # flake8-print
+    "TC",  # flake8-type-checking
+    "TID", # flake8-tidy-imports
+    "UP",  # pyupgrade
 ]
 extend-safe-fixes = ["TC"]
 
 [tool.ruff.lint.flake8-tidy-imports]
+# Enforces clean, absolute imports, which is excellent for a monorepo.
 ban-relative-imports = "all"
 
 [tool.ruff.lint.isort]
@@ -69,16 +49,25 @@ lines-between-types = 1
 lines-after-imports = 2
 
 [tool.mypy]
-files = "excel_analysis"
+python_version = "3.10"
+strict = true
 namespace_packages = true
 explicit_package_bases = true
-strict = true
+
+mypy_path = "packages/core/src:packages/cli/src:packages/api/src"
+
 enable_error_code = [
     "ignore-without-code",
     "redundant-expr",
     "truthy-bool",
 ]
 
-# [[tool.mypy.overrides]]
-# module = ["requests.*"]
-# ignore_missing_imports = true
+# todo: ignoring missing stubs for third-party libraries for now
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "packages/core/src",
+  "packages/cli/src",
+  "packages/api/src"
+]
