@@ -2,7 +2,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.middleware.cors import CORSMiddleware  # 1. Import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 from equity_analyzer_api.workflows import analysis_workflow
 
