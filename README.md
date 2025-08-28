@@ -90,7 +90,7 @@ the `uv_venv_auto = true` setting.
 Running the application typically requires two or three terminal sessions,
 depending on which components you need.
 
-**API server:** From the repository root, run:
+**API server.** From the repository root, run:
 
 ```
 mise run api
@@ -99,7 +99,7 @@ mise run api
 This starts Uvicorn with hot reloading. The API will be available at
 `http://127.0.0.1:8000`, with interactive docs at `http://127.0.0.1:8000/docs`.
 
-**CLI tool:** The CLI can be used independently for terminal-based analysis:
+**CLI tool.** The CLI can be used independently for terminal-based analysis:
 
 ```
 mise run cli
@@ -112,7 +112,7 @@ By default, it reads Excel files from `./data/` and writes results to
 mise run cli -- --debug --data-dir ./custom/path/
 ```
 
-**Frontend:** To launch the development server, run:
+**Frontend.** To launch the development server, run:
 
 ```
 mise run web
