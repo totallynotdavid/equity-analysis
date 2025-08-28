@@ -1,11 +1,11 @@
-[settings]
+[settings.python]
 uv_venv_auto = true
 
 [tools]
-python = "3.11.9"
-uv = "0.1.41"
-ruff = "0.4.4"
-bun = "1.1.8"
+python = "3.10.18"
+uv = "0.8.13"
+ruff = "0.12.10"
+bun = "1.2.21"
 
 [tasks.install]
 description = "Install all workspace packages and dependencies from uv.lock"
