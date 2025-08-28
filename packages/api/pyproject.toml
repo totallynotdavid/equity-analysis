@@ -3,8 +3,7 @@ name = "equity-analyzer-api"
 version = "0.1.0"
 description = "A FastAPI web API for the Equity Analysis tool."
 dependencies = [
-    # This declares a dependency on the local 'core' package in the workspace
-    "equity-analyzer-core @ file:///${PROJECT_ROOT}/packages/core",
+    "equity-analyzer-core",
     "fastapi",
     "uvicorn[standard]",
     "python-multipart", # Required for file uploads
