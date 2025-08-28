@@ -66,8 +66,8 @@ automatically provision Python, `uv`, and Bun as defined in the configuration.
 Clone the repository and enter the project directory:
 
 ```bash
-git clone https://github.com/totallynotdavid/excel-analysis
-cd excel-analysis
+git clone https://github.com/totallynotdavid/equity-analysis
+cd equity-analysis
 ```
 
 Set up the environment with:
