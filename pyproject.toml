@@ -54,7 +54,7 @@ strict = true
 namespace_packages = true
 explicit_package_bases = true
 
-mypy_path = "packages/core/src:packages/cli/src:packages/api/src"
+mypy_path = "packages/core:packages/cli:packages/api"
 
 enable_error_code = [
     "ignore-without-code",
@@ -67,7 +67,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = [
-  "packages/core/src",
-  "packages/cli/src",
-  "packages/api/src"
+  "packages/core",
+  "packages/cli",
+  "packages/api"
 ]
