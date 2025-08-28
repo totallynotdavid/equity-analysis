@@ -30,7 +30,11 @@ def run_full_analysis(data_directory: Path):
 
         logging.info(f"📂 Processing file config '{config_name}' from: {file_path}")
         valid_sheets, all_data = validar_y_cargar_hojas(str(file_path), INDEX_COLUMN)
-        if all_data is None:
+
+        if not valid_sheets:
+            logging.warning(
+                f"No valid sheets found or could be loaded for '{config_name}'. Skipping."
+            )
             continue
 
         results_for_config = []
