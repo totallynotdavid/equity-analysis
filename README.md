@@ -43,7 +43,7 @@ interface.
 
 ## Technology stack
 
-**Backend and CLI:** Built with Python 3.10+, using `uv` for package management.
+**Backend and CLI:** Built with Python 3.14+, using `uv` for package management.
 Pandas handles data manipulation, Scikit-learn covers machine learning, and
 Openpyxl supports Excel integration. The web API is powered by FastAPI.
 

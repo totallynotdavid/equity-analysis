@@ -26,8 +26,8 @@ def handle_non_numeric_values(df, columns_to_check):
         if df[column].dtype != "float64":
             df[column] = df[column].astype("float64")
 
-    df.fillna(method="ffill", inplace=True)
-    df.fillna(method="bfill", inplace=True)
+    df.ffill(inplace=True)
+    df.bfill(inplace=True)
 
 
 def normalize_data(df, columns_to_normalize):
