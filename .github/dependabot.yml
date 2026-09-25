@@ -1,11 +1,11 @@
 version: 2
 updates:
-  # === Python Packages ===
+  # === Python Workspace (uv) ===
 
-  - package-ecosystem: "pip"
-    directory: "/packages/core/"
+  - package-ecosystem: "uv"
+    directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     target-branch: "master"
     commit-message:
       prefix: "chore(deps)"
@@ -13,43 +13,15 @@ updates:
     labels:
       - "dependencies"
     groups:
-      python-core:
+      python-workspace:
         patterns: ["*"]
 
-  - package-ecosystem: "pip"
-    directory: "/packages/cli/"
-    schedule:
-      interval: "daily"
-    target-branch: "master"
-    commit-message:
-      prefix: "chore(deps)"
-      include: "scope"
-    labels:
-      - "dependencies"
-    groups:
-      python-cli:
-        patterns: ["*"]
+  # === Frontend Package (Bun) ===
 
-  - package-ecosystem: "pip"
-    directory: "/packages/api/"
-    schedule:
-      interval: "daily"
-    target-branch: "master"
-    commit-message:
-      prefix: "chore(deps)"
-      include: "scope"
-    labels:
-      - "dependencies"
-    groups:
-      python-api:
-        patterns: ["*"]
-
-  # === Frontend Package ===
-
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/web/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     target-branch: "master"
     commit-message:
       prefix: "chore(deps-js)"
