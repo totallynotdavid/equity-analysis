@@ -28,8 +28,8 @@ def clean_daily_returns(stock_data, price_column):
     daily_returns = stock_data[price_column].pct_change().dropna()
     daily_returns.replace([np.inf, -np.inf], np.nan, inplace=True)
     daily_returns.interpolate(inplace=True)
-    daily_returns.fillna(method="ffill", inplace=True)
-    daily_returns.fillna(method="bfill", inplace=True)
+    daily_returns.ffill(inplace=True)
+    daily_returns.bfill(inplace=True)
     return daily_returns
 
 

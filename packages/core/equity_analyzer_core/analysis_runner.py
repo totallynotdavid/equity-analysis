@@ -1,6 +1,6 @@
 import logging
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from equity_analyzer_core.constants import EXCEL_CONFIGURATIONS, INDEX_COLUMN
 from equity_analyzer_core.stock_processing import procesar_datos_stock
@@ -8,6 +8,10 @@ from equity_analyzer_core.utils.cargadores_de_datos import validar_y_cargar_hoja
 from equity_analyzer_core.utils.sistema_de_calificaciones import (
     asignar_calificaciones_y_actualizar_resultados,
 )
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def run_full_analysis(data_directory: Path):

@@ -3,9 +3,13 @@ import shutil
 import tempfile
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from equity_analyzer_core.analysis_runner import run_full_analysis
-from fastapi import UploadFile
+
+
+if TYPE_CHECKING:
+    from fastapi import UploadFile
 
 
 def process_uploaded_files(files: list[UploadFile]):
