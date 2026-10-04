@@ -1,12 +1,11 @@
 [project]
 name = "equity-analyzer-api"
 version = "0.1.0"
-description = "A FastAPI web API for the Equity Analysis tool."
+description = "A FastAPI web API for the Equity Analysis project."
 dependencies = [
     "equity-analyzer-core",
     "fastapi",
     "uvicorn[standard]",
-    "python-multipart", # Required for file uploads
 ]
 
 [tool.uv.sources]

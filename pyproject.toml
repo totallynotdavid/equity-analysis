@@ -48,6 +48,10 @@ extend-safe-fixes = ["TC"]
 # Enforces clean, absolute imports, which is excellent for a monorepo.
 ban-relative-imports = "all"
 
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic resolves field annotations at runtime.
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+
 [tool.ruff.lint.isort]
 force-single-line = false
 lines-between-types = 1
@@ -79,6 +83,7 @@ pythonpath = [
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.13.1",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
 ]
