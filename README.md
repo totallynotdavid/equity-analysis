@@ -1,14 +1,9 @@
-# [internal]: Equity analysis
+# Equity analysis
 
-<!-- prettier-ignore -->
-> [!WARNING]
-> This is an internal tool. While the repository is public, it depends on
-> proprietary data and a specific Excel format, so it is unlikely to work out of the
-> box.
-
-This monorepo provides tools for analyzing stock market data from Excel files
-using machine learning. It includes a command-line interface for automation and
-a web API with a frontend.
+An open-source project to rank US stocks with a daily score from 1 to 10,
+estimated from public price, filing and insider-trading data. It is under
+construction and publishes no scores yet. Nothing here is investment advice or a
+recommendation to buy or sell any security, and you can lose money.
 
 ## Architecture
 
@@ -25,27 +20,23 @@ The API and CLI packages provide interfaces only.
 The monorepo consists of four main components:
 
 **Core package** ([`packages/core`](packages/core)) houses
-`equity-analyzer-core`, the application's engine. It includes data processing,
-machine learning models, and reusable analytical functions, with no
-external-facing interfaces.
+`equity-analyzer-core`, the application's engine. It is empty for now and will
+hold the analytical logic, with no external-facing interfaces.
 
-**CLI package** ([`packages/cli`](packages/cli)) provides `equity-analyzer-cli`
-for automation and batch processing. It uses the core library to run analyses
-while handling argument parsing, file I/O, and console output.
+**CLI package** ([`packages/cli`](packages/cli)) provides `equity-analyzer-cli`,
+the `eq` command, for automation and batch processing.
 
 **API package** ([`packages/api`](packages/api)) contains `equity-analyzer-api`,
-a FastAPI server exposing the core via REST endpoints. It handles file uploads,
-executes analyses asynchronously, and returns JSON results for the frontend.
+a FastAPI server. It currently exposes `GET /health`, which returns the status
+and the as-of date of the latest scores (`null` until scores exist).
 
-**Frontend application** ([`web`](web)) houses a simple Astro-based UI that
-communicates with the API to upload files and display results in a graphical
-interface.
+**Frontend application** ([`web`](web)) houses an Astro site, currently a
+placeholder page.
 
 ## Technology stack
 
 **Backend and CLI:** Built with Python 3.14+, using `uv` for package management.
-Pandas handles data manipulation, Scikit-learn covers machine learning, and
-Openpyxl supports Excel integration. The web API is powered by FastAPI.
+The web API is powered by FastAPI.
 
 **Frontend:** Developed with Astro, styled using Tailwind CSS + Starwind CSS,
 and running on the Bun JavaScript runtime.
@@ -99,17 +90,10 @@ mise run api
 This starts Uvicorn with hot reloading. The API will be available at
 `http://127.0.0.1:8000`, with interactive docs at `http://127.0.0.1:8000/docs`.
 
-**CLI tool.** The CLI can be used independently for terminal-based analysis:
+**CLI tool.** The CLI can be used independently of the other components:
 
 ```
-mise run cli
-```
-
-By default, it reads Excel files from `./data/` and writes results to
-`./outputs/`. Additional arguments can be passed after `--`, for example:
-
-```bash
-mise run cli -- --debug --data-dir ./custom/path/
+mise run cli -- --help
 ```
 
 **Frontend.** To launch the development server, run:
@@ -143,7 +127,6 @@ The monorepo structure:
 │   ├── src/
 │   ├── astro.config.mjs
 │   └── package.json
-└── data/                           # Input Excel files (git-ignored)
 ```
 
 The root `pyproject.toml` acts as the central configuration. Its
