@@ -29,9 +29,8 @@ alias = "m"
 run = "uv run mypy ."
 
 [tasks.cli]
-description = "Run the CLI application with default arguments"
-# usage example: `mise run cli -- --debug`
-run = "uv run run-analysis"
+description = "Run the eq command-line interface"
+run = "uv run eq"
 
 [tasks.api]
 description = "Start the FastAPI development server"
