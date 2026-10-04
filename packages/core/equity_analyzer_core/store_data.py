@@ -4,6 +4,10 @@ import os
 import pandas as pd
 
 
+def _as_dict(result):
+    return result if isinstance(result, dict) else result._asdict()
+
+
 def store_results_to_json(results, filename, key="Default"):
     """
     Guarda los resultados en un archivo JSON.
@@ -20,7 +24,7 @@ def store_results_to_json(results, filename, key="Default"):
         data = {}
 
     # Convertir los resultados a un formato de diccionario
-    results_dict = [result._asdict() for result in results]
+    results_dict = [_as_dict(result) for result in results]
 
     # Anexar los nuevos resultados bajo la key específica
     data[key] = results_dict
@@ -37,7 +41,7 @@ def store_results_to_excel(results, filename, sheet_name="Sheet1"):
     - results (lista): Lista de resultados.
     - filename (str): Nombre del archivo donde guardar los resultados.
     """
-    df = pd.DataFrame([r if isinstance(r, dict) else r._asdict() for r in results])
+    df = pd.DataFrame([_as_dict(r) for r in results])
 
     file_exists = os.path.isfile(filename)
 
