@@ -26,6 +26,11 @@ class SourceError(Exception):
     """A price source could not deliver what was asked of it."""
 
 
+def check_range(start: date, end: date) -> None:
+    if start > end:
+        raise SourceError(f"start {start} is after end {end}")
+
+
 class PriceSource(Protocol):
     name: str
 
@@ -33,7 +38,7 @@ class PriceSource(Protocol):
         """Daily bars from `start` to `end` inclusive.
 
         The frame has a sorted, unique, tz-naive `DatetimeIndex` named `date` and
-        the columns in `PRICE_COLUMNS`. A ticker with no bars in the range is a
-        `SourceError`.
+        the columns in `PRICE_COLUMNS`. A ticker with no bars in the range, or a
+        `start` after `end`, is a `SourceError`.
         """
         ...

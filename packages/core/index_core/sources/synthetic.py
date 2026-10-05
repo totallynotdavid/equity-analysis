@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from index_core.sources.base import SourceError
+from index_core.sources.base import SourceError, check_range
 
 
 if TYPE_CHECKING:
@@ -37,6 +37,7 @@ class SyntheticSource:
         self._seed = seed
 
     def fetch(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+        check_range(start, end)
         if start < EPOCH:
             raise SourceError(f"synthetic prices start at {EPOCH}, not {start}")
         dates = pd.bdate_range(EPOCH, end, name="date")

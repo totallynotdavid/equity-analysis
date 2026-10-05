@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import httpx2
 import pandas as pd
 
-from index_core.sources.base import PRICE_COLUMNS, SourceError
+from index_core.sources.base import PRICE_COLUMNS, SourceError, check_range
 
 
 if TYPE_CHECKING:
@@ -48,6 +48,7 @@ class TiingoSource:
         return cls(api_key)
 
     def fetch(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+        check_range(start, end)
         try:
             response = self._client.get(
                 f"/tiingo/daily/{ticker}/prices",
@@ -70,6 +71,8 @@ class TiingoSource:
             bars = response.json()
         except ValueError as error:
             raise SourceError(f"Tiingo sent invalid JSON for {ticker}") from error
+        if not isinstance(bars, list):
+            raise SourceError(f"Tiingo sent {bars!r:.200} for {ticker}, not bars")
         if not bars:
             raise SourceError(f"Tiingo has no prices for {ticker} in {start}..{end}")
 
