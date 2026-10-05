@@ -129,3 +129,16 @@ def test_export_can_pick_a_universe_by_name(tmp_path: Path) -> None:
 
     assert len(json.loads(exported.read_text())["rows"]) == 30
     assert len(json.loads((tmp_path / "small.json").read_text())["rows"]) == 10
+
+
+def test_a_reversed_date_range_fails_with_a_message(tmp_path: Path) -> None:
+    with pytest.raises(
+        SystemExit, match="eq: start 2026-09-30 is after end 2024-01-01"
+    ):
+        main(
+            [
+                *["run", "--universe", str(DEMO), "--source", "synthetic"],
+                *["--start", "2026-09-30", "--end", "2024-01-01"],
+                *["--db", str(tmp_path / "db.sqlite")],
+            ]
+        )

@@ -136,6 +136,27 @@ def test_tiingo_malformed_bodies_are_source_errors() -> None:
         no_fields.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
 
 
+def test_tiingo_json_object_instead_of_bars_is_a_source_error() -> None:
+    source, _ = _tiingo(
+        httpx2.MockTransport(
+            lambda _: httpx2.Response(200, json={"detail": "Not found."})
+        )
+    )
+
+    with pytest.raises(SourceError, match=r"Not found.*for AAPL, not bars"):
+        source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+
+
+def test_a_reversed_range_is_a_source_error_without_a_request() -> None:
+    tiingo, requests = _tiingo()
+
+    with pytest.raises(SourceError, match="start 2024-03-08 is after end 2024-03-01"):
+        tiingo.fetch("AAPL", date(2024, 3, 8), date(2024, 3, 1))
+    with pytest.raises(SourceError, match="start 2024-03-08 is after end 2024-03-01"):
+        SyntheticSource().fetch("AAPL", date(2024, 3, 8), date(2024, 3, 1))
+    assert requests == []
+
+
 def test_synthetic_prices_do_not_depend_on_the_requested_range() -> None:
     source = SyntheticSource()
 
