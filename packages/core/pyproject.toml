@@ -1,8 +1,14 @@
 [project]
-name = "equity-analyzer-core"
+name = "index-core"
 version = "0.1.0"
 description = "Core logic for ranking US stocks."
-dependencies = []
+dependencies = [
+    "httpx2",
+    "lightgbm",
+    "numpy",
+    "pandas",
+    "pydantic",
+]
 
 [build-system]
 requires = ["hatchling"]

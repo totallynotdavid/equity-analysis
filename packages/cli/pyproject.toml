@@ -1,17 +1,17 @@
 [project]
-name = "equity-analyzer-cli"
+name = "index-cli"
 version = "0.1.0"
-description = "A command-line interface for the Equity Analysis project."
+description = "A command-line interface for index."
 dependencies = [
-    "equity-analyzer-core"
+    "index-core"
 ]
 
 [project.scripts]
-eq = "equity_analyzer_cli.main:main"
+eq = "index_cli.main:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv.sources]
-equity-analyzer-core = { workspace = true }
+index-core = { workspace = true }

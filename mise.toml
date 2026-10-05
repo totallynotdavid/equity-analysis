@@ -34,7 +34,7 @@ run = "uv run eq"
 
 [tasks.api]
 description = "Start the FastAPI development server"
-run = "uv run uvicorn equity_analyzer_api.main:app --reload --app-dir ./packages/api/"
+run = "uv run uvicorn index_api.main:app --reload --app-dir ./packages/api/"
 
 [tasks.web]
 description = "Start the Bun/Astro development server for the web frontend"

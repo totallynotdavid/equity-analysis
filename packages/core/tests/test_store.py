@@ -1,0 +1,113 @@
+from datetime import date
+from typing import TYPE_CHECKING
+
+import pandas as pd
+import pytest
+
+from index_core.report import ModelInfo, ScoreRow, ScoresReport
+from index_core.sources.base import PRICE_COLUMNS
+from index_core.sources.synthetic import SyntheticSource
+from index_core.store import Store, StoreError
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def _bars() -> pd.DataFrame:
+    return SyntheticSource().fetch("AAA", date(2024, 1, 1), date(2024, 1, 31))
+
+
+def _report(as_of: date, tickers: list[str], universe: str = "demo") -> ScoresReport:
+    return ScoresReport(
+        as_of=as_of,
+        universe=universe,
+        source="synthetic",
+        horizon_days=63,
+        model=ModelInfo(train_rows=10, holdout_rows=4, holdout_auc=None),
+        rows=[
+            ScoreRow(ticker=t, rank=i, score=10 - i, prob=0.5 + i / 100)
+            for i, t in enumerate(tickers, start=1)
+        ],
+    )
+
+
+def test_prices_round_trip(tmp_path: Path) -> None:
+    bars = _bars()
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.upsert_prices("synthetic", "AAA", bars)
+        stored = store.read_prices(["AAA"])
+
+    assert list(stored["ticker"].unique()) == ["AAA"]
+    pd.testing.assert_frame_equal(
+        stored.set_index("date")[list(PRICE_COLUMNS)],
+        bars,
+        check_freq=False,
+        check_names=False,
+    )
+
+
+def test_fetching_a_range_again_replaces_the_stored_bars(tmp_path: Path) -> None:
+    bars = _bars()
+    revised = bars * 2
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.upsert_prices("synthetic", "AAA", bars)
+        store.upsert_prices("synthetic", "AAA", revised)
+        stored = store.read_prices(["AAA"])
+
+    assert len(stored) == len(bars)
+    assert stored["adj_close"].to_list() == pytest.approx(
+        revised["adj_close"].to_list()
+    )
+
+
+def test_one_database_refuses_prices_from_two_sources(tmp_path: Path) -> None:
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.upsert_prices("synthetic", "AAA", _bars())
+        with pytest.raises(StoreError, match="holds synthetic prices"):
+            store.upsert_prices("tiingo", "AAA", _bars())
+
+
+def test_the_latest_report_is_returned_with_rows_in_rank_order(tmp_path: Path) -> None:
+    with Store.open(tmp_path / "db.sqlite") as store:
+        assert store.latest_report() is None
+        store.save_report(_report(date(2024, 1, 30), ["OLD"]))
+        store.save_report(_report(date(2024, 1, 31), ["B", "A"]))
+        latest = store.latest_report()
+
+    assert latest == _report(date(2024, 1, 31), ["B", "A"])
+
+
+def test_saving_a_report_again_replaces_that_date(tmp_path: Path) -> None:
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.save_report(_report(date(2024, 1, 31), ["A", "B"]))
+        store.save_report(_report(date(2024, 1, 31), ["C"]))
+        latest = store.latest_report()
+
+    assert latest is not None
+    assert [row.ticker for row in latest.rows] == ["C"]
+
+
+def test_a_run_over_another_universe_on_the_same_day_keeps_both(
+    tmp_path: Path,
+) -> None:
+    day = date(2024, 1, 31)
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.save_report(_report(day, ["A", "B"], universe="demo"))
+        store.save_report(_report(day, ["C"], universe="other"))
+
+        assert store.latest_report("demo") == _report(day, ["A", "B"], "demo")
+        assert store.latest_report("other") == _report(day, ["C"], "other")
+        assert store.latest_report() == _report(day, ["C"], "other")
+        assert store.latest_report("missing") is None
+
+
+def test_a_read_only_store_cannot_write(tmp_path: Path) -> None:
+    path = tmp_path / "db.sqlite"
+    Store.open(path).close()
+
+    with (
+        Store.open(path, read_only=True) as store,
+        pytest.raises(Exception, match="readonly"),
+    ):
+        store.save_report(_report(date(2024, 1, 31), ["A"]))

@@ -1,7 +1,7 @@
 [project]
-name = "equity-analysis"
+name = "index"
 version = "1.0.0"
-description = "A monorepo containing the core library, CLI, and API client."
+description = "A monorepo containing the core library, CLI, and API of index."
 requires-python = ">=3.14"
 
 [tool.uv.workspace]
