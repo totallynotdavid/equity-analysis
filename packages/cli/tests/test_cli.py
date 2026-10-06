@@ -1,14 +1,19 @@
 import json
 
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from index_cli.main import main
+from index_core.pipeline import ingest
+from index_core.sources.synthetic import SyntheticSource
+from index_core.store import Store
 
 
 DEMO = Path(__file__).parents[3] / "universes" / "demo30.txt"
-WINDOW = ["--start", "2024-01-01", "--end", "2026-09-30"]
+END = date(2026, 9, 30)
+WINDOW = ["--start", "2024-01-01", "--end", END.isoformat()]
 
 
 def _run(tmp_path: Path) -> Path:
@@ -77,6 +82,60 @@ def test_tiingo_run_without_a_key_fails_before_fetching(
         main(["run", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")])
 
 
+def test_tiingo_run_without_a_contact_fails_before_fetching(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TIINGO_API_KEY", "key")
+    monkeypatch.delenv("SEC_USER_AGENT", raising=False)
+
+    with pytest.raises(SystemExit, match="SEC_USER_AGENT is not set"):
+        main(["run", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")])
+
+
+def test_coverage_counts_a_name_with_no_stored_filings_as_zero(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database = tmp_path / "db.sqlite"
+    universe = tmp_path / "pair.txt"
+    universe.write_text("AAPL\nMSFT\n")
+    with Store.open(database) as store:
+        ingest(SyntheticSource(), store, ["AAPL", "MSFT"], date(2024, 1, 1), END)
+
+    main(["coverage", "--universe", str(universe), "--db", str(database)])
+
+    assert capsys.readouterr().out == (
+        "Fundamentals coverage, pair universe, no filings, as of 2026-09-30\n"
+        "0 of 2 names have at least 10 of 13 concepts with a fresh filed value.\n"
+        "2 with fewer (a missing value stays missing):\n"
+        "  AAPL: 0\n"
+        "  MSFT: 0\n"
+    )
+
+
+def test_coverage_lists_names_with_few_concepts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _run(tmp_path)
+    capsys.readouterr()
+
+    main(
+        [
+            *["coverage", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")],
+            *["--min-concepts", "99"],
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert "demo30" in output
+    assert "synthetic" in output
+    assert "AAPL" in output
+
+
+def test_coverage_without_a_database_fails_with_a_message(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match=r"eq: .*does not exist; run `eq run` first"):
+        main(["coverage", "--universe", str(DEMO), "--db", str(tmp_path / "none.db")])
+
+
 def test_a_missing_universe_file_fails_with_a_message(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match=r"eq: .*no-such\.txt"):
         main(
@@ -94,6 +153,7 @@ def test_a_network_failure_ends_with_a_message_not_a_traceback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("TIINGO_API_KEY", "key")
+    monkeypatch.setenv("SEC_USER_AGENT", "Jane Doe jane@example.com")
     monkeypatch.setattr(
         "index_core.sources.tiingo.BASE_URL", "http://127.0.0.1:1", raising=True
     )

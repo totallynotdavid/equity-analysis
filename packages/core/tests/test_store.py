@@ -6,7 +6,7 @@ import pytest
 
 from index_core.report import ModelInfo, ScoreRow, ScoresReport
 from index_core.sources.base import PRICE_COLUMNS
-from index_core.sources.synthetic import SyntheticSource
+from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
 from index_core.store import Store, StoreError
 
 
@@ -66,6 +66,63 @@ def test_one_database_refuses_prices_from_two_sources(tmp_path: Path) -> None:
         store.upsert_prices("synthetic", "AAA", _bars())
         with pytest.raises(StoreError, match="holds synthetic prices"):
             store.upsert_prices("tiingo", "AAA", _bars())
+
+
+def test_facts_round_trip_with_missing_starts_kept(tmp_path: Path) -> None:
+    facts = SyntheticFilings().facts("AAA", date(2024, 12, 31))
+    assert facts["start"].isna().any(), "balance facts have no start"
+    assert facts["start"].notna().any()
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.replace_facts("synthetic", "AAA", facts)
+        stored = store.read_facts(["AAA"])
+
+    assert set(stored["ticker"]) == {"AAA"}
+    key = ["concept", "end", "start", "filed"]
+    pd.testing.assert_frame_equal(
+        stored.drop(columns="ticker").sort_values(key).reset_index(drop=True),
+        facts.sort_values(key).reset_index(drop=True),
+    )
+
+
+def test_replacing_facts_drops_what_the_ticker_had_before(tmp_path: Path) -> None:
+    filings = SyntheticFilings()
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.replace_facts(
+            "synthetic", "AAA", filings.facts("AAA", date(2024, 12, 31))
+        )
+        store.replace_facts(
+            "synthetic", "BBB", filings.facts("BBB", date(2024, 12, 31))
+        )
+        earlier = filings.facts("AAA", date(2022, 12, 31))
+        store.replace_facts("synthetic", "AAA", earlier)
+        stored = store.read_facts(["AAA", "BBB"])
+
+    assert len(stored[stored["ticker"] == "AAA"]) == len(earlier)
+    assert not stored[stored["ticker"] == "BBB"].empty
+
+
+def test_storing_no_facts_does_not_lock_the_database_to_a_source(
+    tmp_path: Path,
+) -> None:
+    facts = SyntheticFilings().facts("AAA", date(2024, 12, 31))
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.replace_facts("synthetic", "AAA", facts.iloc[0:0])
+        assert store.facts_source() is None
+
+        store.replace_facts("edgar", "AAA", facts)
+
+        assert store.facts_source() == "edgar"
+
+
+def test_one_database_refuses_facts_from_two_sources(tmp_path: Path) -> None:
+    facts = SyntheticFilings().facts("AAA", date(2024, 12, 31))
+    with Store.open(tmp_path / "db.sqlite") as store:
+        assert store.facts_source() is None
+        store.replace_facts("synthetic", "AAA", facts)
+        with pytest.raises(StoreError, match="holds synthetic facts"):
+            store.replace_facts("edgar", "AAA", facts)
+        assert store.facts_source() == "synthetic"
 
 
 def test_the_latest_report_is_returned_with_rows_in_rank_order(tmp_path: Path) -> None:

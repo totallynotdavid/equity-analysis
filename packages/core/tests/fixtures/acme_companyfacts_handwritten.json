@@ -1,0 +1,157 @@
+{
+  "cik": 1234567,
+  "entityName": "Acme Corp",
+  "facts": {
+    "dei": {
+      "EntityCommonStockSharesOutstanding": {
+        "label": "Entity Common Stock, Shares Outstanding",
+        "units": {
+          "shares": [
+            {"end": "2022-10-28", "val": 125, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"end": "2023-10-27", "val": 60, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"},
+            {"end": "2023-10-27", "val": 40, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      }
+    },
+    "us-gaap": {
+      "Revenues": {
+        "label": "Revenues",
+        "units": {
+          "USD": [
+            {"start": "2021-01-01", "end": "2021-12-31", "val": 360, "accn": "0001234567-22-000005", "fy": 2021, "fp": "FY", "form": "10-K", "filed": "2022-02-15", "frame": "CY2021"},
+            {"start": "2021-01-01", "end": "2021-09-30", "val": 260, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 290, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 400, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 405, "accn": "0001234567-23-000020", "fy": 2022, "fp": "FY", "form": "10-K/A", "filed": "2023-06-01", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 999, "accn": "0001234567-23-000038", "fy": 2023, "fp": "Q3", "form": "8-K", "filed": "2023-10-26"}
+          ]
+        }
+      },
+      "RevenueFromContractWithCustomerExcludingAssessedTax": {
+        "label": "Revenue from Contract with Customer, Excluding Assessed Tax",
+        "units": {
+          "USD": [
+            {"start": "2022-07-01", "end": "2022-09-30", "val": 100, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"},
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 290, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"},
+            {"start": "2023-07-01", "end": "2023-09-30", "val": 120, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 330, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"},
+            {"start": "2023-01-01", "end": "2023-12-31", "val": 450, "accn": "0001234567-24-000007", "fy": 2023, "fp": "FY", "form": "10-K", "filed": "2024-02-15", "frame": "CY2023"}
+          ]
+        }
+      },
+      "GrossProfit": {
+        "label": "Gross Profit",
+        "units": {
+          "USD": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 110, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 160, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 140, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "OperatingIncomeLoss": {
+        "label": "Operating Income (Loss)",
+        "units": {
+          "USD": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 40, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 60, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 54, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "NetIncomeLoss": {
+        "label": "Net Income (Loss)",
+        "units": {
+          "USD": [
+            {"start": "2021-01-01", "end": "2021-12-31", "val": 32, "accn": "0001234567-22-000005", "fy": 2021, "fp": "FY", "form": "10-K", "filed": "2022-02-15", "frame": "CY2021"},
+            {"start": "2021-01-01", "end": "2021-09-30", "val": 22, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 28, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 40, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 36, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "DepreciationDepletionAndAmortization": {
+        "label": "Depreciation, Depletion and Amortization",
+        "units": {
+          "USD": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 15, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 20, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 16, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "NetCashProvidedByUsedInOperatingActivities": {
+        "label": "Net Cash Provided by Operating Activities",
+        "units": {
+          "USD": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 45, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 70, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 55, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "PaymentsToAcquirePropertyPlantAndEquipment": {
+        "label": "Payments to Acquire Property, Plant, and Equipment",
+        "units": {
+          "USD": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 17, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 25, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 18, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "Assets": {
+        "label": "Assets",
+        "units": {
+          "USD": [
+            {"end": "2022-09-30", "val": 800, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"end": "2022-12-31", "val": 900, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022Q4I"},
+            {"end": "2023-09-30", "val": 1000, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "LongTermDebtNoncurrent": {
+        "label": "Long-term Debt, Excluding Current Maturities",
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "val": 150, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "DebtCurrent": {
+        "label": "Debt, Current",
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "val": 50, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "StockholdersEquity": {
+        "label": "Stockholders' Equity",
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "val": 500, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "CashAndCashEquivalentsAtCarryingValue": {
+        "label": "Cash and Cash Equivalents",
+        "units": {
+          "USD": [
+            {"end": "2023-09-30", "val": 100, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "EarningsPerShareDiluted": {
+        "label": "Earnings Per Share, Diluted",
+        "units": {
+          "USD/shares": [
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 0.36, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      }
+    }
+  }
+}
