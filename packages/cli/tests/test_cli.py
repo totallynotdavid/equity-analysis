@@ -142,3 +142,43 @@ def test_a_reversed_date_range_fails_with_a_message(tmp_path: Path) -> None:
                 *["--db", str(tmp_path / "db.sqlite")],
             ]
         )
+
+
+def test_backtest_prints_the_out_of_sample_table_with_the_base_rate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database = tmp_path / "db.sqlite"
+    main(
+        [
+            *["run", "--universe", str(DEMO), "--source", "synthetic"],
+            *["--start", "2016-01-01", "--end", "2026-09-30"],
+            *["--db", str(database), "--out", str(tmp_path / "scores.json")],
+        ]
+    )
+    capsys.readouterr()
+
+    main(["backtest", "--universe", str(DEMO), "--db", str(database)])
+
+    output = capsys.readouterr().out
+    assert output.startswith("Walk-forward backtest, demo30 universe, synthetic prices")
+    assert "Base rate, share of stocks beating SPY:" in output
+    assert "Effective sample: about" in output
+    assert "Newey-West t-statistic" in output
+
+
+def test_backtest_without_a_database_fails_with_a_message(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match=r"eq: .*does not exist; run `eq run` first"):
+        main(["backtest", "--universe", str(DEMO), "--db", str(tmp_path / "none.db")])
+
+
+def test_backtest_with_too_little_history_fails_with_a_message(tmp_path: Path) -> None:
+    database = tmp_path / "db.sqlite"
+    main(
+        [
+            *["run", "--universe", str(DEMO), "--source", "synthetic", *WINDOW],
+            *["--db", str(database), "--out", str(tmp_path / "scores.json")],
+        ]
+    )
+
+    with pytest.raises(SystemExit, match=r"eq: .*too short"):
+        main(["backtest", "--universe", str(DEMO), "--db", str(database)])
