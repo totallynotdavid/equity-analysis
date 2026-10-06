@@ -5,9 +5,11 @@ is the decile of a LightGBM model's estimated probability that a stock beats SPY
 over the next 63 trading days.
 
 **Experimental, not validated.** The model uses about 20 technical features of
-daily prices and is fitted once on a chronological, purged split. There is no
-backtest yet. Nothing here is investment advice or a recommendation to buy or
-sell any security, and you can lose money.
+daily prices and is fitted once on a chronological, purged split. `eq backtest`
+measures it walk-forward, but the data is a fixed list of today's names with no
+point-in-time membership, so the numbers carry survivorship bias. Nothing here
+is investment advice or a recommendation to buy or sell any security, and you
+can lose money.
 
 ## Quick start
 
@@ -40,6 +42,29 @@ use a new `--db` file to switch between synthetic and Tiingo.
 | `INDEX_DB`       | SQLite file shared by `eq` and the API        | `data/index.sqlite`      |
 | `SCORES_JSON`    | File the web build reads                      | `../outputs/scores.json` |
 
+## Backtest
+
+`eq backtest` reads the prices that `eq run` stored, so run that first with a
+`--start` early enough for several years of training. It refits the model every
+quarter on all labelled weekly snapshots whose 63-day label window closed before
+the quarter began, and predicts only that quarter. The settings are frozen, so a
+backtest never tunes them.
+
+```bash
+uv run eq run --universe universes/demo30.txt --source synthetic --start 2008-01-01
+uv run eq backtest --universe universes/demo30.txt
+```
+
+It prints the out-of-sample rank IC with a Newey-West t-statistic, the per-date
+AUC, the hit rate of scores 8 to 10 against the base rate, and the hit rate and
+mean excess return of each score from 1 to 10, with 95% intervals that resample
+whole months. Snapshots a week apart share most of their outcome, so the output
+also states how many independent 63-day windows the period holds. That is the
+effective sample, and it is small.
+
+The last 24 months of predictions (`--holdout-months`) stay out of the metrics.
+`--final` measures only those months. Use it once, before a public claim.
+
 ## Architecture
 
 The project follows a monorepo structure managed with
@@ -58,10 +83,11 @@ The monorepo consists of four main components:
 **Core package** ([`packages/core`](packages/core)) houses `index-core`, the
 application's engine: price sources behind a `PriceSource` interface (Tiingo,
 and a synthetic generator for tests and offline runs), the SQLite store,
-technical features, the label, the model and the decile score.
+technical features, the label, the model, the decile score and the walk-forward
+backtest.
 
 **CLI package** ([`packages/cli`](packages/cli)) provides `index-cli`, the `eq`
-command, with `eq run` and `eq export`.
+command, with `eq run`, `eq backtest` and `eq export`.
 
 **API package** ([`packages/api`](packages/api)) contains `index-api`, a
 read-only FastAPI server over the SQLite file. `GET /scores` returns the latest
