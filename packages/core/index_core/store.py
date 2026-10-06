@@ -29,6 +29,16 @@ CREATE TABLE IF NOT EXISTS prices (
     {", ".join(f"{column} REAL NOT NULL" for column in PRICE_COLUMNS)},
     PRIMARY KEY (ticker, date)
 );
+CREATE TABLE IF NOT EXISTS facts (
+    ticker TEXT NOT NULL,
+    concept TEXT NOT NULL,
+    start TEXT NOT NULL,
+    end TEXT NOT NULL,
+    filed TEXT NOT NULL,
+    value REAL NOT NULL,
+    priority INTEGER NOT NULL,
+    PRIMARY KEY (ticker, concept, start, end, filed, priority)
+);
 CREATE TABLE IF NOT EXISTS runs (
     as_of TEXT NOT NULL,
     universe TEXT NOT NULL,
@@ -141,6 +151,65 @@ class Store:
             params=tickers,
         )
         frame["date"] = pd.to_datetime(frame["date"])
+        return frame
+
+    def replace_facts(self, source: str, ticker: str, facts: pd.DataFrame) -> None:
+        """Store all facts of a ticker, dropping any stored before.
+
+        A company's facts are fetched whole each time. One database holds facts
+        from one source, as it holds prices from one.
+        """
+        with self._db:
+            stored = self._db.execute(
+                "SELECT value FROM meta WHERE key = 'facts_source'"
+            ).fetchone()
+            if stored is not None and stored[0] != source:
+                raise StoreError(
+                    f"this database holds {stored[0]} facts; use a new database "
+                    f"for {source}"
+                )
+            if not facts.empty:
+                self._db.execute(
+                    "INSERT OR IGNORE INTO meta (key, value) "
+                    "VALUES ('facts_source', ?)",
+                    (source,),
+                )
+            self._db.execute("DELETE FROM facts WHERE ticker = ?", (ticker,))
+            self._db.executemany(
+                "INSERT INTO facts VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    (
+                        ticker,
+                        row.concept,
+                        "" if pd.isna(row.start) else row.start.date().isoformat(),
+                        row.end.date().isoformat(),
+                        row.filed.date().isoformat(),
+                        row.value,
+                        row.priority,
+                    )
+                    for row in facts.itertuples(index=False)
+                ),
+            )
+
+    def facts_source(self) -> str | None:
+        """The source of the stored facts, or None before any were stored."""
+        stored = self._db.execute(
+            "SELECT value FROM meta WHERE key = 'facts_source'"
+        ).fetchone()
+        return None if stored is None else str(stored[0])
+
+    def read_facts(self, tickers: list[str]) -> pd.DataFrame:
+        """Long frame with `ticker` and the `FACT_COLUMNS`."""
+        marks = ", ".join("?" * len(tickers))
+        frame = pd.read_sql_query(
+            "SELECT ticker, concept, start, end, filed, value, priority FROM facts "
+            f"WHERE ticker IN ({marks}) ORDER BY ticker, concept, end, start, filed",
+            self._db,
+            params=tickers,
+        )
+        frame["start"] = frame["start"].replace("", None)
+        for column in ("start", "end", "filed"):
+            frame[column] = pd.to_datetime(frame[column]).astype("datetime64[ns]")
         return frame
 
     def save_report(self, report: ScoresReport) -> None:

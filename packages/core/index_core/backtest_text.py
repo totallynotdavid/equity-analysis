@@ -20,7 +20,8 @@ def render(result: Backtest, universe: str) -> str:
         else f"development, up to {result.holdout_start}"
     )
     lines = [
-        f"Walk-forward backtest, {universe} universe, {result.price_source} prices",
+        f"Walk-forward backtest, {universe} universe, {result.price_source} prices, "
+        f"{result.facts_source or 'no'} filings",
         "Experimental, not validated. Gross of costs.",
         "",
         f"Period: {period}",
@@ -52,7 +53,13 @@ def render(result: Backtest, universe: str) -> str:
         ),
         "",
         "Caveats: the universe is a fixed list, not point-in-time membership, so "
-        "survivors are over-represented. Only technical features are used.",
+        "survivors are over-represented. "
+        + (
+            "Fundamentals come from filings dated before each snapshot; a company "
+            "without filings has none."
+            if result.facts_source
+            else "No filings are stored, so only technical features carry signal."
+        ),
     ]
     return "\n".join(lines) + "\n"
 

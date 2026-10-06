@@ -7,9 +7,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from index_core.backtest_text import render
-from index_core.pipeline import HOLDOUT_MONTHS, backtest, run
-from index_core.sources.base import PriceSource, SourceError
-from index_core.sources.synthetic import SyntheticSource
+from index_core.coverage_text import render as render_coverage
+from index_core.pipeline import (
+    HOLDOUT_MONTHS,
+    backtest,
+    coverage,
+    missing_filings,
+    run,
+)
+from index_core.sources.base import FilingsSource, PriceSource, SourceError
+from index_core.sources.edgar import EdgarSource
+from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
 from index_core.sources.tiingo import TiingoSource
 from index_core.store import Store, StoreError, default_db_path
 from index_core.universe import read_universe
@@ -22,6 +30,7 @@ if TYPE_CHECKING:
 
 DEFAULT_OUT = Path("outputs/scores.json")
 HISTORY_DAYS = 6 * 365
+MIN_CONCEPTS = 10
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,7 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--source",
         choices=["tiingo", "synthetic"],
         default="tiingo",
-        help="tiingo reads TIINGO_API_KEY; synthetic is fake data for offline runs",
+        help="tiingo reads TIINGO_API_KEY and SEC_USER_AGENT; synthetic is fake "
+        "prices and filings for offline runs",
     )
     run_command.add_argument("--start", type=date.fromisoformat)
     run_command.add_argument("--end", type=date.fromisoformat)
@@ -76,6 +86,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="SQLite file (default: $INDEX_DB or data/index.sqlite)",
     )
 
+    coverage_command = commands.add_parser(
+        "coverage",
+        help="list names with few fundamentals concepts in the stored filings",
+    )
+    coverage_command.add_argument("--universe", type=Path, required=True)
+    coverage_command.add_argument(
+        "--min-concepts",
+        type=int,
+        default=MIN_CONCEPTS,
+        help="a name with fewer concepts is listed (default: %(default)s)",
+    )
+    coverage_command.add_argument(
+        "--db",
+        type=Path,
+        default=default_db_path(),
+        help="SQLite file (default: $INDEX_DB or data/index.sqlite)",
+    )
+
     export_command = commands.add_parser(
         "export", help="write the latest stored scores as JSON"
     )
@@ -104,6 +132,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             _run(args)
         elif args.command == "backtest":
             _backtest(args)
+        elif args.command == "coverage":
+            _coverage(args)
         else:
             _export(args)
     except (SourceError, StoreError, ValueError, OSError, sqlite3.Error) as error:
@@ -113,17 +143,33 @@ def main(argv: Sequence[str] | None = None) -> None:
 def _run(args: argparse.Namespace) -> None:
     tickers = read_universe(args.universe)
     source: PriceSource
+    filings: FilingsSource
     if args.source == "synthetic":
-        source = SyntheticSource()
-        sys.stderr.write("eq: synthetic prices; the scores mean nothing\n")
+        source, filings = SyntheticSource(), SyntheticFilings()
+        sys.stderr.write("eq: synthetic prices and filings; the scores mean nothing\n")
     else:
-        source = TiingoSource.from_env()
+        source, filings = TiingoSource.from_env(), EdgarSource.from_env()
 
     end = args.end or date.today()
     start = args.start or end - timedelta(days=HISTORY_DAYS)
     with Store.open(args.db) as store:
-        report = run(source, store, args.universe.stem, tickers, start, end)
+        report = run(source, filings, store, args.universe.stem, tickers, start, end)
+        missing = missing_filings(store, tickers)
+    if missing:
+        sys.stderr.write(
+            f"eq: no filings for {len(missing)} tickers ({', '.join(missing)}); "
+            "their fundamentals are missing\n"
+        )
     _write(report, args.out)
+
+
+def _coverage(args: argparse.Namespace) -> None:
+    tickers = read_universe(args.universe)
+    if not args.db.exists():
+        raise StoreError(f"{args.db} does not exist; run `eq run` first")
+    with Store.open(args.db, read_only=True) as store:
+        result = coverage(store, tickers)
+    sys.stdout.write(render_coverage(result, args.universe.stem, args.min_concepts))
 
 
 def _backtest(args: argparse.Namespace) -> None:
