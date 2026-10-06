@@ -63,6 +63,26 @@ def purged_split(
     return dates[:-holdout_count][last_read < holdout_start], holdout
 
 
+def labelled_snapshots(
+    features: pd.DataFrame, labels: pd.Series, calendar: pd.DatetimeIndex
+) -> pd.DataFrame:
+    """Complete feature rows with their label, on every `SNAPSHOT_STEP`th day.
+
+    Both inputs are indexed by (`date`, `ticker`). Rows with a missing feature
+    or label are left out.
+    """
+    frame = features.join(labels, how="inner").dropna()
+    return frame[frame.index.get_level_values("date").isin(calendar[::SNAPSHOT_STEP])]
+
+
+def train_booster(train: pd.DataFrame, columns: list[str]) -> lgb.Booster:
+    return lgb.train(
+        PARAMS,
+        lgb.Dataset(train[columns], label=train["label"]),
+        num_boost_round=NUM_ROUNDS,
+    )
+
+
 def fit(
     features: pd.DataFrame, labels: pd.Series, calendar: pd.DatetimeIndex
 ) -> FittedModel:
@@ -71,9 +91,7 @@ def fit(
     `features` and `labels` are indexed by (`date`, `ticker`). Rows with a
     missing feature or label are not used.
     """
-    snapshots = calendar[::SNAPSHOT_STEP]
-    frame = features.join(labels, how="inner").dropna()
-    frame = frame[frame.index.get_level_values("date").isin(snapshots)]
+    frame = labelled_snapshots(features, labels, calendar)
 
     dates = pd.DatetimeIndex(sorted(frame.index.get_level_values("date").unique()))
     if len(dates) < 4 * MIN_HOLDOUT_DATES:
@@ -85,11 +103,7 @@ def fit(
     train, holdout = frame[in_train], frame[in_holdout]
     columns = list(features.columns)
 
-    booster = lgb.train(
-        PARAMS,
-        lgb.Dataset(train[columns], label=train["label"]),
-        num_boost_round=NUM_ROUNDS,
-    )
+    booster = train_booster(train, columns)
     holdout_probabilities = pd.Series(
         np.asarray(booster.predict(holdout[columns])), index=holdout.index
     )
@@ -97,11 +111,11 @@ def fit(
         booster,
         train_rows=len(train),
         holdout_rows=len(holdout),
-        holdout_auc=_auc(holdout["label"], holdout_probabilities),
+        holdout_auc=auc(holdout["label"], holdout_probabilities),
     )
 
 
-def _auc(truth: pd.Series, score: pd.Series) -> float | None:
+def auc(truth: pd.Series, score: pd.Series) -> float | None:
     """Area under the ROC curve; ties count half. None if one class is absent."""
     positives = int(truth.sum())
     negatives = len(truth) - positives
