@@ -123,6 +123,13 @@ class Store:
                 ),
             )
 
+    def price_source(self) -> str | None:
+        """The source of the stored prices, or None before any were stored."""
+        stored = self._db.execute(
+            "SELECT value FROM meta WHERE key = 'price_source'"
+        ).fetchone()
+        return None if stored is None else str(stored[0])
+
     def read_prices(self, tickers: list[str]) -> pd.DataFrame:
         """Long frame with `ticker`, a `date` column and the price columns."""
         marks = ", ".join("?" * len(tickers))
