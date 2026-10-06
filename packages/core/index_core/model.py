@@ -6,6 +6,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
+from index_core.features.technical import FEATURES as TECHNICAL
 from index_core.labels import LABEL_SPAN
 
 
@@ -66,12 +67,14 @@ def purged_split(
 def labelled_snapshots(
     features: pd.DataFrame, labels: pd.Series, calendar: pd.DatetimeIndex
 ) -> pd.DataFrame:
-    """Complete feature rows with their label, on every `SNAPSHOT_STEP`th day.
+    """Feature rows with their label, on every `SNAPSHOT_STEP`th day.
 
-    Both inputs are indexed by (`date`, `ticker`). Rows with a missing feature
-    or label are left out.
+    Both inputs are indexed by (`date`, `ticker`). Rows with a missing label or
+    technical feature are left out. A missing fundamental stays missing: a
+    company that has not filed a concept is not a reason to drop its prices.
     """
-    frame = features.join(labels, how="inner").dropna()
+    required = [name for name in features.columns if name in TECHNICAL]
+    frame = features.join(labels, how="inner").dropna(subset=[*required, "label"])
     return frame[frame.index.get_level_values("date").isin(calendar[::SNAPSHOT_STEP])]
 
 
@@ -89,7 +92,7 @@ def fit(
     """Fit on the early part of the history and measure on the later part.
 
     `features` and `labels` are indexed by (`date`, `ticker`). Rows with a
-    missing feature or label are not used.
+    missing label or technical feature are not used.
     """
     frame = labelled_snapshots(features, labels, calendar)
 
