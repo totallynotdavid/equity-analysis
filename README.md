@@ -5,27 +5,30 @@ is the decile of a LightGBM model's estimated probability that a stock beats SPY
 over the next 63 trading days.
 
 **Experimental, not validated.** The model uses about 20 technical features of
-daily prices and is fitted once on a chronological, purged split. `eq backtest`
-measures it walk-forward, but the data is a fixed list of today's names with no
-point-in-time membership, so the numbers carry survivorship bias. Nothing here
-is investment advice or a recommendation to buy or sell any security, and you
-can lose money.
+daily prices and 14 fundamental ratios from SEC filings. It is fitted once on a
+chronological, purged split. `eq backtest` measures it walk-forward, but the
+data is a fixed list of today's names with no point-in-time membership, so the
+numbers carry survivorship bias. Nothing here is investment advice or a
+recommendation to buy or sell any security, and you can lose money.
 
 ## Quick start
 
-`eq run` fetches prices, builds features, fits the model, stores the scores in
-SQLite and writes `outputs/scores.json`. Without a Tiingo key, run it on
-synthetic prices. They are fake, so the scores mean nothing:
+`eq run` fetches prices and filings, builds features, fits the model, stores the
+scores in SQLite and writes `outputs/scores.json`. Without keys, run it on
+synthetic prices and filings. They are fake, so the scores mean nothing:
 
 ```bash
 uv run eq run --universe universes/demo30.txt --source synthetic
 ```
 
-With real prices, set `TIINGO_API_KEY` (a free Tiingo account is enough for the
-31 requests of the demo universe) and leave out `--source`:
+With real data, set `TIINGO_API_KEY` (a free Tiingo account is enough for the 31
+requests of the demo universe) and `SEC_USER_AGENT`, then leave out `--source`.
+The SEC asks every client to identify itself, so the user agent must hold your
+name and an email address:
 
 ```bash
-TIINGO_API_KEY=... uv run eq run --universe universes/demo30.txt
+TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
+  uv run eq run --universe universes/demo30.txt
 ```
 
 `outputs/scores.json` holds an `as_of` date, the `universe` name (the universe
@@ -33,22 +36,48 @@ file name without extension) and one row per ticker with its `rank` (1 is best),
 integer `score` and `prob`. A database keeps one run per universe and date, so
 runs over different universes do not replace each other; `eq export` writes the
 latest run, or one universe with `--universe NAME`. Tiingo's free data is
-licensed for internal use only. A database holds prices from one source only, so
-use a new `--db` file to switch between synthetic and Tiingo.
+licensed for internal use only. A database holds prices from one source and
+filings from one source, so use a new `--db` file to switch between synthetic
+and real data.
 
-| Setting          | Meaning                                       | Default                  |
-| ---------------- | --------------------------------------------- | ------------------------ |
-| `TIINGO_API_KEY` | Tiingo API token, read when `--source tiingo` | none                     |
-| `INDEX_DB`       | SQLite file shared by `eq` and the API        | `data/index.sqlite`      |
-| `SCORES_JSON`    | File the web build reads                      | `../outputs/scores.json` |
+| Setting          | Meaning                                        | Default                  |
+| ---------------- | ---------------------------------------------- | ------------------------ |
+| `TIINGO_API_KEY` | Tiingo API token, read when `--source tiingo`  | none                     |
+| `SEC_USER_AGENT` | Name and email sent to EDGAR, read with Tiingo | none                     |
+| `INDEX_DB`       | SQLite file shared by `eq` and the API         | `data/index.sqlite`      |
+| `SCORES_JSON`    | File the web build reads                       | `../outputs/scores.json` |
+
+## Fundamentals
+
+The fundamental features come from the SEC's XBRL `companyfacts` data. Every
+fact carries the date it was filed, and a fact is used only from the first
+trading day after that date. A later filing that restates a period replaces the
+earlier value from its own filing date on, never before it. Nothing is filled
+backward: before a company's first filing its fundamentals are missing, and a
+name with no filings keeps its technical features. A value is also missing once
+its period ended more than 460 days before the date, so a company that stops
+filing is not scored on old numbers.
+
+Trailing twelve-month figures add the latest fiscal year to the year-to-date
+quarters and subtract the year-to-date of a year before. The ratios are
+valuation (sales, EBITDA, earnings and free cash flow against enterprise value
+or market value), profitability and margins, growth, leverage, accruals, share
+dilution and asset growth. Market value is the filed share count times the price
+of that day, corrected for splits since the count was filed. Like the technical
+features, each ratio is ranked within its date.
+
+`eq coverage --universe universes/demo30.txt` lists the names with fewer than
+`--min-concepts` of the 13 concepts filed recently, so a name that a ticker
+change or an unusual taxonomy leaves bare is visible. A missing value stays
+missing, and the model reads it as missing.
 
 ## Backtest
 
-`eq backtest` reads the prices that `eq run` stored, so run that first with a
-`--start` early enough for several years of training. It refits the model every
-quarter on all labelled weekly snapshots whose 63-day label window closed before
-the quarter began, and predicts only that quarter. The settings are frozen, so a
-backtest never tunes them.
+`eq backtest` reads the prices and filings that `eq run` stored, so run that
+first with a `--start` early enough for several years of training. It refits the
+model every quarter on all labelled weekly snapshots whose 63-day label window
+closed before the quarter began, and predicts only that quarter. The settings
+are frozen, so a backtest never tunes them.
 
 ```bash
 uv run eq run --universe universes/demo30.txt --source synthetic --start 2008-01-01
@@ -75,19 +104,20 @@ management.
 
 The `index-core` package implements all analytical logic as functions that
 process data and return structured results, independent of any interface. Only
-the price sources touch the network. The API and CLI packages provide interfaces
-only.
+the price and filings sources touch the network. The API and CLI packages
+provide interfaces only.
 
 The monorepo consists of four main components:
 
 **Core package** ([`packages/core`](packages/core)) houses `index-core`, the
 application's engine: price sources behind a `PriceSource` interface (Tiingo,
-and a synthetic generator for tests and offline runs), the SQLite store,
-technical features, the label, the model, the decile score and the walk-forward
-backtest.
+and a synthetic generator for tests and offline runs), filings sources behind a
+`FilingsSource` interface (EDGAR and a synthetic generator), the SQLite store,
+technical and fundamental features, the label, the model, the decile score and
+the walk-forward backtest.
 
 **CLI package** ([`packages/cli`](packages/cli)) provides `index-cli`, the `eq`
-command, with `eq run`, `eq backtest` and `eq export`.
+command, with `eq run`, `eq backtest`, `eq coverage` and `eq export`.
 
 **API package** ([`packages/api`](packages/api)) contains `index-api`, a
 read-only FastAPI server over the SQLite file. `GET /scores` returns the latest
@@ -161,7 +191,8 @@ This starts Uvicorn with hot reloading. The API will be available at
 mise run cli -- --help
 ```
 
-**Tests.** The tests use synthetic prices and make no network calls:
+**Tests.** The tests use synthetic prices and filings and a small EDGAR fixture,
+and make no network calls:
 
 ```
 uv run pytest
