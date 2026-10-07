@@ -84,6 +84,6 @@ pythonpath = [
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1",
-    "mypy>=2.3.1",
+    "mypy>=2.4.0",
     "pytest>=9.1.1",
 ]
