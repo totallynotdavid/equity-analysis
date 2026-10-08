@@ -41,12 +41,15 @@ class Concept:
 
     Companies change tags over time (revenue has several), so the tags are in
     priority order and a period takes the first tag that reports it.
+
+    A `payment` is kept as a positive amount paid. Filers differ on its sign.
     """
 
     kind: Literal["flow", "instant"]
     unit: str
     tags: tuple[str, ...]
     taxonomy: str = "us-gaap"
+    payment: bool = False
 
 
 CONCEPTS = {
@@ -82,6 +85,7 @@ CONCEPTS = {
             "PaymentsToAcquirePropertyPlantAndEquipment",
             "PaymentsToAcquireProductiveAssets",
         ),
+        payment=True,
     ),
     "total_assets": Concept("instant", "USD", ("Assets",)),
     "long_term_debt": Concept(
@@ -136,7 +140,7 @@ def parse_companyfacts(payload: object, ticker: str = "?") -> pd.DataFrame:
                         "start": entry.get("start") if spec.kind == "flow" else None,
                         "end": entry["end"],
                         "filed": entry["filed"],
-                        "value": entry["val"],
+                        "value": abs(entry["val"]) if spec.payment else entry["val"],
                         "priority": priority,
                         "accn": entry.get("accn", ""),
                     }
