@@ -74,14 +74,15 @@ when earnings or EBITDA are not positive.
 ## eq coverage
 
 ```bash
-uv run eq coverage --universe universes/demo30.txt
+uv run eq coverage --universe universes/demo30.txt --db data/synthetic-synthetic.sqlite
 ```
 
 `eq coverage` reads the stored filings, so run [`eq run`](CLI.md#eq-run) first.
 It counts, for each ticker, how many of the 13 concepts have a fresh value at
 the latest stored SPY date. It lists the tickers with fewer than
 `--min-concepts` (default 10), so a name that a ticker change or an unusual
-taxonomy leaves bare is visible. `--db` selects the database.
+taxonomy leaves bare is visible. `--db` selects the database
+([CLI](CLI.md#the-database)).
 
 ```text
 Fundamentals coverage, demo30 universe, synthetic filings, as of 2026-10-08

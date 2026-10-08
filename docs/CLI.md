@@ -27,17 +27,18 @@ were members on a past date.
 ## eq run
 
 ```bash
-uv run eq run --universe universes/demo30.txt --source synthetic
+uv run eq run --universe universes/demo30.txt --prices synthetic --filings synthetic
 ```
 
-| Option       | Meaning                                                    | Default                               |
-| ------------ | ---------------------------------------------------------- | ------------------------------------- |
-| `--universe` | Ticker list file. Required.                                |                                       |
-| `--source`   | `tiingo` for real prices and filings, `synthetic` for fake | `tiingo`                              |
-| `--start`    | First price date, `YYYY-MM-DD`                             | `--end` minus 2190 days               |
-| `--end`      | Last price date, and the last filing date used             | today                                 |
-| `--db`       | SQLite file                                                | `$INDEX_DB`, else `data/index.sqlite` |
-| `--out`      | JSON file to write                                         | `outputs/scores.json`                 |
+| Option       | Meaning                                             | Default                    |
+| ------------ | --------------------------------------------------- | -------------------------- |
+| `--universe` | Ticker list file. Required.                         |                            |
+| `--prices`   | `tiingo` for real prices, `synthetic` for fake ones | `tiingo`                   |
+| `--filings`  | `edgar` for real filings, `synthetic` for fake ones | `edgar`                    |
+| `--start`    | First price date, `YYYY-MM-DD`                      | `--end` minus 2190 days    |
+| `--end`      | Last price date, and the last filing date used      | today                      |
+| `--db`       | SQLite file                                         | [see below](#the-database) |
+| `--out`      | JSON file to write                                  | `outputs/scores.json`      |
 
 `eq run` does this, in order:
 
@@ -51,23 +52,27 @@ uv run eq run --universe universes/demo30.txt --source synthetic
    ([Model](MODEL.md)).
 4. Stores the run in the database and writes `--out` ([Outputs](OUTPUTS.md)).
 
-With `--source synthetic`, prices and filings are generated, and `eq run` says
+With a synthetic source, the prices or filings are generated, and `eq run` says
 on stderr that the scores mean nothing.
 
-A ticker with too little history on the latest date stops the run with
-`too little history`. Use an earlier `--start`.
+Two errors mean the range is too short.
+`N labelled dates are too few to fit a model` means fewer than 20 usable
+snapshot dates ([Model](MODEL.md#fit)). Use an earlier `--start`.
+`too little history at <date> for [...]` names tickers that lack a technical
+feature on the latest date, such as a recent listing. Remove them from the list.
 
 ## Real data
 
-`--source tiingo` reads two environment variables and fails without them.
+`--prices tiingo` and `--filings edgar` each read one environment variable and
+fail without it.
 
-| Variable         | Meaning                                                     | Default             |
-| ---------------- | ----------------------------------------------------------- | ------------------- |
-| `TIINGO_API_KEY` | [Tiingo](https://www.tiingo.com/) API token for prices      | none                |
-| `SEC_USER_AGENT` | Your name and an email address, sent to the SEC for filings | none                |
-| `INDEX_DB`       | SQLite file used by `eq` and by the [API](OUTPUTS.md#api)   | `data/index.sqlite` |
+| Variable         | Meaning                                                     | Default |
+| ---------------- | ----------------------------------------------------------- | ------- |
+| `TIINGO_API_KEY` | [Tiingo](https://www.tiingo.com/) API token for prices      | none    |
+| `SEC_USER_AGENT` | Your name and an email address, sent to the SEC for filings | none    |
 
-`SCORES_JSON` is read by the web page; see [Outputs](OUTPUTS.md#web-page).
+`INDEX_DB` selects the database ([below](#the-database)). `SCORES_JSON` is read
+by the web page ([Outputs](OUTPUTS.md#web-page)).
 
 The SEC asks every client to identify itself, so `SEC_USER_AGENT` must hold a
 contact such as `Jane Doe jane@example.com`. The client waits 0.12 seconds
@@ -79,24 +84,31 @@ TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
 ```
 
 Tiingo costs one request per ticker plus one for SPY: 31 for `demo30`. The SEC
-costs one request for its ticker list and one per ticker.
+costs one request for its ticker list and at most one per ticker.
 
 ## The database
 
 The database is one SQLite file. It holds prices, filings and every saved run.
 
+- The file is `--db`, else `$INDEX_DB`, else `data/index.sqlite`. The exception
+  is `eq run` with a synthetic source and no `--db` or `$INDEX_DB`: it writes
+  `data/<prices>-<filings>.sqlite`, for example
+  `data/synthetic-synthetic.sqlite`.
+- `eq export`, `eq coverage` and `eq backtest` do not look for that file. After
+  a synthetic run, pass `--db data/synthetic-synthetic.sqlite` or set `INDEX_DB`
+  to it. When the file does not exist, they fail and name the other `.sqlite`
+  files beside it. They open it read-only.
 - A run is keyed by universe and as-of date. Running the same universe again on
   the same date replaces that run. Other universes and dates stay.
 - A database holds prices from one source and filings from one source. To switch
   between `synthetic` and `tiingo`, pass a new `--db` file. A mismatch stops
   with `this database holds synthetic prices; use a new database for tiingo`.
-- `eq export`, `eq coverage` and `eq backtest` open the file read-only and fail
-  when it does not exist.
 
 ## eq export
 
 ```bash
-uv run eq export --universe demo30 --out outputs/scores.json
+uv run eq export --universe demo30 --db data/synthetic-synthetic.sqlite \
+  --out outputs/scores.json
 ```
 
 Writes the stored run with the latest as-of date. `--universe NAME` limits the

@@ -27,18 +27,25 @@ otherwise ([CLI](CLI.md)).
 Rows are ordered by rank. How the score derives from `prob` is in
 [Model](MODEL.md#the-score).
 
+`source` records the price source only, not the filings source. A run with
+`--prices tiingo --filings synthetic` has `source` `tiingo`.
+
 ## API
 
 `index-api` is a read-only FastAPI app
 ([`packages/api/index_api/main.py`](../packages/api/index_api/main.py)). It
 reads the database at `$INDEX_DB`, else `data/index.sqlite`, on every request.
+To serve a synthetic run, set `INDEX_DB=data/synthetic-synthetic.sqlite`
+([CLI](CLI.md#the-database)).
 
 ```bash
 mise run api   # http://127.0.0.1:8000/docs
 ```
 
 Without mise:
-`uv run uvicorn index_api.main:app --reload --app-dir ./packages/api/`.
+`uv run uvicorn index_api.main:app --reload --app-dir ./packages/api/`. The
+`--app-dir` is required: the `index-api` package has no build metadata, so
+`index_api` is not importable without it.
 
 | Endpoint      | Returns                                                                   |
 | ------------- | ------------------------------------------------------------------------- |
@@ -54,12 +61,23 @@ web dev server.
 scores file at build time, not in the browser, so run `eq run` first and build
 again after each run.
 
+From the repository root:
+
 ```bash
-mise run web   # http://localhost:4321
-cd web && bun run build
+(cd web && bun install)   # once
+mise run web              # dev server at http://localhost:4321
+(cd web && bun run build) # writes web/dist
 ```
+
+`mise run web` starts `astro dev --host`
+([`web/package.json`](../web/package.json)), so the dev server listens on every
+network interface of the machine, not only on `localhost`.
+
+`mise run site` runs `eq export` on the default database, then the build.
 
 The build reads `../outputs/scores.json`, relative to `web/`. Set `SCORES_JSON`
 to read another file. The page shows the disclaimer, the as-of date and a table
-of rank, ticker and score. It warns when `source` is not `tiingo`. Without a
-file it says there are no scores yet.
+of rank, ticker and score. It warns when `source` is not `tiingo`. Because
+`source` names only the price source, a run with
+`--prices tiingo --filings synthetic` shows no warning although its fundamentals
+are fake. Without a file the page says there are no scores yet.

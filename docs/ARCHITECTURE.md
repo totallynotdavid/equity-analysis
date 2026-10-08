@@ -11,6 +11,8 @@ Python packages and an Astro site.
 │   └── api/    index-api: read-only FastAPI over the SQLite file
 ├── universes/  ticker lists, one per line
 ├── web/        Astro site that renders outputs/scores.json
+├── docs/       the manual
+├── .github/    contributing guide and the CI workflow
 ├── pyproject.toml   workspace members, ruff, mypy and pytest settings
 └── mise.toml        tool versions and tasks
 ```

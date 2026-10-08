@@ -2,27 +2,29 @@
 
 `eq backtest` measures the model out of sample. It reads the prices and filings
 that [`eq run`](CLI.md#eq-run) stored, so run that first with a `--start` early
-enough for several years of training.
+enough for several years of training. When the stored prices are too short, the
+command prints the `--start` to run with.
 
 ```bash
-uv run eq run --universe universes/demo30.txt --source synthetic --start 2008-01-01
-uv run eq backtest --universe universes/demo30.txt
+uv run eq run --universe universes/demo30.txt --prices synthetic --filings synthetic --start 2008-01-01
+uv run eq backtest --universe universes/demo30.txt --db data/synthetic-synthetic.sqlite
 ```
 
-| Option             | Meaning                                            | Default             |
-| ------------------ | -------------------------------------------------- | ------------------- |
-| `--universe`       | Ticker list file. Required.                        |                     |
-| `--first-oos`      | First test quarter begins on or after this date    | as early as allowed |
-| `--holdout-months` | Months of predictions kept out of the metrics      | 24                  |
-| `--final`          | Measure the held-back months instead of the others | off                 |
-| `--db`             | SQLite file                                        | as for `eq run`     |
+| Option             | Meaning                                            | Default                        |
+| ------------------ | -------------------------------------------------- | ------------------------------ |
+| `--universe`       | Ticker list file. Required.                        |                                |
+| `--first-oos`      | First test quarter begins on or after this date    | as early as allowed            |
+| `--holdout-months` | Months of predictions kept out of the metrics      | 24                             |
+| `--final`          | Measure the held-back months instead of the others | off                            |
+| `--db`             | SQLite file                                        | [see CLI](CLI.md#the-database) |
 
 ## Method
 
 The backtest walks forward, in
 [`walkforward.py`](../packages/core/index_core/walkforward.py). It refits the
-model every calendar quarter on all labelled weekly snapshots whose 63-day label
-window closed before the quarter began, then predicts only that quarter. Each
+model every calendar quarter on all labelled snapshots (every fifth trading day)
+whose label window closed before the quarter began, then predicts only that
+quarter. A label reads 64 days ahead ([Model](MODEL.md#the-label)). Each
 prediction comes from a model that never saw the quarter's prices. The first
 quarter is the first with 100 such snapshots, about two years, or the first on
 or after `--first-oos`. The model settings are the ones `eq run` uses.

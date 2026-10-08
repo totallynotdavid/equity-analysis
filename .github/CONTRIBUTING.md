@@ -16,27 +16,29 @@ mise run install   # uv sync --all-packages --locked, bun install in web/
 
 Without mise, install uv and Bun yourself and run the commands in each task.
 
-| Task            | What it does                                        |
-| --------------- | --------------------------------------------------- |
-| `mise run cli`  | The `eq` command, for example `mise run cli -- run` |
-| `mise run api`  | The API with reload at `http://127.0.0.1:8000/docs` |
-| `mise run web`  | The Astro dev server at `http://localhost:4321`     |
-| `mise run fix`  | Format and lint the Python code with ruff           |
-| `mise run mypy` | Type-check with mypy                                |
+| Task             | What it does                                         |
+| ---------------- | ---------------------------------------------------- |
+| `mise run cli`   | The `eq` command, for example `mise run cli -- run`  |
+| `mise run api`   | The API with reload at `http://127.0.0.1:8000/docs`  |
+| `mise run web`   | The Astro dev server at `http://localhost:4321`      |
+| `mise run site`  | Export the latest scores, then build the static page |
+| `mise run fix`   | Format and lint the Python code with ruff            |
+| `mise run mypy`  | Type-check with mypy                                 |
+| `mise run check` | Every check below, as CI runs them                   |
 
 ## Checks
 
-CI ([`ci.yml`](workflows/ci.yml)) runs these. Run them from the repository root
-before you submit a change:
+CI ([`ci.yml`](workflows/ci.yml)) runs `mise run install` and `mise run check`.
+Run `mise run check` before you submit a change. It runs the `check:python` and
+`check:web` tasks, which are these commands from the repository root:
 
 ```bash
 uv run ruff check . --no-fix
 uv run ruff format --check .
 uv run mypy .
-uv run pytest -q               # about 2 minutes, no network
-cd web
-bunx prettier --check src astro.config.mjs
-bun run build
+uv run pytest -q               # a few minutes, no network
+(cd web && bunx prettier --check src astro.config.mjs)
+(cd web && bun run build)
 ```
 
 ## Tests
