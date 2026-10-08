@@ -1,30 +1,5 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@plugin "@tailwindcss/forms";
 @variant dark (&:where(.dark, .dark *));
-
-@theme {
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
-
-  @keyframes accordion-down {
-    from {
-      height: 0;
-    }
-    to {
-      height: var(--starwind-accordion-content-height);
-    }
-  }
-
-  @keyframes accordion-up {
-    from {
-      height: var(--starwind-accordion-content-height);
-    }
-    to {
-      height: 0;
-    }
-  }
-}
 
 @theme inline {
   --color-background: var(--background);
@@ -132,16 +107,5 @@
   }
   button {
     @apply cursor-pointer;
-  }
-}
-
-@layer utilities {
-  /* transition-colors but without outline-color transition property */
-  .starwind-transition-colors {
-    transition-property:
-      color, background-color, border-color, text-decoration-color, fill,
-      stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to;
-    transition-timing-function: var(--default-transition-timing-function);
-    transition-duration: var(--default-transition-duration);
   }
 }

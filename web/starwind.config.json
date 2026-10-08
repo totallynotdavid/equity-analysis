@@ -6,22 +6,5 @@
     "cssVariables": true
   },
   "componentDir": "src/components/",
-  "components": [
-    {
-      "name": "button",
-      "version": "2.0.1"
-    },
-    {
-      "name": "card",
-      "version": "1.1.0"
-    },
-    {
-      "name": "skeleton",
-      "version": "1.0.0"
-    },
-    {
-      "name": "tabs",
-      "version": "1.2.0"
-    }
-  ]
+  "components": []
 }
