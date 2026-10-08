@@ -61,7 +61,7 @@ def test_a_backwards_ranking_has_ic_minus_one_and_a_negative_spread() -> None:
 def test_the_count_of_independent_windows_comes_from_the_span_not_the_rows() -> None:
     evaluation = evaluate(_predictions(DATES), CALENDAR)
 
-    span = CALENDAR.get_loc(DATES[-1]) - CALENDAR.get_loc(DATES[0]) + 1
+    span = CALENDAR.searchsorted(DATES[-1]) - CALENDAR.searchsorted(DATES[0]) + 1
     assert evaluation.independent_windows == span // HORIZON
     assert evaluation.independent_windows < evaluation.dates
     assert evaluation.first_date == DATES[0].date()
@@ -74,7 +74,7 @@ def test_an_interval_widens_when_months_disagree() -> None:
     steady = _predictions(DATES)
     # Even months rank backwards: the same model, a split verdict.
     flipped = steady.copy()
-    months = flipped.index.get_level_values("date").month
+    months = pd.DatetimeIndex(flipped.index.get_level_values("date")).month
     flipped.loc[months % 2 == 0, "prob"] = 1.0 - flipped.loc[months % 2 == 0, "prob"]
 
     mixed = evaluate(flipped, CALENDAR)

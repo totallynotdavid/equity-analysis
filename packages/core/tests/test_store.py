@@ -1,5 +1,5 @@
 from datetime import date
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -7,11 +7,7 @@ import pytest
 from index_core.report import ModelInfo, ScoreRow, ScoresReport
 from index_core.sources.base import PRICE_COLUMNS
 from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
-from index_core.store import Store, StoreError
-
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from index_core.store import Store, StoreError, default_db_path
 
 
 def _bars() -> pd.DataFrame:
@@ -123,6 +119,33 @@ def test_one_database_refuses_facts_from_two_sources(tmp_path: Path) -> None:
         with pytest.raises(StoreError, match="holds synthetic facts"):
             store.replace_facts("edgar", "AAA", facts)
         assert store.facts_source() == "synthetic"
+
+
+def test_sources_are_checked_without_writing_anything(tmp_path: Path) -> None:
+    facts = SyntheticFilings().facts("AAA", date(2024, 12, 31))
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.require_sources("tiingo", "edgar")
+        store.upsert_prices("synthetic", "AAA", _bars())
+        store.replace_facts("synthetic", "AAA", facts)
+
+        store.require_sources("synthetic", "synthetic")
+        with pytest.raises(StoreError, match="holds synthetic prices"):
+            store.require_sources("tiingo", "synthetic")
+        with pytest.raises(StoreError, match="holds synthetic facts"):
+            store.require_sources("synthetic", "edgar")
+
+
+def test_the_default_database_is_named_and_follows_the_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("INDEX_DB", raising=False)
+    assert default_db_path() == Path("data/index.sqlite")
+    assert default_db_path("synthetic-synthetic") == Path(
+        "data/synthetic-synthetic.sqlite"
+    )
+
+    monkeypatch.setenv("INDEX_DB", str(tmp_path / "mine.sqlite"))
+    assert default_db_path("synthetic-synthetic") == tmp_path / "mine.sqlite"
 
 
 def test_the_latest_report_is_returned_with_rows_in_rank_order(tmp_path: Path) -> None:

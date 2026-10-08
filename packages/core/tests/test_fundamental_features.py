@@ -2,6 +2,7 @@ import json
 
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -70,7 +71,11 @@ def _inputs_at(day: str, facts: pd.DataFrame | None = None) -> pd.Series:
     inputs = fundamental_inputs(
         _facts() if facts is None else facts, _calendar(_prices())
     )
-    return inputs.xs("ACME", level="ticker").loc[day]
+    return cast("pd.Series", inputs.xs("ACME", level="ticker").loc[day])
+
+
+def _at(frame: pd.DataFrame | pd.Series, day: str, column: str) -> float:
+    return float(cast("pd.Series", frame[column]).loc[day])
 
 
 def test_a_filing_is_unusable_on_its_filing_day_and_usable_the_next_trading_day() -> (
@@ -98,9 +103,9 @@ def test_nothing_is_known_before_the_first_filing() -> None:
 
     before = acme.loc[:"2022-02-15"]
     assert before.drop(columns=["shares_prev_end", "as_of"]).isna().all().all()
-    assert acme.loc["2022-02-16", "revenue"] == 360
+    assert _at(acme, "2022-02-16", "revenue") == 360
     # Nothing a year earlier was filed, so there is no growth base yet.
-    assert np.isnan(acme.loc["2022-02-16", "revenue_prev"])
+    assert np.isnan(_at(acme, "2022-02-16", "revenue_prev"))
     # The 9M 2022 10-Q came on 2022-11-04: FY2021 + 9M 2022 - 9M 2021.
     assert acme.loc["2022-11-07", "revenue"] == 360 + 290 - 260
 
@@ -247,12 +252,12 @@ def test_a_company_that_stopped_filing_is_not_current_after_the_lag() -> None:
 
     # Net income ends 2023-09-30, so it is current through 2025-01-02, and
     # revenue ends 2023-12-31, so it is current through 2025-04-04.
-    assert inputs.loc["2025-01-02", "net_income"] == pytest.approx(
-        inputs.loc["2024-02-16", "net_income"]
+    assert _at(inputs, "2025-01-02", "net_income") == pytest.approx(
+        _at(inputs, "2024-02-16", "net_income")
     )
-    assert np.isnan(inputs.loc["2025-01-03", "net_income"])
-    assert inputs.loc["2025-04-04", "revenue"] > 0
-    assert np.isnan(inputs.loc["2025-04-07", "revenue"])
+    assert np.isnan(_at(inputs, "2025-01-03", "net_income"))
+    assert _at(inputs, "2025-04-04", "revenue") > 0
+    assert np.isnan(_at(inputs, "2025-04-07", "revenue"))
     assert inputs.loc["2025-04-07":, values].isna().all().all()
 
 
@@ -275,8 +280,9 @@ def test_a_stale_company_has_no_features_while_a_current_one_keeps_them() -> Non
     )
 
     day = pd.Timestamp("2026-03-02")
-    assert features.loc[day, "ACME"].isna().all()
-    assert features.loc[day, "LIVE"].notna().any()
+    on_day = features.loc[day]
+    assert on_day.loc["ACME"].isna().all()
+    assert on_day.loc["LIVE"].notna().any()
 
 
 def test_a_ticker_without_facts_has_no_rows() -> None:

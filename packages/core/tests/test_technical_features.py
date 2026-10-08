@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from index_core.features.normalize import rank_by_date
-from index_core.features.technical import FEATURES, technical_features
+from index_core.features.technical import FEATURES, WARMUP_BARS, technical_features
 from index_core.sources.base import PRICE_COLUMNS
 
 
@@ -25,6 +25,17 @@ def test_computes_twenty_features_for_every_ticker_but_the_benchmark(
     tickers = set(features.index.get_level_values("ticker"))
     assert tickers == set(prices["ticker"]) - {"SPY"}
     assert not np.isinf(features.to_numpy()).any()
+
+
+def test_the_first_complete_row_comes_after_the_warmup_bars(
+    prices: pd.DataFrame,
+) -> None:
+    features = technical_features(prices, "SPY").xs("AAA", level="ticker")
+
+    complete = features.dropna().index[0]
+
+    calendar = pd.DatetimeIndex(sorted(prices["date"].unique()))
+    assert calendar.searchsorted(complete) == WARMUP_BARS - 1
 
 
 def test_features_at_a_date_do_not_depend_on_later_data(

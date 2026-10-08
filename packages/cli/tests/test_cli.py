@@ -2,6 +2,7 @@ import json
 
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,16 +12,27 @@ from index_core.sources.synthetic import SyntheticSource
 from index_core.store import Store
 
 
+def _without_openmp(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(name: str) -> None:
+        raise OSError(f"{name}: cannot open shared object file")
+
+    monkeypatch.setattr(
+        "index_core.model.importlib", SimpleNamespace(import_module=refuse)
+    )
+    monkeypatch.setattr("index_core.model.sys", SimpleNamespace(platform="linux"))
+
+
 DEMO = Path(__file__).parents[3] / "universes" / "demo30.txt"
 END = date(2026, 9, 30)
 WINDOW = ["--start", "2024-01-01", "--end", END.isoformat()]
+OFFLINE = ["--prices", "synthetic", "--filings", "synthetic"]
 
 
 def _run(tmp_path: Path) -> Path:
     out = tmp_path / "scores.json"
     main(
         [
-            *["run", "--universe", str(DEMO), "--source", "synthetic", *WINDOW],
+            *["run", "--universe", str(DEMO), *OFFLINE, *WINDOW],
             *["--db", str(tmp_path / "db.sqlite"), "--out", str(out)],
         ]
     )
@@ -69,8 +81,15 @@ def test_export_rewrites_the_stored_scores_unchanged(tmp_path: Path) -> None:
 
 
 def test_export_without_a_database_fails_with_a_message(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit, match="does not exist"):
+    with pytest.raises(SystemExit, match=r"does not exist; run `eq run` first"):
         main(["export", "--db", str(tmp_path / "none.sqlite")])
+
+
+def test_a_missing_database_points_to_the_one_beside_it(tmp_path: Path) -> None:
+    _run(tmp_path)
+
+    with pytest.raises(SystemExit, match=r"found db\.sqlite beside it.*--db"):
+        main(["export", "--db", str(tmp_path / "index.sqlite")])
 
 
 def test_tiingo_run_without_a_key_fails_before_fetching(
@@ -90,6 +109,75 @@ def test_tiingo_run_without_a_contact_fails_before_fetching(
 
     with pytest.raises(SystemExit, match="SEC_USER_AGENT is not set"):
         main(["run", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")])
+
+
+def test_a_run_on_a_database_of_other_sources_fails_before_fetching(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run(tmp_path)
+    monkeypatch.setenv("TIINGO_API_KEY", "key")
+    monkeypatch.setenv("SEC_USER_AGENT", "Jane Doe jane@example.com")
+    monkeypatch.setattr(
+        "index_core.sources.tiingo.BASE_URL", "http://127.0.0.1:1", raising=True
+    )
+
+    with pytest.raises(SystemExit, match="holds synthetic prices"):
+        main(["run", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")])
+
+
+def test_prices_and_filings_are_chosen_independently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SEC_USER_AGENT", raising=False)
+
+    with pytest.raises(SystemExit, match="SEC_USER_AGENT is not set"):
+        main(
+            [
+                *["run", "--universe", str(DEMO), "--prices", "synthetic"],
+                *["--db", str(tmp_path / "db.sqlite")],
+            ]
+        )
+
+
+def test_each_choice_of_sources_gets_its_own_default_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("INDEX_DB", raising=False)
+
+    main(["run", "--universe", str(DEMO), *OFFLINE, *WINDOW])
+
+    assert sorted(path.name for path in (tmp_path / "data").glob("*.sqlite")) == [
+        "synthetic-synthetic.sqlite"
+    ]
+
+
+def test_a_missing_openmp_runtime_stops_a_run_before_it_fetches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = tmp_path / "db.sqlite"
+    _without_openmp(monkeypatch)
+
+    with pytest.raises(SystemExit, match=r"eq: .*apt-get install libgomp1"):
+        main(["run", "--universe", str(DEMO), *OFFLINE, "--db", str(database)])
+
+    with Store.open(database, read_only=True) as store:
+        assert store.price_source() is None
+
+
+def test_export_and_coverage_work_without_the_openmp_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _run(tmp_path)
+    capsys.readouterr()
+    _without_openmp(monkeypatch)
+    database = str(tmp_path / "db.sqlite")
+
+    main(["export", "--db", database, "--out", str(tmp_path / "again.json")])
+    main(["coverage", "--universe", str(DEMO), "--db", database])
+
+    assert (tmp_path / "again.json").exists()
+    assert "Fundamentals coverage" in capsys.readouterr().out
 
 
 def test_coverage_counts_a_name_with_no_stored_filings_as_zero(
@@ -138,15 +226,7 @@ def test_coverage_without_a_database_fails_with_a_message(tmp_path: Path) -> Non
 
 def test_a_missing_universe_file_fails_with_a_message(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match=r"eq: .*no-such\.txt"):
-        main(
-            [
-                "run",
-                "--universe",
-                str(tmp_path / "no-such.txt"),
-                "--source",
-                "synthetic",
-            ]
-        )
+        main(["run", "--universe", str(tmp_path / "no-such.txt"), *OFFLINE])
 
 
 def test_a_network_failure_ends_with_a_message_not_a_traceback(
@@ -169,7 +249,7 @@ def test_export_can_pick_a_universe_by_name(tmp_path: Path) -> None:
     _run(tmp_path)
     main(
         [
-            *["run", "--universe", str(small), "--source", "synthetic", *WINDOW],
+            *["run", "--universe", str(small), *OFFLINE, *WINDOW],
             *["--db", str(database), "--out", str(tmp_path / "small.json")],
         ]
     )
@@ -197,7 +277,7 @@ def test_a_reversed_date_range_fails_with_a_message(tmp_path: Path) -> None:
     ):
         main(
             [
-                *["run", "--universe", str(DEMO), "--source", "synthetic"],
+                *["run", "--universe", str(DEMO), *OFFLINE],
                 *["--start", "2026-09-30", "--end", "2024-01-01"],
                 *["--db", str(tmp_path / "db.sqlite")],
             ]
@@ -210,7 +290,7 @@ def test_backtest_prints_the_out_of_sample_table_with_the_base_rate(
     database = tmp_path / "db.sqlite"
     main(
         [
-            *["run", "--universe", str(DEMO), "--source", "synthetic"],
+            *["run", "--universe", str(DEMO), *OFFLINE],
             *["--start", "2016-01-01", "--end", "2026-09-30"],
             *["--db", str(database), "--out", str(tmp_path / "scores.json")],
         ]
@@ -235,10 +315,10 @@ def test_backtest_with_too_little_history_fails_with_a_message(tmp_path: Path) -
     database = tmp_path / "db.sqlite"
     main(
         [
-            *["run", "--universe", str(DEMO), "--source", "synthetic", *WINDOW],
+            *["run", "--universe", str(DEMO), *OFFLINE, *WINDOW],
             *["--db", str(database), "--out", str(tmp_path / "scores.json")],
         ]
     )
 
-    with pytest.raises(SystemExit, match=r"eq: .*too short"):
+    with pytest.raises(SystemExit, match=r"eq: .*needs at least \d+.*--start 20"):
         main(["backtest", "--universe", str(DEMO), "--db", str(database)])

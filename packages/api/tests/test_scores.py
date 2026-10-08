@@ -20,7 +20,8 @@ def _run_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     out = tmp_path / "scores.json"
     main(
         [
-            *["run", "--universe", str(DEMO), "--source", "synthetic"],
+            *["run", "--universe", str(DEMO)],
+            *["--prices", "synthetic", "--filings", "synthetic"],
             *["--start", "2024-01-01", "--end", "2026-09-30"],
             *["--db", str(database), "--out", str(out)],
         ]

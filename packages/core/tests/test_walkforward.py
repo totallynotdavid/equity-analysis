@@ -46,9 +46,8 @@ def test_no_training_label_window_reaches_into_the_test_quarter(
 ) -> None:
     assert len(result.folds) > 20
     for fold in result.folds:
-        assert calendar.get_loc(fold.last_train) + LABEL_SPAN < calendar.get_loc(
-            fold.test_start
-        )
+        last_read = calendar.searchsorted(fold.last_train) + LABEL_SPAN
+        assert last_read < calendar.searchsorted(fold.test_start)
     # The window grows by one quarter at a time.
     sizes = [fold.train_dates for fold in result.folds]
     assert sizes == sorted(sizes)
@@ -58,7 +57,7 @@ def test_no_training_label_window_reaches_into_the_test_quarter(
 def test_each_prediction_comes_from_the_model_of_its_own_quarter(
     result: WalkForward,
 ) -> None:
-    dates = result.predictions.index.get_level_values("date")
+    dates = pd.DatetimeIndex(result.predictions.index.get_level_values("date"))
     starts = [fold.test_start for fold in result.folds]
     quarter = dates.to_period("Q")
     assert quarter.nunique() == len(starts)
@@ -72,7 +71,7 @@ def test_labels_inside_the_purge_window_cannot_change_a_quarters_predictions(
     calendar: pd.DatetimeIndex,
 ) -> None:
     base = walk_forward(features, excess, calendar, date(2020, 1, 1))
-    start = calendar.get_loc(base.folds[0].test_start)
+    start = calendar.searchsorted(base.folds[0].test_start)
     position = calendar.get_indexer(excess.index.get_level_values("date"))
     rng = np.random.default_rng(3)
 

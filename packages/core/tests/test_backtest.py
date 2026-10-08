@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from index_core.backtest_text import render
-from index_core.pipeline import Backtest, backtest
+from index_core.pipeline import Backtest, backtest, history_needed
 from index_core.sources.base import PRICE_COLUMNS
 from index_core.store import Store
 
@@ -53,7 +53,7 @@ def test_a_ticker_without_stored_prices_stops_the_backtest(store: Store) -> None
 
 
 def test_a_holdout_longer_than_the_history_stops_the_backtest(store: Store) -> None:
-    with pytest.raises(ValueError, match="too short"):
+    with pytest.raises(ValueError, match="needs at least"):
         backtest(store, TICKERS, FIRST_OOS, holdout_months=1000)
 
 
@@ -72,3 +72,42 @@ def test_the_text_shows_the_base_rate_the_effective_sample_and_ten_score_rows(
     lines = text.splitlines()
     table = lines[lines.index(next(x for x in lines if x.startswith("score "))) + 1 :]
     assert [int(line.split()[0]) for line in table[:10]] == list(range(10, 0, -1))
+
+
+def _store_with_days(path: Path, planted: pd.DataFrame, days: int) -> Store:
+    frame = planted[planted["ticker"].isin(["SPY", *TICKERS])]
+    first_days = sorted(frame["date"].unique())[:days]
+    frame = frame[frame["date"].isin(first_days)]
+    store = Store.open(path)
+    for ticker, bars in frame.groupby("ticker"):
+        store.upsert_prices(
+            "synthetic", str(ticker), bars.set_index("date")[list(PRICE_COLUMNS)]
+        )
+    return store
+
+
+@pytest.mark.parametrize("final", [False, True])
+def test_a_history_below_the_stated_need_is_refused_with_the_start_to_fetch(
+    tmp_path: Path, planted: pd.DataFrame, final: bool
+) -> None:
+    needed = history_needed(12, final=final)
+
+    with (
+        _store_with_days(tmp_path / "db.sqlite", planted, needed - 1) as store,
+        pytest.raises(ValueError, match=rf"needs at least {needed}") as error,
+    ):
+        backtest(store, TICKERS, holdout_months=12, final=final)
+
+    assert "Run `eq run --start 20" in str(error.value)
+
+
+@pytest.mark.parametrize("final", [False, True])
+def test_a_history_a_quarter_above_the_stated_need_backtests(
+    tmp_path: Path, planted: pd.DataFrame, final: bool
+) -> None:
+    with _store_with_days(
+        tmp_path / "db.sqlite", planted, history_needed(12, final=final) + 126
+    ) as store:
+        result = backtest(store, TICKERS, holdout_months=12, final=final)
+
+    assert result.folds

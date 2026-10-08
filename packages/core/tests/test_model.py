@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -5,8 +7,42 @@ import pytest
 from index_core.features.normalize import rank_by_date
 from index_core.features.technical import technical_features
 from index_core.labels import LABEL_SPAN, excess_return_labels
-from index_core.model import SNAPSHOT_STEP, fit, purged_split
+from index_core.model import (
+    SNAPSHOT_STEP,
+    MissingRuntimeError,
+    fit,
+    load_lightgbm,
+    purged_split,
+)
 from index_core.scoring import decile_scores
+
+
+def _without_openmp(monkeypatch: pytest.MonkeyPatch, platform: str = "linux") -> None:
+    def refuse(name: str) -> None:
+        raise OSError(f"{name}: cannot open shared object file")
+
+    monkeypatch.setattr(
+        "index_core.model.importlib", SimpleNamespace(import_module=refuse)
+    )
+    monkeypatch.setattr("index_core.model.sys", SimpleNamespace(platform=platform))
+
+
+def test_a_missing_openmp_runtime_names_the_package_to_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _without_openmp(monkeypatch)
+
+    with pytest.raises(MissingRuntimeError, match="apt-get install libgomp1"):
+        load_lightgbm()
+
+
+def test_a_missing_openmp_runtime_on_macos_names_libomp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _without_openmp(monkeypatch, "darwin")
+
+    with pytest.raises(MissingRuntimeError, match="brew install libomp"):
+        load_lightgbm()
 
 
 def test_no_training_label_window_reaches_the_holdout_period() -> None:
@@ -17,12 +53,12 @@ def test_no_training_label_window_reaches_the_holdout_period() -> None:
 
     assert len(train) > 0
     assert train.max() < holdout.min()
-    last_train_read = calendar.get_loc(train.max()) + LABEL_SPAN
-    assert last_train_read < calendar.get_loc(holdout.min())
+    last_train_read = calendar.searchsorted(train.max()) + LABEL_SPAN
+    assert last_train_read < calendar.searchsorted(holdout.min())
     # The purge drops the dates in between and nothing else.
-    first_holdout = calendar.get_loc(holdout.min())
+    first_holdout = calendar.searchsorted(holdout.min())
     dropped = [d for d in dates if d < holdout.min() and d not in train]
-    assert all(calendar.get_loc(d) + LABEL_SPAN >= first_holdout for d in dropped)
+    assert all(calendar.searchsorted(d) + LABEL_SPAN >= first_holdout for d in dropped)
 
 
 def test_fit_uses_early_dates_for_training_and_late_dates_for_the_holdout(
