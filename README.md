@@ -46,7 +46,8 @@ It prints `wrote 30 scores as of <date> to outputs/scores.json`:
   "status": "experimental, not validated",
   "as_of": "2026-10-08",
   "universe": "demo30",
-  "source": "synthetic",
+  "price_source": "synthetic",
+  "facts_source": "synthetic",
   "horizon_days": 63,
   "model": { "train_rows": 5640, "holdout_rows": 1500, "holdout_auc": 0.515 },
   "rows": [
@@ -60,9 +61,12 @@ The example cuts the rows to two. Synthetic prices are fake, so these scores
 mean nothing.
 
 With real data, set `TIINGO_API_KEY` and `SEC_USER_AGENT` and leave out
-`--prices` and `--filings`:
+`--prices` and `--filings`. The synthetic run filled `data/index.sqlite`, which
+rejects real data ([the database](docs/CLI.md#the-database)), so point
+`INDEX_DB` at a new file. Every later `eq` command then reads that file too:
 
 ```bash
+export INDEX_DB=data/real.sqlite
 TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
   uv run eq run --universe universes/demo30.txt
 ```

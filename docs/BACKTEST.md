@@ -7,7 +7,7 @@ command prints the `--start` to run with.
 
 ```bash
 uv run eq run --universe universes/demo30.txt --prices synthetic --filings synthetic --start 2008-01-01
-uv run eq backtest --universe universes/demo30.txt --db data/synthetic-synthetic.sqlite
+uv run eq backtest --universe universes/demo30.txt
 ```
 
 | Option             | Meaning                                            | Default                        |

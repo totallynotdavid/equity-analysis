@@ -78,7 +78,12 @@ The SEC asks every client to identify itself, so `SEC_USER_AGENT` must hold a
 contact such as `Jane Doe jane@example.com`. The client waits 0.12 seconds
 between requests to stay under the SEC's limit of 10 a second.
 
+A database that holds synthetic data rejects real data ([below](#the-database)),
+so after a synthetic run give the real run a new file. `INDEX_DB` makes every
+later command read that file too:
+
 ```bash
+export INDEX_DB=data/real.sqlite
 TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
   uv run eq run --universe universes/demo30.txt
 ```
@@ -90,14 +95,10 @@ costs one request for its ticker list and at most one per ticker.
 
 The database is one SQLite file. It holds prices, filings and every saved run.
 
-- The file is `--db`, else `$INDEX_DB`, else `data/index.sqlite`. The exception
-  is `eq run` with a synthetic source and no `--db` or `$INDEX_DB`: it writes
-  `data/<prices>-<filings>.sqlite`, for example
-  `data/synthetic-synthetic.sqlite`.
-- `eq export`, `eq coverage` and `eq backtest` do not look for that file. After
-  a synthetic run, pass `--db data/synthetic-synthetic.sqlite` or set `INDEX_DB`
-  to it. When the file does not exist, they fail and name the other `.sqlite`
-  files beside it. They open it read-only.
+- Every command uses the file given by `--db`, else `$INDEX_DB`, else
+  `data/index.sqlite`. `eq export`, `eq coverage` and `eq backtest` open it
+  read-only. When it does not exist, they fail and name the other `.sqlite`
+  files beside it.
 - A run is keyed by universe and as-of date. Running the same universe again on
   the same date replaces that run. Other universes and dates stay.
 - A database holds prices from one source and filings from one source. To switch
@@ -107,8 +108,7 @@ The database is one SQLite file. It holds prices, filings and every saved run.
 ## eq export
 
 ```bash
-uv run eq export --universe demo30 --db data/synthetic-synthetic.sqlite \
-  --out outputs/scores.json
+uv run eq export --universe demo30 --out outputs/scores.json
 ```
 
 Writes the stored run with the latest as-of date. `--universe NAME` limits the

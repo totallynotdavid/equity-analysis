@@ -74,7 +74,7 @@ when earnings or EBITDA are not positive.
 ## eq coverage
 
 ```bash
-uv run eq coverage --universe universes/demo30.txt --db data/synthetic-synthetic.sqlite
+uv run eq coverage --universe universes/demo30.txt
 ```
 
 `eq coverage` reads the stored filings, so run [`eq run`](CLI.md#eq-run) first.

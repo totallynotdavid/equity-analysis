@@ -9,43 +9,43 @@ page. All three show the same shape,
 `eq run` and `eq export` write `outputs/scores.json` unless `--out` says
 otherwise ([CLI](CLI.md)).
 
-| Field                | Meaning                                                    |
-| -------------------- | ---------------------------------------------------------- |
-| `status`             | Always `experimental, not validated`                       |
-| `as_of`              | The trading day the scores are for                         |
-| `universe`           | The ticker list's file name without its extension          |
-| `source`             | The price source: `tiingo` or `synthetic`                  |
-| `horizon_days`       | The label horizon, 63 trading days                         |
-| `model.train_rows`   | Rows the model was fitted on                               |
-| `model.holdout_rows` | Rows in the later holdout the model was measured on        |
-| `model.holdout_auc`  | AUC on that holdout, `null` when it holds only one outcome |
-| `rows[].ticker`      | The ticker                                                 |
-| `rows[].rank`        | 1 is the highest probability. Ranks are unique             |
-| `rows[].score`       | Decile from 1 to 10. 10 is the top tenth                   |
-| `rows[].prob`        | The model's probability of beating SPY over `horizon_days` |
+| Field                | Meaning                                                     |
+| -------------------- | ----------------------------------------------------------- |
+| `status`             | Always `experimental, not validated`                        |
+| `as_of`              | The trading day the scores are for                          |
+| `universe`           | The ticker list's file name without its extension           |
+| `price_source`       | Where the prices came from: `tiingo` or `synthetic`         |
+| `facts_source`       | Where the filings came from: `edgar`, `synthetic` or `null` |
+| `horizon_days`       | The label horizon, 63 trading days                          |
+| `model.train_rows`   | Rows the model was fitted on                                |
+| `model.holdout_rows` | Rows in the later holdout the model was measured on         |
+| `model.holdout_auc`  | AUC on that holdout, `null` when it holds only one outcome  |
+| `rows[].ticker`      | The ticker                                                  |
+| `rows[].rank`        | 1 is the highest probability. Ranks are unique              |
+| `rows[].score`       | Decile from 1 to 10. 10 is the top tenth                    |
+| `rows[].prob`        | The model's probability of beating SPY over `horizon_days`  |
 
 Rows are ordered by rank. How the score derives from `prob` is in
 [Model](MODEL.md#the-score).
 
-`source` records the price source only, not the filings source. A run with
-`--prices tiingo --filings synthetic` has `source` `tiingo`.
+The two sources are separate fields, and both are the database's
+([CLI](CLI.md#the-database)). A run with `--prices tiingo --filings synthetic`
+has `price_source` `tiingo` and `facts_source` `synthetic`. `facts_source` is
+`null` when the database holds no filings, for example when the SEC lists none
+of the tickers.
 
 ## API
 
 `index-api` is a read-only FastAPI app
 ([`packages/api/index_api/main.py`](../packages/api/index_api/main.py)). It
-reads the database at `$INDEX_DB`, else `data/index.sqlite`, on every request.
-To serve a synthetic run, set `INDEX_DB=data/synthetic-synthetic.sqlite`
+reads the database at `$INDEX_DB`, else `data/index.sqlite`, on every request
 ([CLI](CLI.md#the-database)).
 
 ```bash
 mise run api   # http://127.0.0.1:8000/docs
 ```
 
-Without mise:
-`uv run uvicorn index_api.main:app --reload --app-dir ./packages/api/`. The
-`--app-dir` is required: the `index-api` package has no build metadata, so
-`index_api` is not importable without it.
+Without mise: `uv run uvicorn index_api.main:app --reload`.
 
 | Endpoint      | Returns                                                                   |
 | ------------- | ------------------------------------------------------------------------- |
@@ -69,15 +69,13 @@ mise run web              # dev server at http://localhost:4321
 (cd web && bun run build) # writes web/dist
 ```
 
-`mise run web` starts `astro dev --host`
-([`web/package.json`](../web/package.json)), so the dev server listens on every
-network interface of the machine, not only on `localhost`.
+`mise run web` starts `astro dev` ([`web/package.json`](../web/package.json)),
+which listens only on localhost.
 
 `mise run site` runs `eq export` on the default database, then the build.
 
 The build reads `../outputs/scores.json`, relative to `web/`. Set `SCORES_JSON`
 to read another file. The page shows the disclaimer, the as-of date and a table
-of rank, ticker and score. It warns when `source` is not `tiingo`. Because
-`source` names only the price source, a run with
-`--prices tiingo --filings synthetic` shows no warning although its fundamentals
-are fake. Without a file the page says there are no scores yet.
+of rank, ticker and score. It warns unless `price_source` is `tiingo` and
+`facts_source` is `edgar` or `null`, so a file without the two fields also
+warns. Without a file the page says there are no scores yet.
