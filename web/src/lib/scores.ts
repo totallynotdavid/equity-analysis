@@ -12,7 +12,8 @@ export interface Scores {
   status: string;
   as_of: string;
   universe: string;
-  source: string;
+  price_source: string;
+  facts_source: string | null;
   horizon_days: number;
   rows: ScoreRow[];
 }

@@ -3,6 +3,21 @@ import Layout from "@/layouts/Layout.astro";
 import { loadScores } from "@/lib/scores";
 
 const scores = loadScores();
+// A null facts_source means no filings were stored, so none can be unreal.
+// A file without the fields is not trusted either.
+const unreal =
+  scores === null
+    ? []
+    : [
+        { kind: "prices", source: scores.price_source, real: "tiingo" },
+        { kind: "filings", source: scores.facts_source, real: "edgar" },
+      ]
+        .filter(({ source, real }) => source !== real && source !== null)
+        .map(({ kind, source }) =>
+          source === "synthetic"
+            ? `synthetic ${kind}`
+            : `${kind} of unknown source`,
+        );
 ---
 
 <Layout>
@@ -28,13 +43,13 @@ const scores = loadScores();
       </p>
     ) : (
       <>
-        {scores.source !== "tiingo" && (
+        {unreal.length > 0 && (
           <p
             class="border-error bg-error/10 text-foreground mt-4 rounded-md border px-4 py-3 text-sm font-medium"
             role="alert"
           >
-            These scores come from {scores.source} prices, not market data. They
-            mean nothing.
+            These scores use {unreal.join(" and ")}, not market data. They mean
+            nothing.
           </p>
         )}
         <p class="text-muted-foreground mt-8 text-sm">
