@@ -27,6 +27,35 @@ description = "Type check the entire codebase with mypy"
 alias = "m"
 run = "uv run mypy ."
 
+[tasks."check:python"]
+description = "Lint, format check, type check and test the Python code"
+run = [
+    "uv run ruff check . --no-fix",
+    "uv run ruff format --check .",
+    "uv run mypy .",
+    "uv run pytest -q",
+]
+
+[tasks."check:web"]
+description = "Format check and build the web page"
+dir = "web"
+run = [
+    "bunx prettier --check src astro.config.mjs",
+    "bun run build",
+]
+
+[tasks.check]
+description = "Every check CI runs"
+alias = "c"
+depends = ["check:python", "check:web"]
+
+[tasks.site]
+description = "Export the latest scores and build the static page from them"
+run = [
+    "uv run eq export",
+    "cd web && bun run build",
+]
+
 [tasks.cli]
 description = "Run the eq command-line interface"
 run = "uv run eq"

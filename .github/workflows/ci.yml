@@ -13,27 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  python:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
-        with:
-          python-version: "3.14"
-      - run: uv sync --all-packages --locked
-      - run: uv run ruff check . --no-fix
-      - run: uv run ruff format --check .
-      - run: uv run mypy .
-      - run: uv run pytest -q
-
-  web:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bunx prettier --check src astro.config.mjs
-      - run: bun run build
+      - uses: jdx/mise-action@v5
+      - run: mise run install
+      - run: mise run check
