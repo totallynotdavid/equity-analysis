@@ -1,13 +1,10 @@
-"""Walk-forward prediction: refit every quarter, predict only the next quarter.
+"""Walk-forward prediction: refit every quarter and predict only the next.
 
-An expanding window fits on every labelled snapshot whose label window closed
-before the quarter began, then predicts the snapshots inside that quarter. Each
-prediction comes from a model that never saw the quarter's prices. The stitched
-predictions are the only out-of-sample numbers the project reports.
-
-The purge is also the embargo: the training set ends before the test quarter, so
-no later data trains a model that is tested earlier, and a gap of `LABEL_SPAN`
-days separates them.
+An expanding window fits on labelled snapshots whose label window closed before
+the quarter began, then predicts snapshots inside that quarter. Each
+prediction comes from a model that never saw the quarter's prices. The purge
+also acts as the embargo: training ends before the test quarter, leaving a
+`LABEL_SPAN`-day gap between them.
 """
 
 from dataclasses import dataclass

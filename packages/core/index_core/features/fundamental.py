@@ -1,15 +1,13 @@
 """Fundamental features from SEC filings, as known on each date.
 
-A fact is usable from the first trading day after the day it was filed, never on
-the filing day itself: a filing can land after the close. Where several filings
-report one period, the latest one filed before the date wins, so a restated
-value stays invisible until its restatement is filed. Nothing is back-filled and
-a value is carried forward only until the next filing changes the information.
+A fact is usable from the first trading day after it was filed. Where several
+filings report one period, the latest one filed before the date wins. Nothing
+is back-filled, and a value is carried forward only until the next filing
+changes the information.
 
-Two steps keep this testable. `fundamental_inputs` turns filed facts into the
-price-free quantities known on each date: trailing-twelve-month (TTM) flows,
-balance-sheet values and share counts. `fundamental_features` joins them with
-the day's price into ratios that compare across companies.
+`fundamental_inputs` turns filed facts into trailing-twelve-month flows,
+balance-sheet values, and share counts known on each date. `fundamental_features`
+joins them with the day's price into ratios that compare across companies.
 """
 
 from typing import TYPE_CHECKING, NamedTuple
@@ -309,16 +307,17 @@ def fundamental_features(
     price multiples: they stay defined and keep their order when earnings or
     EBITDA are not positive. A ratio with a non-positive denominator is NaN.
     """
-    bars = prices.pivot(index="date", columns="ticker", values=["close", "volume"])
+    closes = prices.pivot(index="date", columns="ticker", values="close")
+    volumes = prices.pivot(index="date", columns="ticker", values="volume")
     adjusted = prices.pivot(index="date", columns="ticker", values="adj_volume")
     # Adjusted volume over traded volume is the number of shares today that one
     # share on that day became through later splits.
-    split = (adjusted / bars["volume"].replace(0, np.nan)).ffill()
+    split = (adjusted / volumes.replace(0, np.nan)).ffill()
 
     index = inputs.index
-    dates = index.get_level_values("date")
+    dates = pd.DatetimeIndex(index.get_level_values("date"))
     tickers = index.get_level_values("ticker")
-    close = _lookup(bars["close"], dates, tickers)
+    close = _lookup(closes, dates, tickers)
     split_now = _lookup(split, dates, tickers)
     split_filed = _lookup(split, pd.DatetimeIndex(inputs["as_of"]), tickers)
     split_prev = _lookup(split, pd.DatetimeIndex(inputs["shares_prev_end"]), tickers)

@@ -1,15 +1,14 @@
-"""Honest metrics for out-of-sample predictions.
+"""Metrics for out-of-sample predictions.
 
-All rows are weekly snapshots, and each label looks 63 trading days ahead, so
-neighbouring snapshots share most of their outcome. The number of snapshots
-therefore overstates the evidence. Intervals resample whole months, which keeps
-that overlap inside each block, and the t-statistic uses Newey-West errors.
-`Evaluation.independent_windows` counts the non-overlapping 63-day windows the
-span holds. That, not the row count, is the effective sample.
+Rows are weekly snapshots, and each label looks 63 trading days ahead, so
+neighbouring snapshots share most of their outcome. Intervals resample whole
+months to keep that overlap inside each block, and the t-statistic uses
+Newey-West errors. `Evaluation.independent_windows` counts the non-overlapping
+63-day windows in the span. That is the effective sample, not the row count.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
@@ -101,7 +100,7 @@ def evaluate(predictions: pd.DataFrame, calendar: pd.DatetimeIndex) -> Evaluatio
     scored = frame.join(_scores(frame))
     per_date = _per_date(scored)
     scored = scored[scored.index.get_level_values("date").isin(per_date.index)]
-    months = per_date.index.to_period("M")
+    months = pd.DatetimeIndex(per_date.index).to_period("M")
     sums = _month_sums(scored, per_date, months)
 
     draws = np.random.default_rng(BOOTSTRAP_SEED).integers(
@@ -197,16 +196,17 @@ def _month_sums(
     scored: pd.DataFrame, per_date: pd.DataFrame, months: pd.PeriodIndex
 ) -> np.ndarray:
     """One row per month: the quantities the statistics are ratios of."""
-    dates = scored.index.get_level_values("date")
+    dates = pd.DatetimeIndex(scored.index.get_level_values("date"))
     scored_months = dates.to_period("M")
     labels = sorted(months.unique())
     sums = np.zeros((len(labels), _AUC_N + 1))
     for row, month in enumerate(labels):
         group = scored[scored_months == month]
         for score, bucket in group.groupby("score"):
-            sums[row, _COUNT + int(score) - 1] = len(bucket)
-            sums[row, _HITS + int(score) - 1] = bucket["label"].sum()
-            sums[row, _EXCESS + int(score) - 1] = bucket["excess"].sum()
+            level = cast("int", score) - 1
+            sums[row, _COUNT + level] = len(bucket)
+            sums[row, _HITS + level] = bucket["label"].sum()
+            sums[row, _EXCESS + level] = bucket["excess"].sum()
         in_month = per_date[months == month]
         sums[row, _IC] = in_month["ic"].sum()
         sums[row, _IC_N] = len(in_month)
