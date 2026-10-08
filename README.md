@@ -13,6 +13,15 @@ recommendation to buy or sell any security, and you can lose money.
 
 ## Quick start
 
+You need [uv](https://docs.astral.sh/uv/) and Python 3.14. uv installs the
+Python it needs. Install the workspace once:
+
+```bash
+git clone https://github.com/totallynotdavid/equity-analysis
+cd equity-analysis
+uv sync --all-packages
+```
+
 `eq run` fetches prices and filings, builds features, fits the model, stores the
 scores in SQLite and writes `outputs/scores.json`. Without keys, run it on
 synthetic prices and filings. They are fake, so the scores mean nothing:
@@ -63,8 +72,9 @@ quarters and subtract the year-to-date of a year before. The ratios are
 valuation (sales, EBITDA, earnings and free cash flow against enterprise value
 or market value), profitability and margins, growth, leverage, accruals, share
 dilution and asset growth. Market value is the filed share count times the price
-of that day, corrected for splits since the count was filed. Like the technical
-features, each ratio is ranked within its date.
+of that day, corrected for splits since the count was filed. Capital spending is
+read as a positive amount paid, because filers differ on its sign. Like the
+technical features, each ratio is ranked within its date.
 
 `eq coverage --universe universes/demo30.txt` lists the names with fewer than
 `--min-concepts` of the 13 concepts filed recently, so a name that a ticker
@@ -94,147 +104,62 @@ effective sample, and it is small.
 The last 24 months of predictions (`--holdout-months`) stay out of the metrics.
 `--final` measures only those months. Use it once, before a public claim.
 
-## Architecture
+## Layout
 
-The project follows a monorepo structure managed with
-[uv workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces/#getting-started),
-organizing code into independent Python packages. This structure supports
-cross-package development, clear separation of concerns, and isolated dependency
-management.
+A [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) of
+three Python packages and an Astro site:
 
-The `index-core` package implements all analytical logic as functions that
-process data and return structured results, independent of any interface. Only
-the price and filings sources touch the network. The API and CLI packages
-provide interfaces only.
-
-The monorepo consists of four main components:
-
-**Core package** ([`packages/core`](packages/core)) houses `index-core`, the
-application's engine: price sources behind a `PriceSource` interface (Tiingo,
-and a synthetic generator for tests and offline runs), filings sources behind a
-`FilingsSource` interface (EDGAR and a synthetic generator), the SQLite store,
-technical and fundamental features, the label, the model, the decile score and
-the walk-forward backtest.
-
-**CLI package** ([`packages/cli`](packages/cli)) provides `index-cli`, the `eq`
-command, with `eq run`, `eq backtest`, `eq coverage` and `eq export`.
-
-**API package** ([`packages/api`](packages/api)) contains `index-api`, a
-read-only FastAPI server over the SQLite file. `GET /scores` returns the latest
-scores, the same JSON that `eq export` writes. `GET /health` returns the status
-and the as-of date of the latest scores (`null` until scores exist).
-
-**Frontend application** ([`web`](web)) houses an Astro site. It renders
-`outputs/scores.json` as a ranked table at build time, so run `eq run` first and
-rebuild after each run.
-
-## Technology stack
-
-**Backend and CLI:** Built with Python 3.14+, using `uv` for package management.
-The web API is powered by FastAPI.
-
-**Frontend:** Developed with Astro, styled using Tailwind CSS + Starwind CSS,
-and running on the Bun JavaScript runtime.
-
-For the development stack, I use `mise` to manage task automation and to enforce
-version consistency across environments. Python packages are linted and
-type-checked with Ruff and Mypy (configured in the root
-[`pyproject.toml`](pyproject.toml?plain=1#L18)), while the frontend is currently
-formatted with Prettier.
-
-## Development environment
-
-First, install `mise` by following the official guide at
-[mise.jdx.dev](https://mise.jdx.dev/getting-started.html) for your operating
-system. You'll also need Git for version control. Once installed, `mise` will
-automatically provision Python, `uv`, and Bun as defined in the configuration.
-
-Clone the repository and enter the project directory:
-
-```bash
-git clone https://github.com/totallynotdavid/equity-analysis
-cd equity-analysis
+```
+├── packages/
+│   ├── core/   index-core: sources, store, features, model, backtest
+│   ├── cli/    index-cli: the `eq` command
+│   └── api/    index-api: read-only FastAPI over the SQLite file
+├── universes/  ticker lists, one per line
+├── web/        Astro site that renders outputs/scores.json
+├── pyproject.toml   workspace members, ruff, mypy and pytest settings
+└── mise.toml        tool versions and tasks
 ```
 
-Set up the environment with:
+`index-core` holds all the logic as functions over data, with no interface. Only
+the price and filings sources touch the network. Prices come through a
+`PriceSource` (Tiingo, or a synthetic generator for tests and offline runs) and
+filings through a `FilingsSource` (EDGAR, or a synthetic generator). The CLI and
+API only call into it.
+
+`index-api` serves `GET /scores`, the latest scores in the JSON that `eq export`
+writes, and `GET /health`, the status and the as-of date of the latest scores
+(`null` until scores exist). The `web` site reads `outputs/scores.json` at build
+time, so run `eq run` first and rebuild after each run.
+
+## Development
+
+[mise](https://mise.jdx.dev/getting-started.html) provisions uv and Bun and runs
+the tasks in [`mise.toml`](mise.toml). Without mise, install uv and Bun yourself
+and run the commands in each task.
 
 ```bash
 mise install
-mise run install
+mise run install   # uv sync --all-packages --locked, bun install in web/
 ```
 
-The first command installs all required tools from `.mise.toml`. The second
-installs Python workspace dependencies from `uv.lock` and frontend dependencies
-with `bun install` inside `web/`. See [mise.toml](mise.toml?plain=1#L10) for
-more details.
+| Task            | What it does                                        |
+| --------------- | --------------------------------------------------- |
+| `mise run cli`  | the `eq` command, for example `mise run cli -- run` |
+| `mise run api`  | the API with reload at `http://127.0.0.1:8000/docs` |
+| `mise run web`  | the Astro dev server at `http://localhost:4321`     |
+| `mise run fix`  | format and lint the Python code with ruff           |
+| `mise run mypy` | type-check with mypy                                |
 
-By default, `uv` also creates and manages a virtual environment, enabled through
-the `uv_venv_auto = true` setting.
+The checks that CI runs, from the repository root:
 
-## Running the system
-
-Running the application typically requires two or three terminal sessions,
-depending on which components you need.
-
-**API server.** From the repository root, run:
-
-```
-mise run api
-```
-
-This starts Uvicorn with hot reloading. The API will be available at
-`http://127.0.0.1:8000`, with interactive docs at `http://127.0.0.1:8000/docs`.
-
-**CLI tool.** The CLI can be used independently of the other components:
-
-```
-mise run cli -- --help
+```bash
+uv run ruff check . --no-fix
+uv run ruff format --check .
+uv run mypy .
+uv run pytest                  # about 2.5 minutes, no network
+cd web && bun run build
 ```
 
-**Tests.** The tests use synthetic prices and filings and a small EDGAR fixture,
-and make no network calls:
-
-```
-uv run pytest
-```
-
-**Frontend.** To launch the development server, run:
-
-```
-mise run web
-```
-
-The interface will be available at `http://localhost:4321` on your machine, and
-can also be accessed from other devices on your local network using your
-computer’s IP address.
-
-## Project structure
-
-The monorepo structure:
-
-```
-├── .mise.toml                      # Tool versions and task definitions
-├── pyproject.toml                  # Workspace configuration, ruff and mypy settings
-├── packages/
-│   ├── core/
-│   │   ├── index_core/             # Analytical engine
-│   │   └── pyproject.toml          # Core package definition
-│   ├── cli/
-│   │   ├── index_cli/              # Command-line interface
-│   │   └── pyproject.toml          # CLI package definition
-│   └── api/
-│       ├── index_api/              # Web API
-│       └── pyproject.toml          # API package definition
-├── universes/                      # Ticker lists, one per line
-├── web/                            # Astro frontend application
-│   ├── src/
-│   ├── astro.config.mjs
-│   └── package.json
-```
-
-The root `pyproject.toml` acts as the central configuration. Its
-`[tool.uv.workspace]` section defines the monorepo members and centralizes tool
-settings for consistency. Each package has its own `pyproject.toml`, declaring
-dependencies and referencing local packages (e.g. `index-core`)
-[1](packages/api/pyproject.toml?plain=1#L13)
-[2](packages/cli/pyproject.toml?plain=1#L14).
+The tests run on synthetic prices and filings and on a small hand-written EDGAR
+payload (`packages/core/tests/fixtures`). They train real models, so they take
+minutes, and they make no network calls.
