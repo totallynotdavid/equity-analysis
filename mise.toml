@@ -37,10 +37,11 @@ run = [
 ]
 
 [tasks."check:web"]
-description = "Format check and build the web page"
+description = "Format check, test and build the web page"
 dir = "web"
 run = [
-    "bunx prettier --check src astro.config.mjs",
+    "bunx prettier --check src tests astro.config.mjs vitest.config.ts",
+    "bun run test",
     "bun run build",
 ]
 
@@ -62,7 +63,7 @@ run = "uv run eq"
 
 [tasks.api]
 description = "Start the FastAPI development server"
-run = "uv run uvicorn index_api.main:app --reload --app-dir ./packages/api/"
+run = "uv run uvicorn index_api.main:app --reload"
 
 [tasks.web]
 description = "Start the Bun/Astro development server for the web frontend"

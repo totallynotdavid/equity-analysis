@@ -254,7 +254,7 @@ dev = [
 [[package]]
 name = "index-api"
 version = "0.1.0"
-source = { virtual = "packages/api" }
+source = { editable = "packages/api" }
 dependencies = [
     { name = "fastapi" },
     { name = "index-core" },
