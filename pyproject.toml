@@ -45,7 +45,7 @@ select = [
 extend-safe-fixes = ["TC"]
 
 [tool.ruff.lint.flake8-tidy-imports]
-# Enforces clean, absolute imports, which is excellent for a monorepo.
+# Absolute imports only.
 ban-relative-imports = "all"
 
 [tool.ruff.lint.flake8-type-checking]
@@ -71,9 +71,6 @@ enable_error_code = [
     "truthy-bool",
 ]
 
-# todo: ignoring missing stubs for third-party libraries for now
-ignore_missing_imports = true
-
 [tool.pytest.ini_options]
 pythonpath = [
   "packages/core",
@@ -85,6 +82,7 @@ pythonpath = [
 dev = [
     "httpx2>=2.13.1",
     "mypy>=2.4.0",
+    "pandas-stubs>=3.0.5.260914",
     "pytest>=9.1.1",
     "ruff>=0.16.10",
 ]

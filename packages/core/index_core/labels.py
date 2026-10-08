@@ -1,6 +1,6 @@
 """The training label: does a stock beat the benchmark over the next 63 days?"""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 
 if TYPE_CHECKING:
@@ -27,7 +27,8 @@ def excess_returns(prices: pd.DataFrame, benchmark: str) -> pd.Series:
 
     forward = adj_close.shift(-LABEL_SPAN) / adj_close.shift(-ENTRY_LAG) - 1
     excess = forward.drop(columns=benchmark).sub(forward[benchmark], axis=0)
-    return excess.stack().dropna().rename("excess").rename_axis(["date", "ticker"])
+    stacked = cast("pd.Series", excess.stack().dropna())
+    return stacked.rename("excess").rename_axis(["date", "ticker"])
 
 
 def beats_benchmark(excess: pd.Series) -> pd.Series:

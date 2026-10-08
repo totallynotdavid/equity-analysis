@@ -172,11 +172,10 @@ def parse_companyfacts(payload: object, ticker: str = "?") -> pd.DataFrame:
     frame = frame.drop_duplicates(
         subset=["concept", "start", "end", "filed", "priority"], keep="last"
     )
-    return (
-        frame[list(FACT_COLUMNS)]
-        .sort_values(["concept", "end", "start", "filed", "priority"])
-        .reset_index(drop=True)
+    ordered: pd.DataFrame = frame[list(FACT_COLUMNS)].sort_values(
+        ["concept", "end", "start", "filed", "priority"]
     )
+    return ordered.reset_index(drop=True)
 
 
 class EdgarSource:
