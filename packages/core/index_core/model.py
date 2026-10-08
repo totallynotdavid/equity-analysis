@@ -1,8 +1,11 @@
 """One LightGBM classifier fitted on a chronological, purged split."""
 
-from dataclasses import dataclass
+import importlib
+import sys
 
-import lightgbm as lgb
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pandas as pd
 
@@ -10,8 +13,11 @@ from index_core.features.technical import FEATURES as TECHNICAL
 from index_core.labels import LABEL_SPAN
 
 
-# Rows of one stock on neighbouring days are nearly identical, so the model sees
-# one day in five.
+if TYPE_CHECKING:
+    from types import ModuleType
+
+    import lightgbm as lgb
+
 SNAPSHOT_STEP = 5
 HOLDOUT_FRACTION = 0.2
 MIN_HOLDOUT_DATES = 5
@@ -33,6 +39,29 @@ PARAMS = {
     "num_threads": 1,
     "verbose": -1,
 }
+
+
+class MissingRuntimeError(Exception):
+    """LightGBM cannot load because the OpenMP runtime is not installed."""
+
+
+def load_lightgbm() -> ModuleType:
+    """Import LightGBM, or name the package whose absence stops it.
+
+    `import lightgbm` fails with a bare `OSError` on a host without OpenMP.
+    Importing here instead of at module level lets `eq export` and `eq coverage`
+    run on such a host, and lets `eq run` fail before it fetches anything.
+    """
+    try:
+        return importlib.import_module("lightgbm")
+    except OSError as error:
+        if sys.platform == "darwin":
+            fix = "brew install libomp"
+        else:
+            fix = "sudo apt-get install libgomp1"
+        raise MissingRuntimeError(
+            f"LightGBM needs the OpenMP runtime ({error}); install it with `{fix}`"
+        ) from error
 
 
 @dataclass(frozen=True)
@@ -59,7 +88,7 @@ def purged_split(
     """
     holdout_count = max(MIN_HOLDOUT_DATES, round(len(dates) * HOLDOUT_FRACTION))
     holdout = dates[-holdout_count:]
-    holdout_start = calendar.get_loc(holdout[0])
+    holdout_start = calendar.searchsorted(holdout[0])
     last_read = calendar.get_indexer(dates[:-holdout_count]) + LABEL_SPAN
     return dates[:-holdout_count][last_read < holdout_start], holdout
 
@@ -79,11 +108,13 @@ def labelled_snapshots(
 
 
 def train_booster(train: pd.DataFrame, columns: list[str]) -> lgb.Booster:
-    return lgb.train(
+    lightgbm = load_lightgbm()
+    booster: lgb.Booster = lightgbm.train(
         PARAMS,
-        lgb.Dataset(train[columns], label=train["label"]),
+        lightgbm.Dataset(train[columns], label=train["label"]),
         num_boost_round=NUM_ROUNDS,
     )
+    return booster
 
 
 def fit(

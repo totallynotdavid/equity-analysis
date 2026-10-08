@@ -9,6 +9,9 @@ import numpy as np
 import pandas as pd
 
 
+# The first complete feature row follows this many price bars.
+WARMUP_BARS = 253
+
 FEATURES = (
     "ret_5",
     "ret_21",

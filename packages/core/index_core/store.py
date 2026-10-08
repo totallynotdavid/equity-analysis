@@ -66,8 +66,9 @@ class StoreError(Exception):
     pass
 
 
-def default_db_path() -> Path:
-    return Path(os.environ.get(DB_VARIABLE, "data/index.sqlite"))
+def default_db_path(name: str = "index") -> Path:
+    """`$INDEX_DB`, else `data/<name>.sqlite`."""
+    return Path(os.environ.get(DB_VARIABLE, f"data/{name}.sqlite"))
 
 
 class Store:
@@ -99,21 +100,31 @@ class Store:
     ) -> None:
         self.close()
 
-    def upsert_prices(self, source: str, ticker: str, bars: pd.DataFrame) -> None:
-        """Store bars, replacing any stored for the same ticker and date.
+    def require_sources(self, prices: str, filings: str) -> None:
+        """Raise `StoreError` if the stored prices or facts come from other sources.
 
-        One database holds prices from one source. Mixing, say, synthetic and
-        real bars would make every score downstream meaningless.
+        One database holds prices from one source and facts from one. Mixing,
+        say, synthetic and real data would make every score downstream
+        meaningless. Call it before fetching: the writes check too, but only
+        after the first request.
         """
+        self._require("price_source", "prices", prices)
+        self._require("facts_source", "facts", filings)
+
+    def _require(self, key: str, kind: str, source: str) -> None:
+        stored = self._db.execute(
+            "SELECT value FROM meta WHERE key = ?", (key,)
+        ).fetchone()
+        if stored is not None and stored[0] != source:
+            raise StoreError(
+                f"this database holds {stored[0]} {kind}; use a new database "
+                f"for {source}"
+            )
+
+    def upsert_prices(self, source: str, ticker: str, bars: pd.DataFrame) -> None:
+        """Store bars, replacing any stored for the same ticker and date."""
         with self._db:
-            stored = self._db.execute(
-                "SELECT value FROM meta WHERE key = 'price_source'"
-            ).fetchone()
-            if stored is not None and stored[0] != source:
-                raise StoreError(
-                    f"this database holds {stored[0]} prices; use a new database "
-                    f"for {source}"
-                )
+            self._require("price_source", "prices", source)
             self._db.execute(
                 "INSERT OR IGNORE INTO meta (key, value) VALUES ('price_source', ?)",
                 (source,),
@@ -156,18 +167,10 @@ class Store:
     def replace_facts(self, source: str, ticker: str, facts: pd.DataFrame) -> None:
         """Store all facts of a ticker, dropping any stored before.
 
-        A company's facts are fetched whole each time. One database holds facts
-        from one source, as it holds prices from one.
+        A company's facts are fetched whole each time.
         """
         with self._db:
-            stored = self._db.execute(
-                "SELECT value FROM meta WHERE key = 'facts_source'"
-            ).fetchone()
-            if stored is not None and stored[0] != source:
-                raise StoreError(
-                    f"this database holds {stored[0]} facts; use a new database "
-                    f"for {source}"
-                )
+            self._require("facts_source", "facts", source)
             if not facts.empty:
                 self._db.execute(
                     "INSERT OR IGNORE INTO meta (key, value) "
@@ -175,19 +178,23 @@ class Store:
                     (source,),
                 )
             self._db.execute("DELETE FROM facts WHERE ticker = ?", (ticker,))
+            days = {
+                column: facts[column].dt.strftime("%Y-%m-%d")
+                for column in ("start", "end", "filed")
+            }
             self._db.executemany(
                 "INSERT INTO facts VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
-                    (
-                        ticker,
-                        row.concept,
-                        "" if pd.isna(row.start) else row.start.date().isoformat(),
-                        row.end.date().isoformat(),
-                        row.filed.date().isoformat(),
-                        row.value,
-                        row.priority,
+                    (ticker, concept, start, end, filed, value, priority)
+                    for concept, start, end, filed, value, priority in zip(
+                        facts["concept"],
+                        days["start"].fillna(""),
+                        days["end"],
+                        days["filed"],
+                        facts["value"],
+                        facts["priority"],
+                        strict=True,
                     )
-                    for row in facts.itertuples(index=False)
                 ),
             )
 

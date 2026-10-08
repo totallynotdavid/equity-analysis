@@ -1,7 +1,7 @@
 """The daily job: fetch prices, build features, fit, score."""
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 import pandas as pd
 
@@ -13,14 +13,14 @@ from index_core.features.fundamental import (
 )
 from index_core.features.normalize import rank_by_date
 from index_core.features.technical import FEATURES as TECHNICAL
-from index_core.features.technical import technical_features
-from index_core.labels import HORIZON, excess_return_labels, excess_returns
-from index_core.model import fit
+from index_core.features.technical import WARMUP_BARS, technical_features
+from index_core.labels import HORIZON, LABEL_SPAN, excess_return_labels, excess_returns
+from index_core.model import SNAPSHOT_STEP, fit, load_lightgbm
 from index_core.report import ModelInfo, ScoreRow, ScoresReport
 from index_core.scoring import decile_scores
 from index_core.sources.base import NotFoundError, empty_facts
 from index_core.universe import BENCHMARK
-from index_core.walkforward import Fold, walk_forward
+from index_core.walkforward import MIN_TRAIN_DATES, Fold, walk_forward
 
 
 if TYPE_CHECKING:
@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 
 # Backtests reserve these months until `final`.
 HOLDOUT_MONTHS = 24
+TRADING_DAYS_PER_MONTH = 21
+CALENDAR_PER_TRADING_DAY = 1.5
 
 
 @dataclass(frozen=True)
@@ -82,13 +84,18 @@ def missing_filings(store: Store, tickers: list[str]) -> list[str]:
     return [ticker for ticker in tickers if ticker not in stored]
 
 
+def _calendar(features: pd.DataFrame) -> pd.DatetimeIndex:
+    dates = features.index.get_level_values("date")
+    return pd.DatetimeIndex(dates.unique().sort_values())
+
+
 def ranked_features(prices: pd.DataFrame, facts: pd.DataFrame) -> pd.DataFrame:
     """Technical and fundamental features ranked within each date.
 
     A ticker without facts keeps its rows with every fundamental missing.
     """
     technical = technical_features(prices, BENCHMARK)
-    calendar = technical.index.get_level_values("date").unique().sort_values()
+    calendar = _calendar(technical)
     inputs = fundamental_inputs(facts, calendar)
     fundamental = fundamental_features(inputs, prices, BENCHMARK)
     return rank_by_date(technical.join(fundamental))
@@ -112,13 +119,14 @@ def score(store: Store, universe: str, tickers: list[str], source: str) -> Score
     prices = store.read_prices([BENCHMARK, *tickers])
     features = ranked_features(prices, store.read_facts(tickers))
     labels = excess_return_labels(prices, BENCHMARK)
-    calendar = features.index.get_level_values("date").unique().sort_values()
+    calendar = _calendar(features)
 
     model = fit(features, labels, calendar)
 
     as_of = calendar[-1]
-    latest = features.xs(as_of, level="date")
-    incomplete = sorted(latest.index[latest[list(TECHNICAL)].isna().any(axis=1)])
+    latest = cast("pd.DataFrame", features.xs(as_of, level="date"))
+    missing_technical = latest[list(TECHNICAL)].isna().any(axis=1).to_numpy()
+    incomplete = sorted(latest.index[missing_technical])
     if incomplete:
         raise ValueError(f"too little history at {as_of.date()} for {incomplete}")
 
@@ -134,10 +142,30 @@ def score(store: Store, universe: str, tickers: list[str], source: str) -> Score
             holdout_auc=model.holdout_auc,
         ),
         rows=[
-            ScoreRow(ticker=row.ticker, rank=row.rank, score=row.score, prob=row.prob)
-            for row in table.itertuples()
+            ScoreRow(ticker=ticker, rank=rank, score=score, prob=prob)
+            for ticker, rank, score, prob in zip(
+                table["ticker"],
+                table["rank"],
+                table["score"],
+                table["prob"],
+                strict=True,
+            )
         ],
     )
+
+
+def history_needed(holdout_months: int, *, final: bool) -> int:
+    """Fewest trading days of stored prices a backtest can work with.
+
+    The first fold needs complete features, `MIN_TRAIN_DATES` snapshots and a
+    label span between training and test. Development metrics also need the
+    held-back months after the last of their predictions; with `final` those
+    months are the metrics, so they need only one more test quarter.
+    """
+    first_snapshot = -(-WARMUP_BARS // SNAPSHOT_STEP) * SNAPSHOT_STEP
+    first_fold = first_snapshot + (MIN_TRAIN_DATES - 1) * SNAPSHOT_STEP + LABEL_SPAN
+    held_back = 0 if final else holdout_months * TRADING_DAYS_PER_MONTH
+    return first_fold + LABEL_SPAN + held_back
 
 
 def backtest(
@@ -153,13 +181,23 @@ def backtest(
     The last `holdout_months` months stay out of development metrics. With
     `final`, only those months are measured.
     """
+    load_lightgbm()
     prices = store.read_prices([BENCHMARK, *tickers])
     missing = sorted({BENCHMARK, *tickers} - set(prices["ticker"]))
     if missing:
         raise ValueError(f"no stored prices for {missing}; run `eq run` first")
+    days = prices.loc[prices["ticker"] == BENCHMARK, "date"]
+    needed = history_needed(holdout_months, final=final)
+    if len(days) < needed:
+        start = days.max() - pd.Timedelta(days=int(needed * CALENDAR_PER_TRADING_DAY))
+        raise ValueError(
+            f"{len(days)} days of {BENCHMARK} prices are stored, from "
+            f"{days.min().date()}; this backtest needs at least {needed}. "
+            f"Run `eq run --start {start.date()}` or earlier"
+        )
     features = ranked_features(prices, store.read_facts(tickers))
     excess = excess_returns(prices, BENCHMARK)
-    calendar = features.index.get_level_values("date").unique().sort_values()
+    calendar = _calendar(features)
 
     result = walk_forward(features, excess, calendar, first_oos)
     predictions = result.predictions
@@ -191,6 +229,8 @@ def run(
     start: date,
     end: date,
 ) -> ScoresReport:
+    load_lightgbm()
+    store.require_sources(source.name, filings.name)
     ingest(source, store, tickers, start, end)
     ingest_filings(filings, store, tickers, end)
     report = score(store, universe, tickers, source.name)
