@@ -71,11 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_command.add_argument("--start", type=date.fromisoformat)
     run_command.add_argument("--end", type=date.fromisoformat)
-    _add_db_and_out(
-        run_command,
-        db_help="SQLite file (default: $INDEX_DB, else data/index.sqlite for "
-        "tiingo and edgar, else data/<prices>-<filings>.sqlite)",
-    )
+    _add_db_and_out(run_command)
 
     backtest_command = commands.add_parser(
         "backtest",
@@ -127,15 +123,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_db_and_out(parser: argparse.ArgumentParser, db_help: str = DB_HELP) -> None:
-    parser.add_argument("--db", type=Path, help=db_help)
+def _add_db_and_out(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--db", type=Path, help=DB_HELP)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     if args.db is None:
-        args.db = default_db_path(_database_name(args))
+        args.db = default_db_path()
     try:
         if args.command == "run":
             _run(args)
@@ -154,13 +150,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         sqlite3.Error,
     ) as error:
         raise SystemExit(f"eq: {error}") from error
-
-
-def _database_name(args: argparse.Namespace) -> str:
-    """Real data lives in `index`; a run with a fake source gets its own file."""
-    if args.command != "run" or (args.prices, args.filings) == ("tiingo", "edgar"):
-        return "index"
-    return f"{args.prices}-{args.filings}"
 
 
 def _run(args: argparse.Namespace) -> None:
