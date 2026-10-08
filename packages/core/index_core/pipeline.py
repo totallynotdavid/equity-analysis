@@ -115,7 +115,7 @@ def coverage(store: Store, tickers: list[str]) -> Coverage:
     )
 
 
-def score(store: Store, universe: str, tickers: list[str], source: str) -> ScoresReport:
+def score(store: Store, universe: str, tickers: list[str]) -> ScoresReport:
     prices = store.read_prices([BENCHMARK, *tickers])
     features = ranked_features(prices, store.read_facts(tickers))
     labels = excess_return_labels(prices, BENCHMARK)
@@ -134,7 +134,8 @@ def score(store: Store, universe: str, tickers: list[str], source: str) -> Score
     return ScoresReport(
         as_of=as_of.date(),
         universe=universe,
-        source=source,
+        price_source=store.price_source() or "unknown",
+        facts_source=store.facts_source(),
         horizon_days=HORIZON,
         model=ModelInfo(
             train_rows=model.train_rows,
@@ -233,6 +234,6 @@ def run(
     store.require_sources(source.name, filings.name)
     ingest(source, store, tickers, start, end)
     ingest_filings(filings, store, tickers, end)
-    report = score(store, universe, tickers, source.name)
+    report = score(store, universe, tickers)
     store.save_report(report)
     return report

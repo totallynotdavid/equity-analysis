@@ -23,7 +23,8 @@ class ScoresReport(BaseModel):
     status: Literal["experimental, not validated"] = "experimental, not validated"
     as_of: date
     universe: str
-    source: str
+    price_source: str
+    facts_source: str | None
     horizon_days: int
     model: ModelInfo
     rows: list[ScoreRow]

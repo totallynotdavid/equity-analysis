@@ -66,9 +66,9 @@ class StoreError(Exception):
     pass
 
 
-def default_db_path(name: str = "index") -> Path:
-    """`$INDEX_DB`, else `data/<name>.sqlite`."""
-    return Path(os.environ.get(DB_VARIABLE, f"data/{name}.sqlite"))
+def default_db_path() -> Path:
+    """Use `$INDEX_DB`. Otherwise use `data/index.sqlite`."""
+    return Path(os.environ.get(DB_VARIABLE, "data/index.sqlite"))
 
 
 class Store:
@@ -230,7 +230,7 @@ class Store:
                 "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     *key,
-                    report.source,
+                    report.price_source,
                     report.horizon_days,
                     report.model.train_rows,
                     report.model.holdout_rows,
@@ -251,8 +251,8 @@ class Store:
         Without `universe` it is the latest across all universes.
         """
         run = self._db.execute(
-            "SELECT as_of, universe, source, horizon_days, train_rows, "
-            "holdout_rows, holdout_auc FROM runs "
+            "SELECT as_of, universe, horizon_days, train_rows, holdout_rows, "
+            "holdout_auc FROM runs "
             "WHERE ?1 IS NULL OR universe = ?1 "
             "ORDER BY as_of DESC, rowid DESC LIMIT 1",
             (universe,),
@@ -267,9 +267,10 @@ class Store:
         return ScoresReport(
             as_of=date.fromisoformat(run[0]),
             universe=run[1],
-            source=run[2],
-            horizon_days=run[3],
-            model=ModelInfo(train_rows=run[4], holdout_rows=run[5], holdout_auc=run[6]),
+            price_source=self.price_source() or "unknown",
+            facts_source=self.facts_source(),
+            horizon_days=run[2],
+            model=ModelInfo(train_rows=run[3], holdout_rows=run[4], holdout_auc=run[5]),
             rows=[
                 ScoreRow(ticker=t, rank=rank, score=score, prob=prob)
                 for t, rank, score, prob in rows
