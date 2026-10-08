@@ -14,6 +14,7 @@ from index_core.sources.edgar import CONCEPTS, EdgarSource, parse_companyfacts
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "acme_companyfacts_handwritten.json"
+RECORDED = Path(__file__).parent / "fixtures" / "recorded_aapl_companyfacts.json"
 TICKERS = {
     "0": {"cik_str": 1234567, "ticker": "ACME", "title": "Acme Corp"},
     "1": {"cik_str": 1067983, "ticker": "BRK-B", "title": "Berkshire Hathaway"},
@@ -46,6 +47,15 @@ def test_the_fixture_parses_to_one_row_per_fact_per_filing() -> None:
     assert _value(facts, "revenue", "2022-12-31", "2023-02-15", "2022-01-01") == 400
     assert _value(facts, "revenue", "2022-12-31", "2023-06-01", "2022-01-01") == 405
     assert _value(facts, "total_assets", "2023-09-30", "2023-11-03") == 1000
+
+
+def test_a_recorded_edgar_payload_parses_into_facts() -> None:
+    facts = parse_companyfacts(json.loads(RECORDED.read_text()), "AAPL")
+
+    assert list(facts.columns) == list(FACT_COLUMNS)
+    assert {"revenue", "total_assets"} <= set(facts["concept"])
+    assert facts["filed"].min() >= pd.Timestamp("2022-01-01")
+    assert (facts["value"] > 0).any()
 
 
 def test_only_audited_forms_count() -> None:
