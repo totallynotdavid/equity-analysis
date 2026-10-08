@@ -54,6 +54,21 @@ def test_only_audited_forms_count() -> None:
     assert 999 not in set(facts["value"])
 
 
+def test_capex_is_the_amount_paid_whichever_sign_the_filer_used() -> None:
+    expected = parse_companyfacts(_payload(), "ACME")
+    flipped = _payload()
+    tag = flipped["facts"]["us-gaap"]["PaymentsToAcquirePropertyPlantAndEquipment"]  # type: ignore[index]
+    for entry in tag["units"]["USD"]:
+        entry["val"] = -entry["val"]
+
+    facts = parse_companyfacts(flipped, "ACME")
+
+    capex = facts[facts["concept"] == "capex"]
+    assert not capex.empty
+    assert (capex["value"] > 0).all()
+    pd.testing.assert_frame_equal(facts, expected)
+
+
 def test_a_tag_change_keeps_both_tags_and_their_priority() -> None:
     facts = parse_companyfacts(_payload(), "ACME")
     revenue = facts[facts["concept"] == "revenue"]
