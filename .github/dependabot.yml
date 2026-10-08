@@ -16,6 +16,14 @@ updates:
       python-workspace:
         patterns: ["*"]
 
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "master"
+    labels:
+      - "dependencies"
+
   # === Frontend Package (Bun) ===
 
   - package-ecosystem: "bun"
