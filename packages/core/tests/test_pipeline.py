@@ -33,7 +33,7 @@ def test_a_run_over_the_demo_universe_scores_thirty_stocks(tmp_path: Path) -> No
     assert stored == report
     assert report.status == "experimental, not validated"
     assert report.as_of == date(2026, 9, 30)
-    assert report.source == "synthetic"
+    assert (report.price_source, report.facts_source) == ("synthetic", "synthetic")
     assert sorted(row.ticker for row in report.rows) == sorted(tickers)
     assert [row.rank for row in report.rows] == list(range(1, 31))
     assert all(1 <= row.score <= 10 for row in report.rows)

@@ -14,11 +14,19 @@ def _bars() -> pd.DataFrame:
     return SyntheticSource().fetch("AAA", date(2024, 1, 1), date(2024, 1, 31))
 
 
+def _record_sources(store: Store) -> None:
+    store.upsert_prices("tiingo", "AAA", _bars())
+    store.replace_facts(
+        "synthetic", "AAA", SyntheticFilings().facts("AAA", date(2024, 12, 31))
+    )
+
+
 def _report(as_of: date, tickers: list[str], universe: str = "demo") -> ScoresReport:
     return ScoresReport(
         as_of=as_of,
         universe=universe,
-        source="synthetic",
+        price_source="tiingo",
+        facts_source="synthetic",
         horizon_days=63,
         model=ModelInfo(train_rows=10, holdout_rows=4, holdout_auc=None),
         rows=[
@@ -135,21 +143,19 @@ def test_sources_are_checked_without_writing_anything(tmp_path: Path) -> None:
             store.require_sources("synthetic", "edgar")
 
 
-def test_the_default_database_is_named_and_follows_the_environment(
+def test_the_default_database_follows_the_environment(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.delenv("INDEX_DB", raising=False)
     assert default_db_path() == Path("data/index.sqlite")
-    assert default_db_path("synthetic-synthetic") == Path(
-        "data/synthetic-synthetic.sqlite"
-    )
 
     monkeypatch.setenv("INDEX_DB", str(tmp_path / "mine.sqlite"))
-    assert default_db_path("synthetic-synthetic") == tmp_path / "mine.sqlite"
+    assert default_db_path() == tmp_path / "mine.sqlite"
 
 
 def test_the_latest_report_is_returned_with_rows_in_rank_order(tmp_path: Path) -> None:
     with Store.open(tmp_path / "db.sqlite") as store:
+        _record_sources(store)
         assert store.latest_report() is None
         store.save_report(_report(date(2024, 1, 30), ["OLD"]))
         store.save_report(_report(date(2024, 1, 31), ["B", "A"]))
@@ -160,6 +166,7 @@ def test_the_latest_report_is_returned_with_rows_in_rank_order(tmp_path: Path) -
 
 def test_saving_a_report_again_replaces_that_date(tmp_path: Path) -> None:
     with Store.open(tmp_path / "db.sqlite") as store:
+        _record_sources(store)
         store.save_report(_report(date(2024, 1, 31), ["A", "B"]))
         store.save_report(_report(date(2024, 1, 31), ["C"]))
         latest = store.latest_report()
@@ -173,6 +180,7 @@ def test_a_run_over_another_universe_on_the_same_day_keeps_both(
 ) -> None:
     day = date(2024, 1, 31)
     with Store.open(tmp_path / "db.sqlite") as store:
+        _record_sources(store)
         store.save_report(_report(day, ["A", "B"], universe="demo"))
         store.save_report(_report(day, ["C"], universe="other"))
 

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from index_cli import main as cli
 from index_cli.main import main
 from index_core.pipeline import ingest
 from index_core.sources.synthetic import SyntheticSource
@@ -61,7 +62,10 @@ def test_run_writes_thirty_scored_rows_with_an_as_of_date(tmp_path: Path) -> Non
 
     assert scores["as_of"] == "2026-09-30"
     assert scores["status"] == "experimental, not validated"
-    assert scores["source"] == "synthetic"
+    assert (scores["price_source"], scores["facts_source"]) == (
+        "synthetic",
+        "synthetic",
+    )
     rows = scores["rows"]
     assert len(rows) == 30
     assert [row["rank"] for row in rows] == list(range(1, 31))
@@ -139,17 +143,46 @@ def test_prices_and_filings_are_chosen_independently(
         )
 
 
-def test_each_choice_of_sources_gets_its_own_default_database(
+def test_run_and_export_share_the_default_database(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("INDEX_DB", raising=False)
 
     main(["run", "--universe", str(DEMO), *OFFLINE, *WINDOW])
+    main(["export", "--out", str(tmp_path / "exported.json")])
+    main(["coverage", "--universe", str(DEMO)])
+    with pytest.raises(SystemExit, match=r"days of SPY prices are stored"):
+        main(["backtest", "--universe", str(DEMO)])
 
     assert sorted(path.name for path in (tmp_path / "data").glob("*.sqlite")) == [
-        "synthetic-synthetic.sqlite"
+        "index.sqlite"
     ]
+    assert (tmp_path / "exported.json").exists()
+
+
+def test_mixed_sources_are_recorded_in_the_cli_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class TiingoForTest(SyntheticSource):
+        name = "tiingo"
+
+    monkeypatch.setitem(cli.PRICES, "tiingo", TiingoForTest)
+    out = tmp_path / "scores.json"
+
+    main(
+        [
+            *["run", "--universe", str(DEMO), "--prices", "tiingo"],
+            *["--filings", "synthetic", *WINDOW],
+            *["--db", str(tmp_path / "db.sqlite"), "--out", str(out)],
+        ]
+    )
+
+    scores = json.loads(out.read_text())
+    assert (scores["price_source"], scores["facts_source"]) == (
+        "tiingo",
+        "synthetic",
+    )
 
 
 def test_a_missing_openmp_runtime_stops_a_run_before_it_fetches(
