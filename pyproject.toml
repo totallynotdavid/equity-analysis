@@ -3,6 +3,10 @@ name = "index"
 version = "1.0.0"
 description = "A monorepo containing the core library, CLI, and API of index."
 requires-python = ">=3.14"
+dependencies = ["index-api"]
+
+[tool.uv.sources]
+index-api = { workspace = true }
 
 [tool.uv.workspace]
 members = [
