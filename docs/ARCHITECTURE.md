@@ -9,17 +9,21 @@ Python packages and an Astro site.
 │   ├── core/   index-core: sources, store, features, model, backtest
 │   ├── cli/    index-cli: the `eq` command
 │   └── api/    index-api: read-only FastAPI over the SQLite file
+├── api/        Vercel entrypoint that serves index-api under /api
 ├── universes/  ticker lists, one per line
 ├── web/        Astro site that renders outputs/scores.json
 ├── docs/       the manual
+├── scripts/    deploy-data.sh, the scores the deployed page and API show
 ├── .github/    contributing guide and the CI workflow
 ├── pyproject.toml   workspace members, ruff, mypy and pytest settings
+├── vercel.json      how Vercel builds the page and routes /api
 └── mise.toml        tool versions and tasks
 ```
 
 `index-core` holds all the logic as functions over data and has no interface.
 `index-cli` and `index-api` call into it and add arguments, formatting and HTTP.
-`web` does not import Python. It reads the JSON file that `eq run` writes.
+`web` does not import Python. It reads the JSON file that `eq run` writes, and
+the browser refreshes it from the API.
 
 ## A run
 

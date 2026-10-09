@@ -16,15 +16,16 @@ mise run install   # uv sync --all-packages --locked, bun install in web/
 
 Without mise, install uv and Bun yourself and run the commands in each task.
 
-| Task             | What it does                                         |
-| ---------------- | ---------------------------------------------------- |
-| `mise run cli`   | The `eq` command, for example `mise run cli -- run`  |
-| `mise run api`   | The API with reload at `http://127.0.0.1:8000/docs`  |
-| `mise run web`   | The Astro dev server at `http://localhost:4321`      |
-| `mise run site`  | Export the latest scores, then build the static page |
-| `mise run fix`   | Format and lint the Python code with ruff            |
-| `mise run mypy`  | Type-check with mypy                                 |
-| `mise run check` | Every check below, as CI runs them                   |
+| Task                   | What it does                                           |
+| ---------------------- | ------------------------------------------------------ |
+| `mise run cli`         | The `eq` command, for example `mise run cli -- run`    |
+| `mise run api`         | The API with reload at `http://127.0.0.1:8000/docs`    |
+| `mise run web`         | The Astro dev server at `http://localhost:4321`        |
+| `mise run site`        | Export the latest scores, then build the static page   |
+| `mise run deploy:data` | Score the demo universe on synthetic data for a deploy |
+| `mise run fix`         | Format and lint the Python code with ruff              |
+| `mise run mypy`        | Type-check with mypy                                   |
+| `mise run check`       | Every check below, as CI runs them                     |
 
 ## Checks
 

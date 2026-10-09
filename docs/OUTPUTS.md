@@ -57,9 +57,12 @@ web dev server.
 
 ## Web page
 
-`web/` is an [Astro](https://astro.build/) site with one page. It reads the
-scores file at build time, not in the browser, so run `eq run` first and build
-again after each run.
+`web/` is an [Astro](https://astro.build/) site with one page. The build renders
+the scores file into the page, so run `eq run` first and build again after each
+run. In the browser, the page then fetches `/scores` from the API and renders
+that over the build's scores. `PUBLIC_API_URL` sets the API's base URL, `/api`
+by default. When the fetch fails, as with `mise run web` and no API, the build's
+scores stay.
 
 From the repository root:
 
