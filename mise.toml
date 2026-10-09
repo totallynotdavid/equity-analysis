@@ -57,6 +57,10 @@ run = [
     "cd web && bun run build",
 ]
 
+[tasks."deploy:data"]
+description = "Score the demo universe on synthetic data and leave a database the API can read from a read-only disk"
+run = "scripts/deploy-data.sh"
+
 [tasks.cli]
 description = "Run the eq command-line interface"
 run = "uv run eq"

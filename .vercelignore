@@ -1,0 +1,6 @@
+.venv
+.vscode
+web/node_modules
+web/dist
+**/tests
+**/__pycache__

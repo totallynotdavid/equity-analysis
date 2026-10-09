@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "ignoreCommand": "git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- api web packages universes scripts pyproject.toml uv.lock vercel.json .vercelignore",
+  "buildCommand": "scripts/deploy-data.sh && cd web && bun install --frozen-lockfile && SCORES_JSON=../data/deploy-scores.json bun run build",
+  "outputDirectory": "web/dist",
+  "rewrites": [{ "source": "/api/:path*", "destination": "/api/index" }],
+  "functions": {
+    "api/index.py": { "includeFiles": "data/deploy.sqlite" }
+  }
+}
