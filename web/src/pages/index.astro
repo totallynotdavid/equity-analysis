@@ -1,23 +1,9 @@
 ---
 import Layout from "@/layouts/Layout.astro";
+import { renderScores } from "@/lib/render";
 import { loadScores } from "@/lib/scores";
 
-const scores = loadScores();
-// A null facts_source means no filings were stored, so none can be unreal.
-// A file without the fields is not trusted either.
-const unreal =
-  scores === null
-    ? []
-    : [
-        { kind: "prices", source: scores.price_source, real: "tiingo" },
-        { kind: "filings", source: scores.facts_source, real: "edgar" },
-      ]
-        .filter(({ source, real }) => source !== real && source !== null)
-        .map(({ kind, source }) =>
-          source === "synthetic"
-            ? `synthetic ${kind}`
-            : `${kind} of unknown source`,
-        );
+const scores = renderScores(loadScores());
 ---
 
 <Layout>
@@ -37,46 +23,20 @@ const unreal =
       recommendation to buy or sell a security. You can lose money.
     </p>
 
-    {scores === null ? (
-      <p class="text-muted-foreground mt-8 text-sm">
-        No scores yet. Run <code>eq run</code> and build again.
-      </p>
-    ) : (
-      <>
-        {unreal.length > 0 && (
-          <p
-            class="border-error bg-error/10 text-foreground mt-4 rounded-md border px-4 py-3 text-sm font-medium"
-            role="alert"
-          >
-            These scores use {unreal.join(" and ")}, not market data. They mean
-            nothing.
-          </p>
-        )}
-        <p class="text-muted-foreground mt-8 text-sm">
-          As of {scores.as_of}. Score 10 is the top tenth of{" "}
-          {scores.rows.length}
-          stocks by estimated chance of beating the S&amp;P 500 over the next{" "}
-          {scores.horizon_days} trading days.
-        </p>
-        <table class="mt-3 w-full text-left text-sm" id="scores">
-          <thead class="text-muted-foreground border-b">
-            <tr>
-              <th class="py-2 pr-4 font-medium">Rank</th>
-              <th class="py-2 pr-4 font-medium">Ticker</th>
-              <th class="py-2 text-right font-medium">Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {scores.rows.map((row) => (
-              <tr class="border-b last:border-0">
-                <td class="py-2 pr-4 tabular-nums">{row.rank}</td>
-                <td class="py-2 pr-4 font-medium">{row.ticker}</td>
-                <td class="py-2 text-right tabular-nums">{row.score}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </>
-    )}
+    <div id="scores-root" set:html={scores} />
   </main>
 </Layout>
+
+<script>
+  import { renderScores } from "@/lib/render";
+
+  // The build-time scores stay when the API is absent, as in `mise run web`.
+  const base = import.meta.env.PUBLIC_API_URL ?? "/api";
+  const root = document.getElementById("scores-root");
+  fetch(`${base}/scores`)
+    .then((response) => (response.ok ? response.json() : null))
+    .then((scores) => {
+      if (scores && root) root.innerHTML = renderScores(scores);
+    })
+    .catch(() => {});
+</script>
