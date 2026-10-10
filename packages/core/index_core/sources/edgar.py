@@ -18,6 +18,7 @@ from index_core.sources.base import (
     NotFoundError,
     SourceError,
     empty_facts,
+    normalise_ticker,
 )
 
 
@@ -229,7 +230,7 @@ class EdgarSource:
                 }
             except (KeyError, TypeError, ValueError) as error:
                 raise SourceError("EDGAR sent a malformed ticker list") from error
-        cik = self._ciks.get(ticker.upper().replace(".", "-"))
+        cik = self._ciks.get(normalise_ticker(ticker))
         if cik is None:
             raise NotFoundError(f"EDGAR has no company for ticker {ticker}")
         return cik
