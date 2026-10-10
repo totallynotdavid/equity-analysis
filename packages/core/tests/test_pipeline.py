@@ -9,6 +9,7 @@ from index_core.pipeline import (
     ingest,
     ingest_filings,
     missing_filings,
+    missing_prices,
     run,
 )
 from index_core.sources.base import NotFoundError, SourceError
@@ -123,6 +124,42 @@ def test_a_company_the_filings_source_does_not_know_keeps_its_prices_only(
     assert missing == ["MSFT"]
     assert counts["MSFT"] == 0
     assert sorted(row.ticker for row in report.rows) == sorted(tickers)
+
+
+def test_a_ticker_the_price_source_does_not_know_is_scored_without_it(
+    tmp_path: Path,
+) -> None:
+    class Unlisted(SyntheticSource):
+        def fetch(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+            if ticker == "MSFT":
+                raise NotFoundError("no ticker MSFT")
+            return super().fetch(ticker, start, end)
+
+    tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM"]
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        report = run(
+            Unlisted(), SyntheticFilings(), store, always(tickers, "demo"), START, END
+        )
+        missing = missing_prices(store, tickers)
+
+    assert missing == ["MSFT"]
+    assert sorted(row.ticker for row in report.rows) == sorted(set(tickers) - {"MSFT"})
+
+
+def test_a_benchmark_the_price_source_does_not_know_stops_the_run(
+    tmp_path: Path,
+) -> None:
+    class NoBenchmark(SyntheticSource):
+        def fetch(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+            if ticker == "SPY":
+                raise NotFoundError("no ticker SPY")
+            return super().fetch(ticker, start, end)
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        with pytest.raises(NotFoundError, match="SPY"):
+            run(NoBenchmark(), SyntheticFilings(), store, always(["AAPL"]), START, END)
+        assert store.latest_report() is None
 
 
 def test_a_company_that_loses_its_filings_does_not_keep_stale_facts(

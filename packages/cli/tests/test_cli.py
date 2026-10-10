@@ -10,6 +10,7 @@ import pytest
 from index_cli import main as cli
 from index_cli.main import main
 from index_core.pipeline import ingest
+from index_core.sources.base import NotFoundError
 from index_core.sources.synthetic import SyntheticSource
 from index_core.store import Store
 
@@ -168,7 +169,7 @@ def test_mixed_sources_are_recorded_in_the_cli_output(
     class TiingoForTest(SyntheticSource):
         name = "tiingo"
 
-    monkeypatch.setitem(cli.PRICES, "tiingo", TiingoForTest)
+    monkeypatch.setitem(cli.PRICES, "tiingo", lambda _: TiingoForTest())
     out = tmp_path / "scores.json"
 
     main(
@@ -184,6 +185,45 @@ def test_mixed_sources_are_recorded_in_the_cli_output(
         "tiingo",
         "synthetic",
     )
+
+
+class _NoMicrosoft(SyntheticSource):
+    def fetch(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+        if ticker == "MSFT":
+            raise NotFoundError("no ticker MSFT")
+        return super().fetch(ticker, start, end)
+
+
+def test_a_run_names_the_tickers_the_price_source_lacks_and_hands_over_the_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    caches: list[Path] = []
+
+    def source(cache: Path) -> SyntheticSource:
+        caches.append(cache)
+        return _NoMicrosoft()
+
+    monkeypatch.setitem(cli.PRICES, "synthetic", source)
+    universe = tmp_path / "members.txt"
+    universe.write_text("".join(f"{t},2000-01-03\n" for t in [*MEMBERS, "MSFT"]))
+    cache = tmp_path / "responses"
+
+    main(
+        [
+            *["run", "--universe", str(universe), *OFFLINE, *WINDOW],
+            *["--db", str(tmp_path / "db.sqlite"), "--cache", str(cache)],
+            *["--out", str(tmp_path / "scores.json")],
+        ]
+    )
+
+    assert caches == [cache]
+    assert "eq: no prices for 1 tickers (MSFT); they are left out" in (
+        capsys.readouterr().err
+    )
+    scores = json.loads((tmp_path / "scores.json").read_text())
+    assert "MSFT" not in {row["ticker"] for row in scores["rows"]}
 
 
 def test_a_missing_openmp_runtime_stops_a_run_before_it_fetches(
@@ -393,7 +433,7 @@ def test_backtest_uses_a_name_only_while_it_is_a_member(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, keeps_trading: bool
 ) -> None:
     if not keeps_trading:
-        monkeypatch.setitem(cli.PRICES, "synthetic", _DropStopsTrading)
+        monkeypatch.setitem(cli.PRICES, "synthetic", lambda _: _DropStopsTrading())
     universe = tmp_path / "churn.txt"
     universe.write_text(
         "".join(f"{ticker},2000-01-03\n" for ticker in MEMBERS)

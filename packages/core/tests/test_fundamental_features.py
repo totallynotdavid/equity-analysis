@@ -210,6 +210,7 @@ def test_the_aapl_split_from_a_tiingo_response_keeps_the_valuation(
         transport=httpx2.MockTransport(
             lambda _: httpx2.Response(200, content=payload.read_text())
         ),
+        min_interval=0,
     )
     with Store.open(tmp_path / "db.sqlite") as store:
         store.upsert_prices("tiingo", "AAPL", source.fetch("AAPL", *_SPLIT_RANGE))

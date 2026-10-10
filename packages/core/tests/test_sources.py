@@ -1,16 +1,21 @@
 import json
 import os
+import threading
+import time
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from itertools import pairwise
 from pathlib import Path
 
 import httpx2
 import pandas as pd
 import pytest
 
-from index_core.sources.base import PRICE_COLUMNS, SourceError
+from index_core.sources.base import PRICE_COLUMNS, NotFoundError, SourceError
 from index_core.sources.synthetic import SyntheticSource
 from index_core.sources.tiingo import KEY_VARIABLE, TiingoSource
+from index_core.sources.transport import CachingTransport
 from index_core.store import Store
 
 
@@ -64,7 +69,7 @@ def _tiingo(
         return httpx2.Response(200, content=json.dumps(TIINGO_BARS))
 
     transport = handler or httpx2.MockTransport(respond)
-    return TiingoSource("secret-key", transport=transport), requests
+    return TiingoSource("secret-key", transport=transport, min_interval=0), requests
 
 
 def test_tiingo_asks_for_one_ticker_with_the_key_in_the_header() -> None:
@@ -177,18 +182,253 @@ def test_live_tiingo_serves_a_dotted_ticker() -> None:
 
 def test_tiingo_error_status_is_a_source_error() -> None:
     source, _ = _tiingo(
+        httpx2.MockTransport(lambda _: httpx2.Response(500, text="Oops"))
+    )
+
+    with pytest.raises(SourceError, match="HTTP 500 for NOPE") as raised:
+        source.fetch("NOPE", date(2024, 3, 1), date(2024, 3, 8))
+    assert not isinstance(raised.value, NotFoundError)
+
+
+def test_a_ticker_tiingo_does_not_list_is_not_found() -> None:
+    source, _ = _tiingo(
         httpx2.MockTransport(lambda _: httpx2.Response(404, text="Not found"))
     )
 
-    with pytest.raises(SourceError, match="HTTP 404 for NOPE"):
+    with pytest.raises(NotFoundError, match="no ticker NOPE"):
         source.fetch("NOPE", date(2024, 3, 1), date(2024, 3, 8))
 
 
-def test_tiingo_with_no_bars_is_a_source_error() -> None:
+def test_tiingo_with_no_bars_is_not_found() -> None:
     source, _ = _tiingo(httpx2.MockTransport(lambda _: httpx2.Response(200, json=[])))
 
-    with pytest.raises(SourceError, match="no prices for AAPL"):
+    with pytest.raises(NotFoundError, match="no prices for AAPL"):
         source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+
+
+def _padded_bars(*padding: str) -> list[dict[str, object]]:
+    flat = {**TIINGO_BARS[1], "volume": 0, "adjVolume": 0}
+    return [
+        *TIINGO_BARS,
+        *({**flat, "date": f"{day}T00:00:00.000Z"} for day in padding),
+    ]
+
+
+def test_zero_volume_bars_after_the_last_trade_are_dropped() -> None:
+    # Tiingo repeats a delisted company's last close with no volume up to today.
+    bars = _padded_bars("2024-03-06", "2024-03-07")
+    source, _ = _tiingo(httpx2.MockTransport(lambda _: httpx2.Response(200, json=bars)))
+
+    frame = source.fetch("GONE", date(2024, 3, 1), date(2024, 3, 8))
+
+    assert [day.date() for day in frame.index] == [date(2024, 3, 4), date(2024, 3, 5)]
+
+
+def test_a_zero_volume_day_between_trades_is_kept() -> None:
+    bars = [TIINGO_BARS[0], _padded_bars("2024-03-05")[2], TIINGO_BARS[1]]
+    bars[2] = {**bars[2], "date": "2024-03-06T00:00:00.000Z"}
+    source, _ = _tiingo(httpx2.MockTransport(lambda _: httpx2.Response(200, json=bars)))
+
+    frame = source.fetch("HALT", date(2024, 3, 1), date(2024, 3, 8))
+
+    assert len(frame) == 3
+
+
+def test_a_ticker_with_only_zero_volume_bars_is_not_found() -> None:
+    flat = {**TIINGO_BARS[0], "volume": 0, "adjVolume": 0}
+    source, _ = _tiingo(
+        httpx2.MockTransport(lambda _: httpx2.Response(200, json=[flat]))
+    )
+
+    with pytest.raises(NotFoundError, match="no trades for GONE"):
+        source.fetch("GONE", date(2024, 3, 1), date(2024, 3, 8))
+
+
+def test_tiingo_rate_limit_is_a_source_error_that_says_to_run_again() -> None:
+    limit = {"detail": "Error: You have run over your hourly request allocation."}
+    source, _ = _tiingo(
+        httpx2.MockTransport(lambda _: httpx2.Response(429, json=limit))
+    )
+
+    with pytest.raises(
+        SourceError, match=r"hourly request allocation.*run the same"
+    ) as raised:
+        source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+    assert not isinstance(raised.value, NotFoundError)
+
+
+def test_a_cached_response_is_not_requested_again(tmp_path: Path) -> None:
+    requests: list[httpx2.Request] = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(200, content=json.dumps(TIINGO_BARS))
+
+    def new_source() -> TiingoSource:
+        return TiingoSource(
+            "secret-key",
+            transport=httpx2.MockTransport(respond),
+            min_interval=0,
+            cache=tmp_path,
+        )
+
+    first = new_source().fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+    again = new_source().fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+    new_source().fetch("AAPL", date(2024, 3, 1), date(2024, 3, 7))
+
+    pd.testing.assert_frame_equal(first, again)
+    assert [request.url.params["endDate"] for request in requests] == [
+        "2024-03-08",
+        "2024-03-07",
+    ]
+
+
+def test_the_cache_never_holds_the_key_or_a_refusal(tmp_path: Path) -> None:
+    refuse = {"on": True}
+
+    def respond(_: httpx2.Request) -> httpx2.Response:
+        if refuse["on"]:
+            return httpx2.Response(429, text="over the limit")
+        return httpx2.Response(200, content=json.dumps(TIINGO_BARS))
+
+    source = TiingoSource(
+        "secret-key",
+        transport=httpx2.MockTransport(respond),
+        min_interval=0,
+        cache=tmp_path,
+    )
+    with pytest.raises(SourceError):
+        source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+    assert list(tmp_path.iterdir()) == []
+
+    refuse["on"] = False
+    source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+
+    (cached,) = tmp_path.iterdir()
+    assert b"secret-key" not in cached.read_bytes()
+    assert "secret-key" not in cached.name
+
+
+def test_a_ticker_tiingo_does_not_list_is_cached_too(tmp_path: Path) -> None:
+    requests: list[httpx2.Request] = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(404, text="Not found")
+
+    def new_source() -> TiingoSource:
+        return TiingoSource(
+            "secret-key",
+            transport=httpx2.MockTransport(respond),
+            min_interval=0,
+            cache=tmp_path,
+        )
+
+    for _ in range(2):
+        with pytest.raises(NotFoundError, match="no ticker AKS"):
+            new_source().fetch("AKS", date(2024, 3, 1), date(2024, 3, 8))
+
+    assert len(requests) == 1
+    (cached,) = tmp_path.iterdir()
+    assert b"secret-key" not in cached.read_bytes()
+
+
+def test_runs_that_share_a_cache_directory_leave_whole_entries(tmp_path: Path) -> None:
+    runs = 4
+    body = b"x" * 32_000_000
+    arrived = threading.Barrier(runs)
+    writing = threading.Event()
+
+    def respond(_: httpx2.Request) -> httpx2.Response:
+        # Every run holds its answer until all have it, so all write together.
+        arrived.wait(timeout=10)
+        return httpx2.Response(200, content=body)
+
+    def run() -> None:
+        with httpx2.Client(
+            transport=CachingTransport(httpx2.MockTransport(respond), tmp_path)
+        ) as client:
+            client.get("https://api.example.com/prices")
+
+    def read_entries() -> list[int]:
+        # A big body takes long to write, so a plain write is caught half done.
+        sizes: list[int] = []
+        while not writing.is_set():
+            sizes.extend(len(entry.read_bytes()) for entry in tmp_path.glob("*.json"))
+        return sizes
+
+    with ThreadPoolExecutor(runs + 2) as pool:
+        readers = [pool.submit(read_entries) for _ in range(2)]
+        for future in [pool.submit(run) for _ in range(runs)]:
+            future.result()
+        writing.set()
+        seen = [size for reader in readers for size in reader.result()]
+
+    assert set(seen) <= {len(body)}
+    (cached,) = tmp_path.iterdir()
+    assert cached.read_bytes() == body
+
+
+class _Clock:
+    """Stands in for `time`: sleeping moves the clock and nothing waits."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+        self.slept: list[float] = []
+
+    time = staticmethod(time.time)
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def test_tiingo_requests_are_spaced_to_fifty_an_hour(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    clock = _Clock()
+    monkeypatch.setattr("index_core.sources.transport.time", clock)
+    requests: list[float] = []
+
+    def respond(_: httpx2.Request) -> httpx2.Response:
+        requests.append(clock.now)
+        return httpx2.Response(200, content=json.dumps(TIINGO_BARS))
+
+    source = TiingoSource(
+        "secret-key", transport=httpx2.MockTransport(respond), cache=tmp_path
+    )
+    for ticker in ("AAPL", "MSFT", "SPY"):
+        source.fetch(ticker, date(2024, 3, 1), date(2024, 3, 8))
+    source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+
+    assert clock.slept == [72, 72]
+    assert [later - earlier for earlier, later in pairwise(requests)] == [72, 72]
+
+
+def test_a_cached_response_older_than_a_day_is_fetched_again(tmp_path: Path) -> None:
+    requests: list[httpx2.Request] = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(200, content=json.dumps(TIINGO_BARS))
+
+    source = TiingoSource(
+        "secret-key",
+        transport=httpx2.MockTransport(respond),
+        min_interval=0,
+        cache=tmp_path,
+    )
+    source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+    (cached,) = tmp_path.iterdir()
+    stale = cached.stat().st_mtime - 2 * 24 * 3600
+    os.utime(cached, (stale, stale))
+
+    source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+
+    assert len(requests) == 2
 
 
 def test_tiingo_key_is_read_from_the_environment(

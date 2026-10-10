@@ -239,6 +239,32 @@ def test_requests_are_spaced_by_the_minimum_interval() -> None:
     assert all(later - earlier >= 0.19 for earlier, later in pairwise(times))
 
 
+def test_cached_filings_cost_neither_a_request_nor_a_wait(tmp_path: Path) -> None:
+    requests: list[httpx2.Request] = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        if request.url.path == "/files/company_tickers.json":
+            return httpx2.Response(200, json=TICKERS)
+        return httpx2.Response(200, content=FIXTURE.read_bytes())
+
+    def new_source() -> EdgarSource:
+        return EdgarSource(
+            "ua test@example.com",
+            transport=httpx2.MockTransport(respond),
+            min_interval=0.5,
+            cache=tmp_path,
+        )
+
+    first = new_source().facts("ACME", date(2024, 12, 31))
+    started = time.monotonic()
+    again = new_source().facts("ACME", date(2024, 12, 31))
+
+    assert time.monotonic() - started < 0.4
+    assert len(requests) == 2
+    pd.testing.assert_frame_equal(first, again)
+
+
 def test_the_user_agent_is_read_from_the_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -49,9 +49,20 @@ def test_the_holdout_months_are_left_out_until_asked_for(store: Store) -> None:
     assert development.price_source == "synthetic"
 
 
-def test_a_ticker_without_stored_prices_stops_the_backtest(store: Store) -> None:
-    with pytest.raises(ValueError, match=r"no stored prices for \['NOPE'\]"):
-        backtest(store, always([*TICKERS, "NOPE"]), FIRST_OOS)
+def test_a_ticker_without_stored_prices_is_left_out_and_named(store: Store) -> None:
+    with_gap = always([*TICKERS, "NOPE"], "planted")
+
+    full = backtest(store, UNIVERSE, FIRST_OOS, holdout_months=12)
+    gapped = backtest(store, with_gap, FIRST_OOS, holdout_months=12)
+
+    assert gapped.unpriced == ["NOPE"]
+    assert full.unpriced == []
+    assert set(gapped.predictions.index.get_level_values("ticker")) == set(TICKERS)
+    text = render(gapped, "planted")
+    assert (
+        f"Missing: no prices for 1 of {len(TICKERS) + 1} universe names (NOPE)" in text
+    )
+    assert "Missing" not in render(full, "planted")
 
 
 def test_a_holdout_longer_than_the_history_stops_the_backtest(store: Store) -> None:
