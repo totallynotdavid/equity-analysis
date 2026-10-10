@@ -15,6 +15,7 @@ import pandas as pd
 
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from pathlib import Path
 
 BENCHMARK = "SPY"
@@ -36,6 +37,13 @@ class Universe:
     def tickers(self) -> list[str]:
         """Every ticker that is ever a member, in file order."""
         return list(dict.fromkeys(m.ticker for m in self.memberships))
+
+    def excluding(self, tickers: Collection[str]) -> Universe:
+        """This universe without every membership of `tickers`."""
+        return Universe(
+            self.name,
+            tuple(m for m in self.memberships if m.ticker not in tickers),
+        )
 
     def members_between(
         self, first: date | pd.Timestamp, last: date | pd.Timestamp

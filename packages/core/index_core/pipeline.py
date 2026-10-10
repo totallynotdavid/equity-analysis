@@ -16,7 +16,7 @@ from index_core.features.technical import FEATURES as TECHNICAL
 from index_core.features.technical import WARMUP_BARS, technical_features
 from index_core.labels import HORIZON, LABEL_SPAN, excess_return_labels, excess_returns
 from index_core.model import SNAPSHOT_STEP, fit, load_lightgbm
-from index_core.report import ModelInfo, ScoreRow, ScoresReport
+from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport
 from index_core.scoring import decile_scores
 from index_core.sources.base import NotFoundError, empty_facts
 from index_core.universe import BENCHMARK
@@ -268,13 +268,24 @@ def run(
 ) -> ScoresReport:
     """Fetch what the members of `start` to `end` need, then score the latest day.
 
-    A name that left before `start` is not fetched.
+    A name that left before `start` is not fetched. A member with no prices, or
+    with no filings, is left out of the whole run and listed in
+    `ScoresReport.left_out`.
     """
     load_lightgbm()
     store.require_sources(source.name, filings.name)
     tickers = universe.members_between(start, end)
     ingest(source, store, tickers, start, end)
     ingest_filings(filings, store, tickers, end)
-    report = score(store, universe)
+    unpriced = missing_prices(store, tickers)
+    unfiled = [t for t in missing_filings(store, tickers) if t not in unpriced]
+    left_out = [
+        *(LeftOut(ticker=t, reason="no prices") for t in unpriced),
+        *(LeftOut(ticker=t, reason="no filings") for t in unfiled),
+    ]
+    scored = universe.excluding({item.ticker for item in left_out})
+    if not scored.tickers:
+        raise ValueError("no ticker has both prices and filings")
+    report = score(store, scored).model_copy(update={"left_out": left_out})
     store.save_report(report)
     return report

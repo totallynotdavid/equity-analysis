@@ -19,6 +19,11 @@ class ModelInfo(BaseModel):
     holdout_auc: float | None
 
 
+class LeftOut(BaseModel):
+    ticker: str
+    reason: Literal["no prices", "no filings"]
+
+
 class ScoresReport(BaseModel):
     status: Literal["experimental, not validated"] = "experimental, not validated"
     as_of: date
@@ -28,3 +33,4 @@ class ScoresReport(BaseModel):
     horizon_days: int
     model: ModelInfo
     rows: list[ScoreRow]
+    left_out: list[LeftOut] = []
