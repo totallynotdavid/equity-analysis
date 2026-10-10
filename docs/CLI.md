@@ -83,14 +83,18 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
 | `--filings`  | `edgar` for real filings, `synthetic` for fake ones | `edgar`                    |
 | `--start`    | First price date, `YYYY-MM-DD`                      | `--end` minus 2190 days    |
 | `--end`      | Last price date, and the last filing date used      | today                      |
+| `--cache`    | Directory for the responses of Tiingo and the SEC   | `data/cache`               |
 | `--db`       | SQLite file                                         | [see below](#the-database) |
 | `--out`      | JSON file to write                                  | `outputs/scores.json`      |
 
 `eq run` does this, in order:
 
 1. Fetches daily prices for SPY and every ticker that was a member in the range,
-   over the whole range. It fetches the range again on each run, because
-   adjusted prices change after a dividend or split.
+   over the whole range. It asks for the range on every run, because adjusted
+   prices change after a dividend or split; a repeat run inside the
+   [cache](#the-cache) day reuses the cached responses. A ticker Tiingo does not
+   list, or lists with no bars in the range, has no prices. `eq run` names those
+   tickers on stderr and leaves them out. A missing SPY stops the run.
 2. Fetches every company's filed facts up to `--end`. A ticker the SEC does not
    list has no filings. `eq run` names those tickers on stderr, and their
    fundamentals stay missing.
@@ -134,8 +138,49 @@ TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
   uv run eq run --universe universes/demo30.txt
 ```
 
-Tiingo costs one request per ticker plus one for SPY: 31 for `demo30`. The SEC
-costs one request for its ticker list and at most one per ticker.
+Tiingo costs one request per ticker plus one for SPY: 31 for `demo30`, which the
+72-second pause stretches to about 36 minutes when none is cached. The SEC costs
+one request for its ticker list and at most one per ticker.
+
+### The cache
+
+`--cache` holds the Tiingo and SEC responses, so a run that stops can carry on
+and a repeat run costs no requests.
+
+A repeat run reuses the cached responses for one day and stores the prices of
+the first run. Tiingo's URL holds the dates, so `--start` and `--end` must match
+between runs: pin `--end` when you expect to run again. Pass a new directory to
+fetch everything again. `data/` is ignored by git. What the cache keeps and how
+it is written are in the [cache rule](ARCHITECTURE.md#boundaries).
+
+The SEC client leaves 0.12 seconds between requests it sends. The Tiingo client
+leaves 72 seconds (3600 / 50). A response from the cache costs neither a wait
+nor a request. When Tiingo answers HTTP 429, `eq run` stops with Tiingo's
+message. Everything fetched so far is cached, so run the same command again
+after the limit resets and it carries on from the first ticker that was not
+fetched.
+
+#### Running all of `sp500.txt`
+
+One run asks Tiingo for `SPY` and every ticker that was a member in the range:
+`members_between(start, end)` plus one. The two ranges that matter:
+
+| Range                                         | Requests |    At 72 s each |
+| --------------------------------------------- | -------: | --------------: |
+| `--start 2012-01-01 --end 2026-10-09`         |      794 | 57168 s, 15.9 h |
+| default start (2190 days), `--end 2026-10-09` |      613 | 44136 s, 12.3 h |
+
+The time is the number of requests times 72 s. Only requests that miss the cache
+count, so a run after an interruption pays for the tickers still to fetch. 50
+requests an hour was measured on one free key. It is not a guarantee from
+Tiingo.
+
+An entry lasts one day, so a run that is resumed more than a day after its first
+tickers were fetched asks for those tickers again.
+
+Tiingo repeats a delisted company's last close, with zero volume, up to the end
+of the range. The Tiingo source drops those bars. A ticker with no trades in the
+range counts as having no prices.
 
 ## The database
 

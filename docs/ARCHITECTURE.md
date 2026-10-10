@@ -49,7 +49,20 @@ features, fits and predicts, and `Store.save_report` keeps the result.
   [`sources/`](../packages/core/index_core/sources) touch it. A `PriceSource` is
   Tiingo or synthetic, and a `FilingsSource` is EDGAR or synthetic. Both are
   protocols in [`sources/base.py`](../packages/core/index_core/sources/base.py).
-  The pipeline sees only the protocols.
+  The pipeline sees only the protocols. Tiingo and EDGAR send their requests
+  through
+  [`sources/transport.py`](../packages/core/index_core/sources/transport.py),
+  which paces them and keeps responses on disk:
+  - Entries are the 200 and 404 responses, keyed by method and URL without
+    headers, so no key reaches the disk. Other statuses are not kept.
+  - An entry expires one day after it is written. A cache hit costs no request
+    and no wait.
+  - Every run that misses writes the entry through its own temp file in the
+    cache directory and renames it into place, so runs that share the directory
+    never read a partial entry. When several runs write the same entry, the last
+    rename wins. The next write overwrites an expired entry.
+  - A killed run can leave an orphan `.partial` file. It is harmless and may be
+    deleted.
 - **The database.** Only [`store.py`](../packages/core/index_core/store.py)
   speaks SQL. It enforces one price source and one filings source per file.
 - **Time.** A feature at day `t` reads data available on day `t`. A label reads
@@ -66,6 +79,7 @@ features, fits and predicts, and `Store.save_report` keeps the result.
 | `sources/base.py`                      | The source protocols, price columns and fact columns   |
 | `sources/tiingo.py`                    | Tiingo daily prices                                    |
 | `sources/edgar.py`                     | EDGAR `companyfacts`, the concept and tag table        |
+| `sources/transport.py`                 | Request pacing and the on-disk response cache          |
 | `sources/synthetic.py`                 | Deterministic fake prices and filings                  |
 | `store.py`                             | SQLite schema, reads, writes and the source guard      |
 | `universe.py`                          | Reading a universe file and answering who was a member |

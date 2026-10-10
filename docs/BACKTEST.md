@@ -87,6 +87,8 @@ price ends before the window does, so exits by delisting are under-represented
 even in a point-in-time universe. With `demo30` the universe is also today's
 names, so survivors are over-represented.
 
-The backtest needs stored prices for every name that was a member during the
-stored period. When one has none, it stops and names the tickers. A name that
-left before the first stored day is not needed.
+A name that was a member during the stored period but has no stored prices,
+because Tiingo does not list it, is left out. The output then has a `Missing:`
+line with the count and the first tickers. These are mostly names that were
+acquired or delisted, so the rows lean toward survivors even in a point-in-time
+universe. A name that left before the first stored day is not counted.
