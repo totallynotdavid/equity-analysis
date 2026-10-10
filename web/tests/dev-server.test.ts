@@ -17,9 +17,15 @@ function freePort(): Promise<number> {
   });
 }
 
+// A firewall may drop the packets to a host's own network address instead of
+// refusing them, so a connection that stays silent counts as unreachable.
 function reachable(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = connect({ host, port });
+    const socket = connect({ host, port, timeout: 1_000 });
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
     socket.once("connect", () => {
       socket.destroy();
       resolve(true);
