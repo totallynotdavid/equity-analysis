@@ -27,6 +27,22 @@ function unrealSources(scores: Scores): string[] {
     );
 }
 
+const LEFT_OUT_SHOWN = 10;
+
+function leftOutNote(scores: Scores): string {
+  const items = scores.left_out ?? [];
+  if (items.length === 0) return "";
+  const shown = items
+    .slice(0, LEFT_OUT_SHOWN)
+    .map(({ ticker, reason }) => `${escape(ticker)} (${escape(reason)})`)
+    .join(", ");
+  const more =
+    items.length > LEFT_OUT_SHOWN
+      ? ` and ${items.length - LEFT_OUT_SHOWN} more`
+      : "";
+  return `<p class="text-muted-foreground mt-2 text-sm" id="left-out">Left out of the scores: ${shown}${more}.</p>`;
+}
+
 /**
  * The part of the page that depends on the scores. The build renders it from
  * the scores file and the browser renders it again from the API, so both go
@@ -47,5 +63,5 @@ export function renderScores(scores: Scores | null): string {
         `<tr class="border-b last:border-0"><td class="py-2 pr-4 tabular-nums">${escape(row.rank)}</td><td class="py-2 pr-4 font-medium">${escape(row.ticker)}</td><td class="py-2 text-right tabular-nums">${escape(row.score)}</td></tr>`,
     )
     .join("");
-  return `${warning}<p class="text-muted-foreground mt-8 text-sm">As of ${escape(scores.as_of)}. Score 10 is the top tenth of ${scores.rows.length} stocks by estimated chance of beating the S&amp;P 500 over the next ${escape(scores.horizon_days)} trading days.</p><table class="mt-3 w-full text-left text-sm" id="scores"><thead class="text-muted-foreground border-b"><tr><th class="py-2 pr-4 font-medium">Rank</th><th class="py-2 pr-4 font-medium">Ticker</th><th class="py-2 text-right font-medium">Score</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `${warning}<p class="text-muted-foreground mt-8 text-sm">As of ${escape(scores.as_of)}. Score 10 is the top tenth of ${scores.rows.length} stocks by estimated chance of beating the S&amp;P 500 over the next ${escape(scores.horizon_days)} trading days.</p>${leftOutNote(scores)}<table class="mt-3 w-full text-left text-sm" id="scores"><thead class="text-muted-foreground border-b"><tr><th class="py-2 pr-4 font-medium">Rank</th><th class="py-2 pr-4 font-medium">Ticker</th><th class="py-2 text-right font-medium">Score</th></tr></thead><tbody>${rows}</tbody></table>`;
 }

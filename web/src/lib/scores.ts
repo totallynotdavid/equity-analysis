@@ -8,6 +8,11 @@ export interface ScoreRow {
   prob: number;
 }
 
+export interface LeftOut {
+  ticker: string;
+  reason: string;
+}
+
 export interface Scores {
   status: string;
   as_of: string;
@@ -16,6 +21,7 @@ export interface Scores {
   facts_source: string | null;
   horizon_days: number;
   rows: ScoreRow[];
+  left_out?: LeftOut[];
 }
 
 /**
