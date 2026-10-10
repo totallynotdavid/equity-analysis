@@ -10,7 +10,7 @@ Python packages and an Astro site.
 │   ├── cli/    index-cli: the `eq` command
 │   └── api/    index-api: read-only FastAPI over the SQLite file
 ├── api/        Vercel entrypoint that serves index-api under /api
-├── universes/  ticker lists, one per line
+├── universes/  universe files (ticker, start, end) and build_sp500.py
 ├── web/        Astro site that renders outputs/scores.json
 ├── docs/       the manual
 ├── scripts/    deploy-data.sh, the scores the deployed page and API show
@@ -68,7 +68,7 @@ features, fits and predicts, and `Store.save_report` keeps the result.
 | `sources/edgar.py`                     | EDGAR `companyfacts`, the concept and tag table        |
 | `sources/synthetic.py`                 | Deterministic fake prices and filings                  |
 | `store.py`                             | SQLite schema, reads, writes and the source guard      |
-| `universe.py`                          | Reading a ticker list                                  |
+| `universe.py`                          | Reading a universe file and answering who was a member |
 | `features/technical.py`                | The 20 technical features                              |
 | `features/fundamental.py`              | Facts to trailing figures to the 14 ratios             |
 | `features/normalize.py`                | Percentile rank within each date                       |

@@ -4,16 +4,19 @@ index ranks US stocks with a daily score from 1 to 10. The score is the decile
 of a LightGBM model's estimated probability that a stock beats SPY over the next
 63 trading days. Score 10 is the top tenth of the stocks you give it.
 
-You give it a list of tickers. It fetches prices and SEC filings, fits the model
-and writes the scores to SQLite and to a JSON file. A read-only API and a static
-web page show them.
+You give it a universe: tickers with the dates they were members. It fetches
+prices and SEC filings, fits the model and writes the scores to SQLite and to a
+JSON file. A read-only API and a static web page show them.
 
 **Experimental, not validated.** The model is fitted once on a chronological,
 purged split of 20 technical and 14 fundamental features. `eq backtest` measures
-it walk-forward, but the ticker list is a fixed list of today's names with no
-point-in-time membership, so the numbers carry survivorship bias. Nothing here
-is investment advice or a recommendation to buy or sell any security, and you
-can lose money.
+it walk-forward. A universe file gives each name a start and end date, and a
+name counts only while it is a member.
+[`universes/sp500.txt`](universes/sp500.txt) holds the S&P 500 members from 2011
+as Wikipedia's changes table records them, with the dropped names included. The
+demo list `demo30` is today's names, so its numbers carry survivorship bias.
+Nothing here is investment advice or a recommendation to buy or sell any
+security, and you can lose money.
 
 ## Get started
 
@@ -75,15 +78,15 @@ TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
 
 ## Features
 
-- Scores a ticker list as of its latest trading day and stores each run in
-  SQLite, one per universe and date. [`eq run`](docs/CLI.md)
+- Scores a universe as of its latest trading day and stores each run in SQLite,
+  one per universe and date. [`eq run`](docs/CLI.md)
 - 20 technical features from daily prices and 14 fundamental ratios from SEC
   XBRL filings. A filing counts from the trading day after it was filed.
   [Model](docs/MODEL.md), [fundamentals](docs/FUNDAMENTALS.md)
 - Walk-forward backtest with a rank IC, a Newey-West t-statistic, hit rates by
   score and 95% intervals that resample whole months. A final holdout stays out
   of the development metrics. [`eq backtest`](docs/BACKTEST.md)
-- Fundamentals coverage report for a ticker list.
+- Fundamentals coverage report for a universe.
   [`eq coverage`](docs/FUNDAMENTALS.md#eq-coverage)
 - `scores.json` export, a read-only FastAPI service and an Astro page.
   [Outputs](docs/OUTPUTS.md)

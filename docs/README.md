@@ -1,7 +1,6 @@
 # Manual
 
-1. [CLI](CLI.md): the `eq` commands, ticker list files, API keys and the
-   database.
+1. [CLI](CLI.md): the `eq` commands, universe files, API keys and the database.
 2. [Outputs](OUTPUTS.md): `scores.json`, the API and the web page.
 3. [Model](MODEL.md): the label, the features, the fit and the score.
 4. [Fundamentals](FUNDAMENTALS.md): how filings become features, and

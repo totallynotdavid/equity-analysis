@@ -13,16 +13,62 @@ through uv from the repository root, for example `uv run eq run ...`.
 
 A failure prints `eq: <message>` to stderr and exits non-zero.
 
-## Ticker list files
+## Universe files
 
-A universe is a text file with one ticker per line. `#` starts a comment. Case
-is ignored. The universe name is the file name without its extension, so
+A universe is a text file with one membership per line: `ticker,start[,end]`. A
+name is a member from `start` through the day before `end`. A line without
+`end`, or with it blank, is still a member. Dates are `YYYY-MM-DD`. `#` starts a
+comment. The universe name is the file name without its extension, so
 `universes/demo30.txt` is `demo30`.
 
-`SPY` is the benchmark and cannot be listed. A repeated ticker, or a file with
-no tickers, is an error. The list is fixed: it does not know which companies
-were members on a past date.
+```text
+AAPL,2000-01-03
+GE,2011-01-01,2018-06-26
+TSLA,2020-12-21
+```
+
+A name can have several lines, for a name that left and came back. Their dates
+cannot overlap. `SPY` is the benchmark and cannot be listed. A file with no
+tickers, a line that is not `ticker,start[,end]`, a date that is not ISO, or an
+`end` that is not after `start` is an error that names the file and line.
 [`read_universe`](../packages/core/index_core/universe.py)
+
+Every command uses the dates:
+
+- `eq run` fetches prices and filings for the names that were members at some
+  point between `--start` and `--end`, and scores the members on the latest
+  date.
+- The labels, the model's training rows and the backtest use a stock on a date
+  only when it was a member then. The cross-sectional ranks of the features are
+  taken among that date's members. A name stays in the history until its `end`.
+- `eq coverage` reports the members on the latest stored price date.
+
+| File                                    | Contents                                                                                     |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`demo30.txt`](../universes/demo30.txt) | Today's 30 large caps, all members from 2000. For offline runs. It has survivorship bias.    |
+| [`sp500.txt`](../universes/sp500.txt)   | S&P 500 members from 2011-01-01, including the names that left. 810 tickers, from Wikipedia. |
+
+### Rebuilding sp500.txt
+
+```bash
+uv run python universes/build_sp500.py
+```
+
+[`build_sp500.py`](../universes/build_sp500.py) fetches two Wikipedia pages with
+a declared `User-Agent` (`--user-agent` changes it), reads their HTML tables and
+walks the changes table backwards from today's members. It writes the page URLs,
+the fetch date and the CC BY-SA 4.0 licence into the file header, and prints the
+rows it could not place on stderr. `--since` moves the first date, and `--out`
+the file.
+
+The changes table is dense from 2011: at least 16 rows a year. Before that it
+has at most 13 a year, so the script's default start is 2011-01-01 and an
+earlier `--since` gives a list that is missing members. The table lists tickers,
+not companies, so a company that changed its ticker has a gap or a warning where
+the table names only one of the two. A current member that the walk never sees
+added starts on `--since`, or on its "Date added" when that is later. The table
+can miss a change, and Wikipedia's editors can fix it later, so a rebuild can
+differ from the checked-in file.
 
 ## eq run
 
@@ -32,7 +78,7 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
 
 | Option       | Meaning                                             | Default                    |
 | ------------ | --------------------------------------------------- | -------------------------- |
-| `--universe` | Ticker list file. Required.                         |                            |
+| `--universe` | Universe file. Required.                            |                            |
 | `--prices`   | `tiingo` for real prices, `synthetic` for fake ones | `tiingo`                   |
 | `--filings`  | `edgar` for real filings, `synthetic` for fake ones | `edgar`                    |
 | `--start`    | First price date, `YYYY-MM-DD`                      | `--end` minus 2190 days    |
@@ -42,9 +88,9 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
 
 `eq run` does this, in order:
 
-1. Fetches daily prices for SPY and every ticker over the whole range. It
-   fetches the range again on each run, because adjusted prices change after a
-   dividend or split.
+1. Fetches daily prices for SPY and every ticker that was a member in the range,
+   over the whole range. It fetches the range again on each run, because
+   adjusted prices change after a dividend or split.
 2. Fetches every company's filed facts up to `--end`. A ticker the SEC does not
    list has no filings. `eq run` names those tickers on stderr, and their
    fundamentals stay missing.

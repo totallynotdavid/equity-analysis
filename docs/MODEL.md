@@ -12,12 +12,14 @@ A stock's label on day `t` is 1 if its return beat SPY's, else 0. Both returns
 run in adjusted prices from the close of day `t + 1` to the close of day
 `t + 64`, counted in SPY trading days. A signal built from the close of day `t`
 is traded at the close of day `t + 1`, so the label starts there. The last 64
-days have no label.
+days have no label. A stock has a label only on the dates it is a member of the
+universe ([universe files](CLI.md#universe-files)), though the 64 days may run
+past its removal. A stock whose prices end has no label for its last 64 days.
 
 ## Features
 
 Every feature at day `t` reads data available on day `t` only. Each is then
-replaced by its percentile rank among the tickers of the same day
+replaced by its percentile rank among the universe's members of the same day
 ([`normalize.py`](../packages/core/index_core/features/normalize.py)), so a
 feature's market-wide level does not matter.
 

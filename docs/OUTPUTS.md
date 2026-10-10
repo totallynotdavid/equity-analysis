@@ -13,7 +13,7 @@ otherwise ([CLI](CLI.md)).
 | -------------------- | ----------------------------------------------------------- |
 | `status`             | Always `experimental, not validated`                        |
 | `as_of`              | The trading day the scores are for                          |
-| `universe`           | The ticker list's file name without its extension           |
+| `universe`           | The universe file's name without its extension              |
 | `price_source`       | Where the prices came from: `tiingo` or `synthetic`         |
 | `facts_source`       | Where the filings came from: `edgar`, `synthetic` or `null` |
 | `horizon_days`       | The label horizon, 63 trading days                          |

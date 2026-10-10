@@ -78,8 +78,8 @@ uv run eq coverage --universe universes/demo30.txt
 ```
 
 `eq coverage` reads the stored filings, so run [`eq run`](CLI.md#eq-run) first.
-It counts, for each ticker, how many of the 13 concepts have a fresh value at
-the latest stored SPY date. It lists the tickers with fewer than
+It counts, for each member at the latest stored SPY date, how many of the 13
+concepts have a fresh value then. It lists the tickers with fewer than
 `--min-concepts` (default 10), so a name that a ticker change or an unusual
 taxonomy leaves bare is visible. `--db` selects the database
 ([CLI](CLI.md#the-database)).

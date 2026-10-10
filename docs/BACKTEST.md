@@ -10,13 +10,14 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
 uv run eq backtest --universe universes/demo30.txt
 ```
 
-| Option             | Meaning                                            | Default                        |
-| ------------------ | -------------------------------------------------- | ------------------------------ |
-| `--universe`       | Ticker list file. Required.                        |                                |
-| `--first-oos`      | First test quarter begins on or after this date    | as early as allowed            |
-| `--holdout-months` | Months of predictions kept out of the metrics      | 24                             |
-| `--final`          | Measure the held-back months instead of the others | off                            |
-| `--db`             | SQLite file                                        | [see CLI](CLI.md#the-database) |
+| Option             | Meaning                                                                     | Default                        |
+| ------------------ | --------------------------------------------------------------------------- | ------------------------------ |
+| `--universe`       | [Universe file](CLI.md#universe-files). Required.                           |                                |
+| `--first-oos`      | First test quarter begins on or after this date                             | as early as allowed            |
+| `--holdout-months` | Months of predictions kept out of the metrics                               | 24                             |
+| `--final`          | Measure the held-back months instead of the others                          | off                            |
+| `--predictions`    | CSV file for the measured rows: `date`, `ticker`, `prob`, `label`, `excess` | none                           |
+| `--db`             | SQLite file                                                                 | [see CLI](CLI.md#the-database) |
 
 ## Method
 
@@ -24,10 +25,14 @@ The backtest walks forward, in
 [`walkforward.py`](../packages/core/index_core/walkforward.py). It refits the
 model every calendar quarter on all labelled snapshots (every fifth trading day)
 whose label window closed before the quarter began, then predicts only that
-quarter. A label reads 64 days ahead ([Model](MODEL.md#the-label)). Each
-prediction comes from a model that never saw the quarter's prices. The first
-quarter is the first with 100 such snapshots, about two years, or the first on
-or after `--first-oos`. The model settings are the ones `eq run` uses.
+quarter. A snapshot row exists only for a stock that is a member on that date,
+and its features are ranked among that date's members
+([universe files](CLI.md#universe-files)). A stock that leaves the universe
+keeps its rows up to its end date. A label reads 64 days ahead
+([Model](MODEL.md#the-label)). Each prediction comes from a model that never saw
+the quarter's prices. The first quarter is the first with 100 such snapshots,
+about two years, or the first on or after `--first-oos`. The model settings are
+the ones `eq run` uses.
 
 The last `--holdout-months` of predictions stay out of the metrics. `--final`
 measures only those months. Use it once, before a public claim, because each
@@ -76,5 +81,12 @@ score   rows   hit rate   95% CI           mean excess   95% CI
   ...
 ```
 
-The output above is from fake prices and means nothing. It ends with a caveat:
-the ticker list is fixed, so survivors are over-represented.
+The output above is from fake prices and means nothing. It ends with a caveat. A
+name that stopped trading has no label for its last 64 trading days, because its
+price ends before the window does, so exits by delisting are under-represented
+even in a point-in-time universe. With `demo30` the universe is also today's
+names, so survivors are over-represented.
+
+The backtest needs stored prices for every name that was a member during the
+stored period. When one has none, it stops and names the tickers. A name that
+left before the first stored day is not needed.
