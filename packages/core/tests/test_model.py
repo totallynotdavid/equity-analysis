@@ -15,6 +15,7 @@ from index_core.model import (
     purged_split,
 )
 from index_core.scoring import decile_scores
+from membership import of_prices
 
 
 def _without_openmp(monkeypatch: pytest.MonkeyPatch, platform: str = "linux") -> None:
@@ -65,7 +66,7 @@ def test_fit_uses_early_dates_for_training_and_late_dates_for_the_holdout(
     prices: pd.DataFrame,
 ) -> None:
     features = rank_by_date(technical_features(prices, "SPY"))
-    labels = excess_return_labels(prices, "SPY")
+    labels = excess_return_labels(prices, "SPY", of_prices(prices))
     calendar = pd.DatetimeIndex(sorted(prices["date"].unique()))
 
     model = fit(features, labels, calendar)
@@ -80,7 +81,7 @@ def test_fit_uses_early_dates_for_training_and_late_dates_for_the_holdout(
 
 def test_fit_is_repeatable(prices: pd.DataFrame) -> None:
     features = rank_by_date(technical_features(prices, "SPY"))
-    labels = excess_return_labels(prices, "SPY")
+    labels = excess_return_labels(prices, "SPY", of_prices(prices))
     calendar = pd.DatetimeIndex(sorted(prices["date"].unique()))
 
     first = fit(features, labels, calendar).predict(features.dropna())
@@ -92,7 +93,7 @@ def test_fit_is_repeatable(prices: pd.DataFrame) -> None:
 def test_fit_refuses_a_history_too_short_to_split(prices: pd.DataFrame) -> None:
     short = prices[prices["date"] < "2024-06-01"]
     features = rank_by_date(technical_features(short, "SPY"))
-    labels = excess_return_labels(short, "SPY")
+    labels = excess_return_labels(short, "SPY", of_prices(short))
     calendar = pd.DatetimeIndex(sorted(short["date"].unique()))
 
     with pytest.raises(ValueError, match="too few"):

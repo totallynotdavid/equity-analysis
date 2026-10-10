@@ -11,6 +11,7 @@ from index_core.features.normalize import rank_by_date
 from index_core.labels import excess_returns
 from index_core.sources.synthetic import SyntheticFilings
 from index_core.walkforward import walk_forward
+from membership import of_prices
 
 
 TICKERS = [f"T{i:02d}" for i in range(30)]
@@ -96,7 +97,7 @@ def market() -> Market:
 def _evaluation(market: Market, inputs: pd.DataFrame) -> Evaluation:
     features = fundamental_features(inputs, market.prices, "SPY")
     features = rank_by_date(features.drop(columns=list(PRICED)))
-    excess = excess_returns(market.prices, "SPY")
+    excess = excess_returns(market.prices, "SPY", of_prices(market.prices))
     result = walk_forward(features, excess, market.calendar)
     return evaluate(result.predictions, market.calendar)
 

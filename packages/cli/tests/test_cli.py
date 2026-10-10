@@ -1,9 +1,10 @@
 import json
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from index_cli import main as cli
@@ -218,7 +219,7 @@ def test_coverage_counts_a_name_with_no_stored_filings_as_zero(
 ) -> None:
     database = tmp_path / "db.sqlite"
     universe = tmp_path / "pair.txt"
-    universe.write_text("AAPL\nMSFT\n")
+    universe.write_text("AAPL,2000-01-03\nMSFT,2000-01-03\n")
     with Store.open(database) as store:
         ingest(SyntheticSource(), store, ["AAPL", "MSFT"], date(2024, 1, 1), END)
 
@@ -278,7 +279,23 @@ def test_a_network_failure_ends_with_a_message_not_a_traceback(
 def test_export_can_pick_a_universe_by_name(tmp_path: Path) -> None:
     database = tmp_path / "db.sqlite"
     small = tmp_path / "small.txt"
-    small.write_text("AAPL\nMSFT\nNVDA\nAMZN\nGOOGL\nMETA\nTSLA\nJPM\nXOM\nUNH\n")
+    small.write_text(
+        "".join(
+            f"{ticker},2000-01-03\n"
+            for ticker in [
+                "AAPL",
+                "MSFT",
+                "NVDA",
+                "AMZN",
+                "GOOGL",
+                "META",
+                "TSLA",
+                "JPM",
+                "XOM",
+                "UNH",
+            ]
+        )
+    )
     _run(tmp_path)
     main(
         [
@@ -355,3 +372,85 @@ def test_backtest_with_too_little_history_fails_with_a_message(tmp_path: Path) -
 
     with pytest.raises(SystemExit, match=r"eq: .*needs at least \d+.*--start 20"):
         main(["backtest", "--universe", str(DEMO), "--db", str(database)])
+
+
+DROPPED_ON = date(2019, 7, 1)
+ADDED_ON = date(2019, 1, 2)
+MEMBERS = [f"M{i:02d}" for i in range(12)]
+
+
+class _DropStopsTrading(SyntheticSource):
+    """DROP has no bars after the day it left, as a delisted stock has none."""
+
+    def fetch(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+        if ticker == "DROP":
+            end = min(end, DROPPED_ON - timedelta(days=3))
+        return super().fetch(ticker, start, end)
+
+
+@pytest.mark.parametrize("keeps_trading", [True, False], ids=["demoted", "delisted"])
+def test_backtest_uses_a_name_only_while_it_is_a_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, keeps_trading: bool
+) -> None:
+    if not keeps_trading:
+        monkeypatch.setitem(cli.PRICES, "synthetic", _DropStopsTrading)
+    universe = tmp_path / "churn.txt"
+    universe.write_text(
+        "".join(f"{ticker},2000-01-03\n" for ticker in MEMBERS)
+        + f"DROP,2000-01-03,{DROPPED_ON}\n"
+        + f"LATE,{ADDED_ON}\n"
+    )
+    database, predictions = tmp_path / "db.sqlite", tmp_path / "predictions.csv"
+    main(
+        [
+            *["run", "--universe", str(universe), *OFFLINE],
+            *["--start", "2014-01-01", "--end", "2024-12-31"],
+            *["--db", str(database), "--out", str(tmp_path / "scores.json")],
+        ]
+    )
+
+    main(
+        [
+            *["backtest", "--universe", str(universe), "--db", str(database)],
+            *["--predictions", str(predictions)],
+        ]
+    )
+
+    rows = pd.read_csv(predictions, parse_dates=["date"])
+    dropped, added = pd.Timestamp(DROPPED_ON), pd.Timestamp(ADDED_ON)
+    year = pd.Timedelta(days=365)
+
+    def first_and_last(ticker: str) -> tuple[pd.Timestamp, pd.Timestamp]:
+        dates = rows.loc[rows["ticker"] == ticker, "date"]
+        return pd.Timestamp(dates.min()), pd.Timestamp(dates.max())
+
+    assert first_and_last("DROP")[0] < dropped - year
+    assert first_and_last("DROP")[1] < dropped
+    assert first_and_last("LATE")[0] >= added
+    assert first_and_last("M00")[1] > dropped + year
+    with Store.open(database, read_only=True) as store:
+        stored = store.read_prices(["DROP"])["date"].max()
+    assert (stored >= pd.Timestamp(DROPPED_ON)) == keeps_trading
+
+
+def test_backtest_does_not_need_prices_of_a_name_that_left_before_them(
+    tmp_path: Path,
+) -> None:
+    universe = tmp_path / "churn.txt"
+    universe.write_text(
+        "".join(f"{ticker},2000-01-03\n" for ticker in MEMBERS)
+        + "ANCIENT,2000-01-03,2012-01-02\n"
+    )
+    database = tmp_path / "db.sqlite"
+    main(
+        [
+            *["run", "--universe", str(universe), *OFFLINE],
+            *["--start", "2014-01-01", "--end", "2024-12-31"],
+            *["--db", str(database), "--out", str(tmp_path / "scores.json")],
+        ]
+    )
+
+    with Store.open(database, read_only=True) as store:
+        assert store.read_prices(["ANCIENT"]).empty
+
+    main(["backtest", "--universe", str(universe), "--db", str(database)])

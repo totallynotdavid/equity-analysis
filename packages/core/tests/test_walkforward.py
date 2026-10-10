@@ -9,6 +9,7 @@ from index_core.features.normalize import rank_by_date
 from index_core.features.technical import technical_features
 from index_core.labels import LABEL_SPAN, excess_returns
 from index_core.walkforward import MIN_TRAIN_DATES, WalkForward, walk_forward
+from membership import of_prices
 
 
 @pytest.fixture(scope="module")
@@ -18,7 +19,7 @@ def features(planted: pd.DataFrame) -> pd.DataFrame:
 
 @pytest.fixture(scope="module")
 def excess(planted: pd.DataFrame) -> pd.Series:
-    return excess_returns(planted, "SPY")
+    return excess_returns(planted, "SPY", of_prices(planted))
 
 
 @pytest.fixture(scope="module")

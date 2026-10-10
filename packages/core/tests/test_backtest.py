@@ -7,6 +7,7 @@ from index_core.backtest_text import render
 from index_core.pipeline import Backtest, backtest, history_needed
 from index_core.sources.base import PRICE_COLUMNS
 from index_core.store import Store
+from membership import always
 
 
 if TYPE_CHECKING:
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     import pandas as pd
 
 TICKERS = [f"T{i:02d}" for i in range(14)]
+UNIVERSE = always(TICKERS, "planted")
 FIRST_OOS = date(2019, 1, 1)
 
 
@@ -34,8 +36,8 @@ def store(tmp_path: Path, planted: pd.DataFrame) -> Iterator[Store]:
 
 
 def test_the_holdout_months_are_left_out_until_asked_for(store: Store) -> None:
-    development = backtest(store, TICKERS, FIRST_OOS, holdout_months=12)
-    holdout = backtest(store, TICKERS, FIRST_OOS, holdout_months=12, final=True)
+    development = backtest(store, UNIVERSE, FIRST_OOS, holdout_months=12)
+    holdout = backtest(store, UNIVERSE, FIRST_OOS, holdout_months=12, final=True)
 
     assert development.period == "development"
     assert holdout.period == "holdout"
@@ -49,18 +51,18 @@ def test_the_holdout_months_are_left_out_until_asked_for(store: Store) -> None:
 
 def test_a_ticker_without_stored_prices_stops_the_backtest(store: Store) -> None:
     with pytest.raises(ValueError, match=r"no stored prices for \['NOPE'\]"):
-        backtest(store, [*TICKERS, "NOPE"], FIRST_OOS)
+        backtest(store, always([*TICKERS, "NOPE"]), FIRST_OOS)
 
 
 def test_a_holdout_longer_than_the_history_stops_the_backtest(store: Store) -> None:
     with pytest.raises(ValueError, match="needs at least"):
-        backtest(store, TICKERS, FIRST_OOS, holdout_months=1000)
+        backtest(store, UNIVERSE, FIRST_OOS, holdout_months=1000)
 
 
 def test_the_text_shows_the_base_rate_the_effective_sample_and_ten_score_rows(
     store: Store,
 ) -> None:
-    result: Backtest = backtest(store, TICKERS, FIRST_OOS, holdout_months=12)
+    result: Backtest = backtest(store, UNIVERSE, FIRST_OOS, holdout_months=12)
 
     text = render(result, "planted")
 
@@ -96,7 +98,7 @@ def test_a_history_below_the_stated_need_is_refused_with_the_start_to_fetch(
         _store_with_days(tmp_path / "db.sqlite", planted, needed - 1) as store,
         pytest.raises(ValueError, match=rf"needs at least {needed}") as error,
     ):
-        backtest(store, TICKERS, holdout_months=12, final=final)
+        backtest(store, UNIVERSE, holdout_months=12, final=final)
 
     assert "Run `eq run --start 20" in str(error.value)
 
@@ -108,6 +110,6 @@ def test_a_history_a_quarter_above_the_stated_need_backtests(
     with _store_with_days(
         tmp_path / "db.sqlite", planted, history_needed(12, final=final) + 126
     ) as store:
-        result = backtest(store, TICKERS, holdout_months=12, final=final)
+        result = backtest(store, UNIVERSE, holdout_months=12, final=final)
 
     assert result.folds
