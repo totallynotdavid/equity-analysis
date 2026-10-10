@@ -14,6 +14,7 @@ from index_core.pipeline import (
     backtest,
     coverage,
     missing_filings,
+    missing_prices,
     run,
 )
 from index_core.sources.base import SourceError
@@ -35,13 +36,15 @@ HISTORY_DAYS = 6 * 365
 MIN_CONCEPTS = 10
 MISSING_SHOWN = 10
 DB_HELP = "SQLite file (default: $INDEX_DB or data/index.sqlite)"
-PRICES: dict[str, Callable[[], PriceSource]] = {
+DEFAULT_CACHE = Path("data/cache")
+# Each factory takes the directory where a source keeps its responses.
+PRICES: dict[str, Callable[[Path], PriceSource]] = {
     "tiingo": TiingoSource.from_env,
-    "synthetic": SyntheticSource,
+    "synthetic": lambda _: SyntheticSource(),
 }
-FILINGS: dict[str, Callable[[], FilingsSource]] = {
+FILINGS: dict[str, Callable[[Path], FilingsSource]] = {
     "edgar": EdgarSource.from_env,
-    "synthetic": SyntheticFilings,
+    "synthetic": lambda _: SyntheticFilings(),
 }
 
 
@@ -72,6 +75,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_command.add_argument("--start", type=date.fromisoformat)
     run_command.add_argument("--end", type=date.fromisoformat)
+    run_command.add_argument(
+        "--cache",
+        type=Path,
+        default=DEFAULT_CACHE,
+        help="directory where Tiingo and EDGAR responses are kept for a day, so "
+        "a run that stops can resume (default: %(default)s)",
+    )
     _add_db_and_out(run_command)
 
     backtest_command = commands.add_parser(
@@ -161,8 +171,8 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 def _run(args: argparse.Namespace) -> None:
     universe = read_universe(args.universe)
-    source = PRICES[args.prices]()
-    filings = FILINGS[args.filings]()
+    source = PRICES[args.prices](args.cache)
+    filings = FILINGS[args.filings](args.cache)
     fake = [
         kind
         for kind, name in (("prices", args.prices), ("filings", args.filings))
@@ -177,19 +187,26 @@ def _run(args: argparse.Namespace) -> None:
     start = args.start or end - timedelta(days=HISTORY_DAYS)
     with Store.open(args.db) as store:
         report = run(source, filings, store, universe, start, end)
-        missing = missing_filings(store, universe.members_between(start, end))
-    if missing:
-        shown = ", ".join(missing[:MISSING_SHOWN])
-        more = (
-            f" and {len(missing) - MISSING_SHOWN} more"
-            if len(missing) > MISSING_SHOWN
-            else ""
-        )
-        sys.stderr.write(
-            f"eq: no filings for {len(missing)} tickers ({shown}{more}); "
-            "their fundamentals are missing\n"
-        )
+        members = universe.members_between(start, end)
+        unpriced = missing_prices(store, members)
+        unfiled = missing_filings(store, members)
+    _warn_missing("prices", unpriced, "they are left out")
+    _warn_missing("filings", unfiled, "their fundamentals are missing")
     _write(report, args.out)
+
+
+def _warn_missing(what: str, tickers: list[str], effect: str) -> None:
+    if not tickers:
+        return
+    shown = ", ".join(tickers[:MISSING_SHOWN])
+    more = (
+        f" and {len(tickers) - MISSING_SHOWN} more"
+        if len(tickers) > MISSING_SHOWN
+        else ""
+    )
+    sys.stderr.write(
+        f"eq: no {what} for {len(tickers)} tickers ({shown}{more}); {effect}\n"
+    )
 
 
 def _coverage(args: argparse.Namespace) -> None:
