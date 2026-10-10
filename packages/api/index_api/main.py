@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from index_core.report import ScoresReport  # noqa: TC002
-from index_core.store import Store, default_db_path
+from index_core.store import Store, StoreError, default_db_path
 from pydantic import BaseModel
 
 
@@ -34,8 +34,11 @@ def _latest_report() -> ScoresReport | None:
     path = default_db_path()
     if not path.exists():
         return None
-    with Store.open(path, read_only=True) as store:
-        return store.latest_report()
+    try:
+        with Store.open(path, read_only=True) as store:
+            return store.latest_report()
+    except StoreError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @app.get("/health")
