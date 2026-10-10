@@ -58,7 +58,7 @@ run = [
 ]
 
 [tasks."deploy:data"]
-description = "Score the demo universe on synthetic data and leave a database the API can read from a read-only disk"
+description = "Score the demo universe on real data into deploy/scores.json. Needs TIINGO_API_KEY and SEC_USER_AGENT"
 run = "scripts/deploy-data.sh"
 
 [tasks.cli]
