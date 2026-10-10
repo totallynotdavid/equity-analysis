@@ -32,7 +32,8 @@ class SourceError(Exception):
 
 
 class NotFoundError(SourceError):
-    """The source has no such ticker. Other tickers may still be fetched."""
+    """The source has no such ticker, or none in the range. Other tickers may
+    still be fetched."""
 
 
 def normalise_ticker(ticker: str) -> str:
@@ -86,7 +87,9 @@ class PriceSource(Protocol):
         """Daily bars from `start` to `end` inclusive.
 
         The frame has a sorted, unique, tz-naive `DatetimeIndex` named `date` and
-        the columns in `PRICE_COLUMNS`. A ticker with no bars in the range, or a
-        `start` after `end`, is a `SourceError`.
+        the columns in `PRICE_COLUMNS`. A ticker the source does not list, or
+        with no bars in the range, is a `NotFoundError`, which `ingest` treats as
+        no prices unless it is the benchmark. A `start` after `end`, or any
+        other failure, is a `SourceError` and stops the run.
         """
         ...

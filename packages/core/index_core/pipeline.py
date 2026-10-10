@@ -45,6 +45,8 @@ class Backtest:
     period: Literal["development", "holdout"]
     holdout_start: date
     predictions: pd.DataFrame
+    members: int
+    unpriced: list[str]
 
 
 @dataclass(frozen=True)
@@ -57,10 +59,22 @@ class Coverage:
 def ingest(
     source: PriceSource, store: Store, tickers: list[str], start: date, end: date
 ) -> None:
-    """Fetch the whole range again each time: adjusted prices change after a
-    dividend or split, so stored history can go stale."""
-    for ticker in [BENCHMARK, *tickers]:
-        store.upsert_prices(source.name, ticker, source.fetch(ticker, start, end))
+    """Ask the source for the whole range on every run: adjusted prices change
+    after a dividend or split, so stored history can go stale. A source with a
+    response cache answers a repeat run inside the cache window from it, so that
+    run sees the prices of the first.
+
+    A ticker the source does not know is skipped, because a source can lack a
+    delisted company. `missing_prices` lists the skipped tickers. Every label
+    needs the benchmark, so a missing `SPY` stops the run.
+    """
+    store.upsert_prices(source.name, BENCHMARK, source.fetch(BENCHMARK, start, end))
+    for ticker in tickers:
+        try:
+            bars = source.fetch(ticker, start, end)
+        except NotFoundError:
+            continue
+        store.upsert_prices(source.name, ticker, bars)
 
 
 def ingest_filings(
@@ -79,6 +93,11 @@ def ingest_filings(
         except NotFoundError:
             facts = empty_facts()
         store.replace_facts(source.name, ticker, facts)
+
+
+def missing_prices(store: Store, tickers: list[str]) -> list[str]:
+    priced = store.priced_tickers()
+    return [ticker for ticker in tickers if ticker not in priced]
 
 
 def missing_filings(store: Store, tickers: list[str]) -> list[str]:
@@ -190,7 +209,8 @@ def backtest(
     """Walk forward over the stored prices and evaluate the out-of-sample rows.
 
     A stock is trained on and predicted only on dates when it is a member of
-    `universe`.
+    `universe`. A member with no stored prices is left out and listed in
+    `Backtest.unpriced`.
     The last `holdout_months` months stay out of development metrics. With
     `final`, only those months are measured.
     """
@@ -201,9 +221,7 @@ def backtest(
         raise ValueError(f"no stored prices for ['{BENCHMARK}']; run `eq run` first")
     # A name that left before the first stored day has nothing to read.
     required = universe.members_between(days.min(), days.max())
-    missing = sorted(set(required) - set(prices["ticker"]))
-    if missing:
-        raise ValueError(f"no stored prices for {missing}; run `eq run` first")
+    unpriced = sorted(set(required) - set(prices["ticker"]))
     needed = history_needed(holdout_months, final=final)
     if len(days) < needed:
         start = days.max() - pd.Timedelta(days=int(needed * CALENDAR_PER_TRADING_DAY))
@@ -235,6 +253,8 @@ def backtest(
         period="holdout" if final else "development",
         holdout_start=holdout_start.date(),
         predictions=chosen,
+        members=len(required),
+        unpriced=unpriced,
     )
 
 

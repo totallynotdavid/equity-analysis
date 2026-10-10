@@ -169,6 +169,13 @@ class Store:
         ).fetchone()
         return None if stored is None else str(stored[0])
 
+    def priced_tickers(self) -> set[str]:
+        """Every ticker with at least one stored bar."""
+        return {
+            str(row[0])
+            for row in self._db.execute("SELECT DISTINCT ticker FROM prices")
+        }
+
     def read_prices(self, tickers: list[str]) -> pd.DataFrame:
         """Long frame with `ticker`, a `date` column and the price columns."""
         marks = ", ".join("?" * len(tickers))

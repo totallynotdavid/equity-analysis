@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from index_core.evaluation import Estimate
     from index_core.pipeline import Backtest
 
+UNPRICED_SHOWN = 10
+
 
 def render(result: Backtest, universe: str) -> str:
     ev = result.evaluation
@@ -33,6 +35,7 @@ def render(result: Backtest, universe: str) -> str:
         f"Effective sample: about {ev.independent_windows} independent "
         f"{HORIZON}-day windows. Snapshots a week apart share most of their "
         "outcome, so the row count overstates the evidence.",
+        *_unpriced(result),
         "",
         f"Base rate, share of stocks beating SPY: {ev.base_rate:.1%}",
         "",
@@ -63,6 +66,19 @@ def render(result: Backtest, universe: str) -> str:
         ),
     ]
     return "\n".join(lines) + "\n"
+
+
+def _unpriced(result: Backtest) -> list[str]:
+    if not result.unpriced:
+        return []
+    shown = ", ".join(result.unpriced[:UNPRICED_SHOWN])
+    more = len(result.unpriced) - UNPRICED_SHOWN
+    more_text = f" and {more} more" if more > 0 else ""
+    return [
+        f"Missing: no prices for {len(result.unpriced)} of {result.members} "
+        f"universe names ({shown}{more_text}). "
+        "They are not in the rows."
+    ]
 
 
 def _interval(estimate: Estimate, spec: str) -> str:
