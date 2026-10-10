@@ -104,6 +104,13 @@ The database is one SQLite file. It holds prices, filings and every saved run.
 - A database holds prices from one source and filings from one source. To switch
   between `synthetic` and `tiingo`, pass a new `--db` file. A mismatch stops
   with `this database holds synthetic prices; use a new database for tiingo`.
+- A database written by an older version fails to open with
+  `has an older layout; delete it and run again`. Databases are rebuilt, not
+  migrated.
+- Prices include each day's cash dividend and split factor. The fundamental
+  features read the split factor to correct a filed share count.
+- A ticker with a dot, such as `BRK.B`, is looked up as `BRK-B` at Tiingo and
+  the SEC. The database keeps the ticker as written in the universe file.
 
 ## eq export
 
