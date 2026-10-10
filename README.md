@@ -96,6 +96,7 @@ TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
 
 - [The manual](docs/README.md) lists every document: commands, outputs, model,
   fundamentals, backtest, architecture and deploy.
-- [Live page](https://equity-analysis.vercel.app) shows synthetic demo scores,
-  and `/api/scores` returns them as JSON. [Deploy](docs/DEPLOY.md) explains how.
+- [Live page](https://equity-analysis.vercel.app) shows the demo universe scored
+  on Tiingo prices and EDGAR filings, and `/api/scores` returns them as JSON.
+  [Deploy](docs/DEPLOY.md) explains how.
 - [Contributing](.github/CONTRIBUTING.md) covers setup, checks and tests.

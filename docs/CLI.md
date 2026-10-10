@@ -8,6 +8,7 @@ through uv from the repository root, for example `uv run eq run ...`.
 | ------------- | ------------------------------------------------------------ | ------------------------------- |
 | `eq run`      | Fetches prices and filings, fits, scores, stores and exports | [below](#eq-run)                |
 | `eq export`   | Writes the latest stored scores as JSON                      | [below](#eq-export)             |
+| `eq import`   | Stores a scores file, for the API to serve                   | [below](#eq-import)             |
 | `eq coverage` | Lists names with few fundamentals in the stored filings      | [Fundamentals](FUNDAMENTALS.md) |
 | `eq backtest` | Walks forward over the stored data and prints metrics        | [Backtest](BACKTEST.md)         |
 
@@ -96,11 +97,14 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
    list, or lists with no bars in the range, has no prices. `eq run` names those
    tickers on stderr and leaves them out. A missing SPY stops the run.
 2. Fetches every company's filed facts up to `--end`. A ticker the SEC does not
-   list has no filings. `eq run` names those tickers on stderr, and their
-   fundamentals stay missing.
+   list has no filings. `eq run` names those tickers on stderr and leaves them
+   out.
 3. Builds the features, fits the model and scores the latest date
    ([Model](MODEL.md)).
 4. Stores the run in the database and writes `--out` ([Outputs](OUTPUTS.md)).
+   The tickers left out in steps 1 and 2 are in the file's `left_out`, with the
+   reason. When none is left, the run stops with
+   `no ticker has both prices and filings`.
 
 With a synthetic source, the prices or filings are generated, and `eq run` says
 on stderr that the scores mean nothing.
@@ -212,3 +216,15 @@ uv run eq export --universe demo30 --out outputs/scores.json
 Writes the stored run with the latest as-of date. `--universe NAME` limits the
 choice to one universe. Without it, the latest run of any universe is written.
 `--db` and `--out` work as for `eq run`.
+
+## eq import
+
+```bash
+uv run eq import --scores deploy/scores.json --db data/deploy.sqlite
+```
+
+Reads a file in the shape of `eq run`'s `--out` ([Outputs](OUTPUTS.md)) and
+stores it as the run of its universe and as-of date. The database then holds the
+scores and their two sources, and no prices or filings, so `index-api` serves it
+and `eq export` writes the file back unchanged. A file that is not a scores
+report fails with the fields that are wrong. `--db` works as for `eq run`.

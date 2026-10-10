@@ -33,7 +33,8 @@ Every fact carries the date it was filed.
 - A later filing that restates a period replaces the earlier value from its own
   filing date on, never before it.
 - Nothing is filled backward. Before a company's first filing its fundamentals
-  are missing, and a name with no filings keeps its technical features.
+  are missing. A name with no filings keeps its technical features in
+  `eq backtest`; `eq run` leaves it out ([CLI](CLI.md#eq-run)).
 - A value is missing once its period ended more than 460 days before the date,
   so a company that stops filing is not scored on old numbers.
 

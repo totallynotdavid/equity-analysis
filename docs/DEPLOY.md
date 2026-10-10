@@ -14,32 +14,59 @@ The page and the API share one origin, so the API's CORS list does not apply.
 The page loads `/api/scores` in the browser and shows what the API returns
 ([Outputs](OUTPUTS.md#web-page)).
 
-The deployed scores come from
+The deployed scores are the committed file
+[`deploy/scores.json`](../deploy/scores.json): the demo universe
+[`universes/demo30.txt`](../universes/demo30.txt) scored on Tiingo prices and
+EDGAR filings. It holds the scores, the as-of date and the two source names, and
+no price bars. Vercel has no Tiingo key and a real run takes too long for a
+build, so the build never scores. It publishes this file.
+
+## Refresh the scores
+
 [`scripts/deploy-data.sh`](../scripts/deploy-data.sh), also
-`mise run deploy:data`. It scores
-[`universes/demo30.txt`](../universes/demo30.txt) on synthetic prices and
-filings, so the page shows the synthetic-data warning and the scores mean
-nothing. The script writes `data/deploy.sqlite` and `data/deploy-scores.json`,
-apart from the files `eq run` writes by default, and switches the database out
-of WAL mode because the function's disk is read-only.
+`mise run deploy:data`, runs `eq run` on the demo universe and writes
+`deploy/scores.json`. It needs the two variables of
+[Real data](CLI.md#real-data):
+
+```bash
+TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
+  mise run deploy:data
+```
+
+Arguments after the task go to `eq run`, for example `-- --end 2026-10-10`. The
+script keeps its database in `data/real.sqlite` and the responses of Tiingo and
+the SEC in `data/cache`, both ignored by git, so a repeat run on the same day
+costs no requests. With an empty cache the Tiingo pause sets the run time
+([Real data](CLI.md#real-data)). A Tiingo rate limit or an SEC block stops the
+run with the source's message and leaves `deploy/scores.json` as it was. Run the
+task again to carry on from the cache.
+
+Commit the new `deploy/scores.json` and push. A ticker without prices or filings
+is left out of the scores and named in the file's `left_out`, which the page
+lists ([Outputs](OUTPUTS.md#web-page)).
 
 ## What runs where
 
-- **Page.** The `buildCommand` in [`vercel.json`](../vercel.json) runs the
-  script above, then builds `web/` from `data/deploy-scores.json` into
-  `web/dist`.
+- **Page.** The `buildCommand` in [`vercel.json`](../vercel.json) runs
+  [`scripts/deploy-db.sh`](../scripts/deploy-db.sh), then builds `web/` from
+  `deploy/scores.json` into `web/dist` with `SCORES_JSON`.
 - **API.** [`api/index.py`](../api/index.py) mounts the FastAPI app of
   [`index-api`](../packages/api/index_api/main.py) under `/api`. Vercel installs
   the Python dependencies named by the root
   [`pyproject.toml`](../pyproject.toml) and bundles `data/deploy.sqlite` with
-  the function.
+  the function. `deploy-db.sh` makes that file with
+  [`eq import`](CLI.md#eq-import) from `deploy/scores.json`, and switches it out
+  of WAL mode because the function's disk is read-only.
+- **Guard.** `deploy-db.sh` fails unless `price_source` is `tiingo` and
+  `facts_source` is `edgar`, so synthetic scores cannot reach the live page. The
+  synthetic path stays for tests and the local demo ([README](../README.md)).
 
 ## Redeploy
 
 The Vercel project is connected to the GitHub repository. A push to `master`
 builds and deploys production, and every other branch gets a preview. The
 `ignoreCommand` in `vercel.json` skips the build when the push changed none of
-the page, the API, the packages, the universes, the deploy script or the Vercel
+the page, the API, the packages, `deploy/`, the deploy scripts or the Vercel
 files. A change to the docs alone does not redeploy.
 
 Deploy a checkout by hand:
@@ -48,4 +75,5 @@ Deploy a checkout by hand:
 vercel deploy --prod --yes
 ```
 
-The build regenerates the scores on Vercel, so the checkout needs no `data/`.
+The build reads the committed `deploy/scores.json`, so the checkout needs no
+`data/`.

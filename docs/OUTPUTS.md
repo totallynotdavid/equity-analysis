@@ -7,32 +7,35 @@ page. All three show the same shape,
 ## scores.json
 
 `eq run` and `eq export` write `outputs/scores.json` unless `--out` says
-otherwise ([CLI](CLI.md)).
+otherwise ([CLI](CLI.md)). The deployed page and API serve a file of this shape
+([Deploy](DEPLOY.md)). `eq import` loads such a file into a database.
 
-| Field                | Meaning                                                     |
-| -------------------- | ----------------------------------------------------------- |
-| `status`             | Always `experimental, not validated`                        |
-| `as_of`              | The trading day the scores are for                          |
-| `universe`           | The universe file's name without its extension              |
-| `price_source`       | Where the prices came from: `tiingo` or `synthetic`         |
-| `facts_source`       | Where the filings came from: `edgar`, `synthetic` or `null` |
-| `horizon_days`       | The label horizon, 63 trading days                          |
-| `model.train_rows`   | Rows the model was fitted on                                |
-| `model.holdout_rows` | Rows in the later holdout the model was measured on         |
-| `model.holdout_auc`  | AUC on that holdout, `null` when it holds only one outcome  |
-| `rows[].ticker`      | The ticker                                                  |
-| `rows[].rank`        | 1 is the highest probability. Ranks are unique              |
-| `rows[].score`       | Decile from 1 to 10. 10 is the top tenth                    |
-| `rows[].prob`        | The model's probability of beating SPY over `horizon_days`  |
+| Field                | Meaning                                                    |
+| -------------------- | ---------------------------------------------------------- |
+| `status`             | Always `experimental, not validated`                       |
+| `as_of`              | The trading day the scores are for                         |
+| `universe`           | The universe file's name without its extension             |
+| `price_source`       | Where the prices came from: `tiingo` or `synthetic`        |
+| `facts_source`       | Where the filings came from: `edgar` or `synthetic`        |
+| `horizon_days`       | The label horizon, 63 trading days                         |
+| `model.train_rows`   | Rows the model was fitted on                               |
+| `model.holdout_rows` | Rows in the later holdout the model was measured on        |
+| `model.holdout_auc`  | AUC on that holdout, `null` when it holds only one outcome |
+| `rows[].ticker`      | The ticker                                                 |
+| `rows[].rank`        | 1 is the highest probability. Ranks are unique             |
+| `rows[].score`       | Decile from 1 to 10. 10 is the top tenth                   |
+| `rows[].prob`        | The model's probability of beating SPY over `horizon_days` |
+| `left_out[].ticker`  | A member of the run that is not in `rows`                  |
+| `left_out[].reason`  | `no prices` or `no filings`                                |
 
 Rows are ordered by rank. How the score derives from `prob` is in
 [Model](MODEL.md#the-score).
 
-The two sources are separate fields, and both are the database's
+The two sources are separate fields, and a run stores the ones it was made from
 ([CLI](CLI.md#the-database)). A run with `--prices tiingo --filings synthetic`
-has `price_source` `tiingo` and `facts_source` `synthetic`. `facts_source` is
-`null` when the database holds no filings, for example when the SEC lists none
-of the tickers.
+has `price_source` `tiingo` and `facts_source` `synthetic`. A database made by
+`eq import` reports the file's sources. A file may omit `left_out`, which means
+none.
 
 ## API
 
@@ -81,4 +84,5 @@ The build reads `../outputs/scores.json`, relative to `web/`. Set `SCORES_JSON`
 to read another file. The page shows the disclaimer, the as-of date and a table
 of rank, ticker and score. It warns unless `price_source` is `tiingo` and
 `facts_source` is `edgar` or `null`, so a file without the two fields also
-warns. Without a file the page says there are no scores yet.
+warns. It lists the `left_out` tickers with their reasons, the first 10 and a
+count of the rest. Without a file the page says there are no scores yet.

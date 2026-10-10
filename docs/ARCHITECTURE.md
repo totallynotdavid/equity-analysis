@@ -13,7 +13,8 @@ Python packages and an Astro site.
 ├── universes/  universe files (ticker, start, end) and build_sp500.py
 ├── web/        Astro site that renders outputs/scores.json
 ├── docs/       the manual
-├── scripts/    deploy-data.sh, the scores the deployed page and API show
+├── deploy/     scores.json, the real scores the deployed page and API show
+├── scripts/    deploy-data.sh refreshes deploy/, deploy-db.sh loads it
 ├── .github/    contributing guide and the CI workflow
 ├── pyproject.toml   workspace members, ruff, mypy and pytest settings
 ├── vercel.json      how Vercel builds the page and routes /api
