@@ -13,10 +13,9 @@ from index_core.pipeline import (
     HOLDOUT_MONTHS,
     backtest,
     coverage,
-    missing_filings,
-    missing_prices,
     run,
 )
+from index_core.report import ScoresReport
 from index_core.sources.base import SourceError
 from index_core.sources.edgar import EdgarSource
 from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
@@ -28,7 +27,6 @@ from index_core.universe import read_universe
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from index_core.report import ScoresReport
     from index_core.sources.base import FilingsSource, PriceSource
 
 DEFAULT_OUT = Path("outputs/scores.json")
@@ -137,6 +135,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="universe name, the file name without extension (default: latest run)",
     )
     _add_db_and_out(export_command)
+
+    import_command = commands.add_parser(
+        "import",
+        help="store scores from a JSON file, for the API to serve",
+        description="Reads a file that `eq run` or `eq export` wrote and stores "
+        "it as the latest run, so the API can serve scores without prices.",
+    )
+    import_command.add_argument("--scores", type=Path, required=True)
+    import_command.add_argument("--db", type=Path, help=DB_HELP)
     return parser
 
 
@@ -156,6 +163,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             _backtest(args)
         elif args.command == "coverage":
             _coverage(args)
+        elif args.command == "import":
+            _import(args)
         else:
             _export(args)
     except (
@@ -187,11 +196,9 @@ def _run(args: argparse.Namespace) -> None:
     start = args.start or end - timedelta(days=HISTORY_DAYS)
     with Store.open(args.db) as store:
         report = run(source, filings, store, universe, start, end)
-        members = universe.members_between(start, end)
-        unpriced = missing_prices(store, members)
-        unfiled = missing_filings(store, members)
-    _warn_missing("prices", unpriced, "they are left out")
-    _warn_missing("filings", unfiled, "their fundamentals are missing")
+    for reason in ("prices", "filings"):
+        tickers = [i.ticker for i in report.left_out if i.reason == f"no {reason}"]
+        _warn_missing(reason, tickers, "they are left out")
     _write(report, args.out)
 
 
@@ -253,6 +260,15 @@ def _export(args: argparse.Namespace) -> None:
     if report is None:
         raise StoreError(f"{args.db} holds no matching scores; run `eq run` first")
     _write(report, args.out)
+
+
+def _import(args: argparse.Namespace) -> None:
+    report = ScoresReport.model_validate_json(args.scores.read_text())
+    with Store.open(args.db) as store:
+        store.save_report(report)
+    sys.stdout.write(
+        f"stored {len(report.rows)} scores as of {report.as_of} in {args.db}\n"
+    )
 
 
 def _write(report: ScoresReport, out: Path) -> None:
