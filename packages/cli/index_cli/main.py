@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 DEFAULT_OUT = Path("outputs/scores.json")
 HISTORY_DAYS = 6 * 365
 MIN_CONCEPTS = 10
+MISSING_SHOWN = 10
 DB_HELP = "SQLite file (default: $INDEX_DB or data/index.sqlite)"
 PRICES: dict[str, Callable[[], PriceSource]] = {
     "tiingo": TiingoSource.from_env,
@@ -97,6 +98,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="measure the held-back months instead. Look once, before a public claim",
     )
+    backtest_command.add_argument(
+        "--predictions",
+        type=Path,
+        help="write the measured out-of-sample rows (date, ticker, prob, label, "
+        "excess) as CSV",
+    )
     backtest_command.add_argument("--db", type=Path, help=DB_HELP)
 
     coverage_command = commands.add_parser(
@@ -153,7 +160,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 
 def _run(args: argparse.Namespace) -> None:
-    tickers = read_universe(args.universe)
+    universe = read_universe(args.universe)
     source = PRICES[args.prices]()
     filings = FILINGS[args.filings]()
     fake = [
@@ -169,36 +176,45 @@ def _run(args: argparse.Namespace) -> None:
     end = args.end or date.today()
     start = args.start or end - timedelta(days=HISTORY_DAYS)
     with Store.open(args.db) as store:
-        report = run(source, filings, store, args.universe.stem, tickers, start, end)
-        missing = missing_filings(store, tickers)
+        report = run(source, filings, store, universe, start, end)
+        missing = missing_filings(store, universe.members_between(start, end))
     if missing:
+        shown = ", ".join(missing[:MISSING_SHOWN])
+        more = (
+            f" and {len(missing) - MISSING_SHOWN} more"
+            if len(missing) > MISSING_SHOWN
+            else ""
+        )
         sys.stderr.write(
-            f"eq: no filings for {len(missing)} tickers ({', '.join(missing)}); "
+            f"eq: no filings for {len(missing)} tickers ({shown}{more}); "
             "their fundamentals are missing\n"
         )
     _write(report, args.out)
 
 
 def _coverage(args: argparse.Namespace) -> None:
-    tickers = read_universe(args.universe)
+    universe = read_universe(args.universe)
     _require_database(args.db)
     with Store.open(args.db, read_only=True) as store:
-        result = coverage(store, tickers)
+        result = coverage(store, universe)
     sys.stdout.write(render_coverage(result, args.universe.stem, args.min_concepts))
 
 
 def _backtest(args: argparse.Namespace) -> None:
-    tickers = read_universe(args.universe)
+    universe = read_universe(args.universe)
     _require_database(args.db)
     with Store.open(args.db, read_only=True) as store:
         result = backtest(
             store,
-            tickers,
+            universe,
             args.first_oos,
             args.holdout_months,
             final=args.final,
         )
-    sys.stdout.write(render(result, args.universe.stem))
+    if args.predictions is not None:
+        args.predictions.parent.mkdir(parents=True, exist_ok=True)
+        result.predictions.to_csv(args.predictions)
+    sys.stdout.write(render(result, universe.name))
 
 
 def _require_database(path: Path) -> None:

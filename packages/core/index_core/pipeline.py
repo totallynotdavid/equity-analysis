@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
     from index_core.sources.base import FilingsSource, PriceSource
     from index_core.store import Store
+    from index_core.universe import Universe
 
 # Backtests reserve these months until `final`.
 HOLDOUT_MONTHS = 24
@@ -43,6 +44,7 @@ class Backtest:
     facts_source: str | None
     period: Literal["development", "holdout"]
     holdout_start: date
+    predictions: pd.DataFrame
 
 
 @dataclass(frozen=True)
@@ -89,23 +91,30 @@ def _calendar(features: pd.DataFrame) -> pd.DatetimeIndex:
     return pd.DatetimeIndex(dates.unique().sort_values())
 
 
-def ranked_features(prices: pd.DataFrame, facts: pd.DataFrame) -> pd.DataFrame:
-    """Technical and fundamental features ranked within each date.
+def ranked_features(
+    prices: pd.DataFrame, facts: pd.DataFrame, universe: Universe
+) -> pd.DataFrame:
+    """Technical and fundamental features of the members, ranked within each date.
 
-    A ticker without facts keeps its rows with every fundamental missing.
+    Every price feeds the features, so a name that joins has its history. Only
+    the rows of members are kept before the ranks, so a rank compares a stock
+    with the other members of its date. A ticker without facts keeps its rows
+    with every fundamental missing.
     """
     technical = technical_features(prices, BENCHMARK)
     calendar = _calendar(technical)
     inputs = fundamental_inputs(facts, calendar)
     fundamental = fundamental_features(inputs, prices, BENCHMARK)
-    return rank_by_date(technical.join(fundamental))
+    features = technical.join(fundamental)
+    return rank_by_date(features[universe.mask(features.index)])
 
 
-def coverage(store: Store, tickers: list[str]) -> Coverage:
-    """Concepts each ticker has fresh facts for at the latest stored price date."""
+def coverage(store: Store, universe: Universe) -> Coverage:
+    """Concepts each member has fresh facts for at the latest stored price date."""
     last = store.read_prices([BENCHMARK])["date"].max()
     if pd.isna(last):
         raise ValueError(f"no stored prices for {BENCHMARK}; run `eq run` first")
+    tickers = universe.members_on(last)
     # A fact filed on the last day is not usable until the next one.
     counts = concept_coverage(
         store.read_facts(tickers), tickers, last + pd.Timedelta(days=1)
@@ -115,10 +124,11 @@ def coverage(store: Store, tickers: list[str]) -> Coverage:
     )
 
 
-def score(store: Store, universe: str, tickers: list[str]) -> ScoresReport:
-    prices = store.read_prices([BENCHMARK, *tickers])
-    features = ranked_features(prices, store.read_facts(tickers))
-    labels = excess_return_labels(prices, BENCHMARK)
+def score(store: Store, universe: Universe) -> ScoresReport:
+    """Score the members on the latest stored date, fitted on every member-day."""
+    prices = store.read_prices([BENCHMARK, *universe.tickers])
+    features = ranked_features(prices, store.read_facts(universe.tickers), universe)
+    labels = excess_return_labels(prices, BENCHMARK, universe)
     calendar = _calendar(features)
 
     model = fit(features, labels, calendar)
@@ -133,7 +143,7 @@ def score(store: Store, universe: str, tickers: list[str]) -> ScoresReport:
     table = decile_scores(model.predict(latest))
     return ScoresReport(
         as_of=as_of.date(),
-        universe=universe,
+        universe=universe.name,
         price_source=store.price_source() or "unknown",
         facts_source=store.facts_source(),
         horizon_days=HORIZON,
@@ -171,7 +181,7 @@ def history_needed(holdout_months: int, *, final: bool) -> int:
 
 def backtest(
     store: Store,
-    tickers: list[str],
+    universe: Universe,
     first_oos: date | None = None,
     holdout_months: int = HOLDOUT_MONTHS,
     *,
@@ -179,15 +189,21 @@ def backtest(
 ) -> Backtest:
     """Walk forward over the stored prices and evaluate the out-of-sample rows.
 
+    A stock is trained on and predicted only on dates when it is a member of
+    `universe`.
     The last `holdout_months` months stay out of development metrics. With
     `final`, only those months are measured.
     """
     load_lightgbm()
-    prices = store.read_prices([BENCHMARK, *tickers])
-    missing = sorted({BENCHMARK, *tickers} - set(prices["ticker"]))
+    prices = store.read_prices([BENCHMARK, *universe.tickers])
+    days = prices.loc[prices["ticker"] == BENCHMARK, "date"]
+    if days.empty:
+        raise ValueError(f"no stored prices for ['{BENCHMARK}']; run `eq run` first")
+    # A name that left before the first stored day has nothing to read.
+    required = universe.members_between(days.min(), days.max())
+    missing = sorted(set(required) - set(prices["ticker"]))
     if missing:
         raise ValueError(f"no stored prices for {missing}; run `eq run` first")
-    days = prices.loc[prices["ticker"] == BENCHMARK, "date"]
     needed = history_needed(holdout_months, final=final)
     if len(days) < needed:
         start = days.max() - pd.Timedelta(days=int(needed * CALENDAR_PER_TRADING_DAY))
@@ -196,8 +212,8 @@ def backtest(
             f"{days.min().date()}; this backtest needs at least {needed}. "
             f"Run `eq run --start {start.date()}` or earlier"
         )
-    features = ranked_features(prices, store.read_facts(tickers))
-    excess = excess_returns(prices, BENCHMARK)
+    features = ranked_features(prices, store.read_facts(universe.tickers), universe)
+    excess = excess_returns(prices, BENCHMARK, universe)
     calendar = _calendar(features)
 
     result = walk_forward(features, excess, calendar, first_oos)
@@ -218,6 +234,7 @@ def backtest(
         facts_source=store.facts_source(),
         period="holdout" if final else "development",
         holdout_start=holdout_start.date(),
+        predictions=chosen,
     )
 
 
@@ -225,15 +242,19 @@ def run(
     source: PriceSource,
     filings: FilingsSource,
     store: Store,
-    universe: str,
-    tickers: list[str],
+    universe: Universe,
     start: date,
     end: date,
 ) -> ScoresReport:
+    """Fetch what the members of `start` to `end` need, then score the latest day.
+
+    A name that left before `start` is not fetched.
+    """
     load_lightgbm()
     store.require_sources(source.name, filings.name)
+    tickers = universe.members_between(start, end)
     ingest(source, store, tickers, start, end)
     ingest_filings(filings, store, tickers, end)
-    report = score(store, universe, tickers)
+    report = score(store, universe)
     store.save_report(report)
     return report

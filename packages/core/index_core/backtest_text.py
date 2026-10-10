@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from index_core.labels import HORIZON
+from index_core.labels import HORIZON, LABEL_SPAN
 from index_core.model import SNAPSHOT_STEP
 
 
@@ -52,8 +52,9 @@ def render(result: Backtest, universe: str) -> str:
             for bucket in ev.by_score
         ),
         "",
-        "Caveats: the universe is a fixed list, not point-in-time membership, so "
-        "survivors are over-represented. "
+        "Caveats: a stock counts only on the dates the universe lists it as a "
+        "member. One that stopped trading has no label for its last "
+        f"{LABEL_SPAN} trading days, so exits by delisting are under-represented. "
         + (
             "Fundamentals come from filings dated before each snapshot; a company "
             "without filings has none."
