@@ -45,6 +45,8 @@ def _planted_prices(tickers: int = 30, days: int = 2900, seed: int = 0) -> pd.Da
                     "adj_low": price / spread[:, 1],
                     "adj_close": price,
                     "adj_volume": volume,
+                    "div_cash": 0.0,
+                    "split_factor": 1.0,
                 }
             )
         )

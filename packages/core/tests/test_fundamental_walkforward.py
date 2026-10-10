@@ -46,6 +46,8 @@ def _prices(drift: pd.DataFrame, seed: int) -> pd.DataFrame:
                 "adj_low": close[:, column],
                 "adj_close": close[:, column],
                 "adj_volume": 1e6,
+                "div_cash": 0.0,
+                "split_factor": 1.0,
             }
         )
         for column, name in enumerate(["SPY", *drift.columns])

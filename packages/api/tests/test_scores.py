@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -60,3 +61,18 @@ def test_scores_are_not_found_before_any_run(
     response = TestClient(app).get("/scores")
 
     assert response.status_code == 404
+
+
+def test_a_database_with_an_older_layout_is_unavailable_with_the_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = tmp_path / "old.sqlite"
+    with sqlite3.connect(old) as connection:
+        connection.execute("CREATE TABLE prices (ticker TEXT, date TEXT, close REAL)")
+    connection.close()
+    monkeypatch.setenv("INDEX_DB", str(old))
+
+    response = TestClient(app).get("/scores")
+
+    assert response.status_code == 503
+    assert "older layout; delete it" in response.json()["detail"]

@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 from typing import cast
 
+import httpx2
 import numpy as np
 import pandas as pd
 import pytest
@@ -17,10 +18,13 @@ from index_core.features.fundamental import (
 )
 from index_core.sources.edgar import CONCEPTS, parse_companyfacts
 from index_core.sources.synthetic import SyntheticFilings
+from index_core.sources.tiingo import TiingoSource
+from index_core.store import Store
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "acme_companyfacts_handwritten.json"
 CLOSE = 20.0
+_SPLIT_RANGE = (date(2020, 7, 31), date(2020, 9, 1))  # as in test_sources.py
 
 
 def _facts() -> pd.DataFrame:
@@ -35,8 +39,7 @@ def _prices(
     end: str = "2024-03-01",
 ) -> pd.DataFrame:
     """SPY and ACME on every business day. A 2-for-1 split on `split_on` halves
-    the as-traded close and doubles the as-traded volume, and the adjusted
-    volume already counts every share as two."""
+    the as-traded close and doubles the as-traded volume."""
     dates = pd.bdate_range(start, end, name="date")
     frames = []
     for ticker in ("SPY", "ACME"):
@@ -57,6 +60,8 @@ def _prices(
                     "adj_low": close,
                     "adj_close": close,
                     "adj_volume": 2000.0 if split_on and ticker == "ACME" else 1000.0,
+                    "div_cash": 0.0,
+                    "split_factor": np.where(after & ~np.roll(after, 1), 2.0, 1.0),
                 }
             )
         )
@@ -193,6 +198,55 @@ def test_a_split_since_the_year_ago_count_is_not_dilution() -> None:
     features = fundamental_features(inputs, prices, "SPY").xs("ACME", level="ticker")
 
     assert features.loc["2023-11-06", "dilution"] == pytest.approx(100 / 250 - 1)
+
+
+def test_the_aapl_split_from_a_tiingo_response_keeps_the_valuation(
+    tmp_path: Path,
+) -> None:
+    # Apple's 4-for-1 split on 2020-08-31, from a Tiingo response to the store.
+    payload = Path(__file__).parent / "fixtures" / "aapl_prices_handwritten.json"
+    source = TiingoSource(
+        "key",
+        transport=httpx2.MockTransport(
+            lambda _: httpx2.Response(200, content=payload.read_text())
+        ),
+    )
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.upsert_prices("tiingo", "AAPL", source.fetch("AAPL", *_SPLIT_RANGE))
+        prices = store.read_prices(["AAPL"])
+
+    counted = 4_334_335_000.0  # shares counted on 2020-07-31, before the split
+    income = 57.4e9
+    rows = pd.DataFrame(
+        [
+            # Priced before the split with the count of its time.
+            ("2020-08-28", "2020-07-31", counted, counted, "2020-07-31"),
+            # Priced after the split with the count of the same filing.
+            ("2020-09-01", "2020-07-31", counted, counted, "2020-07-31"),
+            # Filed after the split, against a count from before it.
+            ("2020-09-01", "2020-09-01", 4 * counted, counted, "2020-08-28"),
+        ],
+        columns=["date", "as_of", "shares", "shares_prev", "shares_prev_end"],
+    )
+    columns: dict[str, object] = dict.fromkeys(INPUTS, np.nan)
+    columns["net_income"] = income
+    columns["shares"] = rows["shares"]
+    columns["shares_prev"] = rows["shares_prev"]
+    columns["as_of"] = pd.to_datetime(rows["as_of"])
+    columns["shares_prev_end"] = pd.to_datetime(rows["shares_prev_end"])
+    inputs = pd.DataFrame(columns)
+    inputs.index = pd.MultiIndex.from_arrays(
+        [pd.to_datetime(rows["date"]), ["AAPL"] * 3], names=["date", "ticker"]
+    )
+
+    features = fundamental_features(inputs, prices, "SPY")
+
+    before, after, refiled = features["earnings_yield"]
+    assert before == pytest.approx(income / (499.23 * counted))
+    assert after == pytest.approx(income / (134.18 * 4 * counted))
+    assert refiled == pytest.approx(after)
+    # A split alone is not dilution.
+    assert features["dilution"].tolist() == pytest.approx([0.0, 0.0, 0.0])
 
 
 def test_negative_denominators_leave_a_ratio_missing_instead_of_wrong() -> None:

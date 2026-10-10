@@ -1,3 +1,5 @@
+import sqlite3
+
 from datetime import date
 from pathlib import Path
 
@@ -141,6 +143,24 @@ def test_sources_are_checked_without_writing_anything(tmp_path: Path) -> None:
             store.require_sources("tiingo", "synthetic")
         with pytest.raises(StoreError, match="holds synthetic facts"):
             store.require_sources("synthetic", "edgar")
+
+
+def test_a_database_from_before_the_current_layout_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "old.sqlite"
+    old = sqlite3.connect(path)
+    old.execute(
+        "CREATE TABLE prices (ticker TEXT, date TEXT, close REAL, "
+        "PRIMARY KEY (ticker, date))"
+    )
+    old.close()
+
+    with pytest.raises(StoreError, match="older layout; delete it"):
+        Store.open(path)
+    with pytest.raises(StoreError, match="older layout; delete it"):
+        Store.open(path, read_only=True)
+    Store.open(tmp_path / "new.sqlite").close()
+    Store.open(tmp_path / "new.sqlite", read_only=True).close()
+    Store.open(tmp_path / "new.sqlite").close()
 
 
 def test_the_default_database_follows_the_environment(

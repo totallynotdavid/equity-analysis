@@ -1,6 +1,8 @@
 import json
+import os
 
 from datetime import date
+from pathlib import Path
 
 import httpx2
 import pandas as pd
@@ -8,8 +10,15 @@ import pytest
 
 from index_core.sources.base import PRICE_COLUMNS, SourceError
 from index_core.sources.synthetic import SyntheticSource
-from index_core.sources.tiingo import TiingoSource
+from index_core.sources.tiingo import KEY_VARIABLE, TiingoSource
+from index_core.store import Store
 
+
+FIXTURES = Path(__file__).parent / "fixtures"
+RECORDED_SPLIT = FIXTURES / "recorded_aapl_prices.json"
+# Holds AAPL's dividend of 2020-08-07 and split of 2020-08-31. The command in
+# `record_tiingo_prices.py` records the same window.
+SPLIT_RANGE = (date(2020, 7, 31), date(2020, 9, 1))
 
 TIINGO_BARS = [
     {
@@ -81,6 +90,89 @@ def test_tiingo_bars_become_the_standard_frame() -> None:
     assert bars.loc["2024-03-04", "adj_close"] == 180.1
     assert bars.loc["2024-03-04", "close"] == 181.16
     assert bars.loc["2024-03-05", "adj_volume"] == 95132355
+    assert (bars["div_cash"] == 0.0).all()
+    assert (bars["split_factor"] == 1.0).all()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        FIXTURES / "aapl_prices_handwritten.json",
+        pytest.param(
+            RECORDED_SPLIT,
+            marks=pytest.mark.skipif(
+                not RECORDED_SPLIT.exists(),
+                reason="not recorded; run tests/record_tiingo_prices.py with a key",
+            ),
+        ),
+    ],
+    ids=["handwritten", "recorded"],
+)
+def test_a_split_and_a_dividend_survive_the_fetch_and_the_store(
+    payload: Path, tmp_path: Path
+) -> None:
+    # AAPL split 4-for-1 with the ex-date 2020-08-31 and paid 0.82 with the
+    # ex-date 2020-08-07.
+    source, _ = _tiingo(
+        httpx2.MockTransport(
+            lambda _: httpx2.Response(200, content=payload.read_text())
+        )
+    )
+
+    bars = source.fetch("AAPL", *SPLIT_RANGE)
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.upsert_prices("tiingo", "AAPL", bars)
+        stored = store.read_prices(["AAPL"]).set_index("date")
+
+    assert stored.loc["2020-08-31", "split_factor"] == 4.0
+    assert stored.loc["2020-08-07", "div_cash"] == pytest.approx(0.82)
+    assert stored["split_factor"].drop(pd.Timestamp("2020-08-31")).eq(1.0).all()
+    assert stored["split_factor"].prod() == 4.0
+    closes = stored["close"]
+    assert closes["2020-08-28"] > 3 * float(closes["2020-09-01"])
+
+
+def test_a_bar_without_split_or_dividend_fields_is_a_source_error() -> None:
+    bars = [{k: v for k, v in TIINGO_BARS[0].items() if k != "splitFactor"}]
+    source, _ = _tiingo(httpx2.MockTransport(lambda _: httpx2.Response(200, json=bars)))
+
+    with pytest.raises(SourceError, match=r"lack \['splitFactor'\]"):
+        source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
+
+
+@pytest.mark.parametrize("ticker", ["BRK.B", "brk.b", "BRK-B"])
+def test_tiingo_is_asked_for_a_share_class_with_a_dash(ticker: str) -> None:
+    source, requests = _tiingo()
+
+    source.fetch(ticker, date(2024, 3, 1), date(2024, 3, 8))
+
+    assert requests[0].url.path == "/tiingo/daily/BRK-B/prices"
+
+
+@pytest.mark.skipif(
+    not os.environ.get(KEY_VARIABLE), reason=f"{KEY_VARIABLE} is not set"
+)
+def test_live_tiingo_reports_the_aapl_split() -> None:
+    bars = TiingoSource.from_env().fetch("AAPL", *SPLIT_RANGE)
+
+    assert list(bars.columns) == list(PRICE_COLUMNS)
+    assert bars.loc["2020-08-07", "div_cash"] == pytest.approx(0.82)
+    assert bars.loc["2020-08-31", "split_factor"] == 4.0
+    assert bars["split_factor"].drop(pd.Timestamp("2020-08-31")).eq(1.0).all()
+    assert bars["close"]["2020-08-28"] > 3 * float(bars["close"]["2020-09-01"])
+    # Tiingo adjusts volume for splits: the day before trades 4 times as many.
+    assert bars["adj_volume"]["2020-08-28"] == pytest.approx(
+        4 * float(bars["volume"]["2020-08-28"])
+    )
+
+
+@pytest.mark.skipif(
+    not os.environ.get(KEY_VARIABLE), reason=f"{KEY_VARIABLE} is not set"
+)
+def test_live_tiingo_serves_a_dotted_ticker() -> None:
+    bars = TiingoSource.from_env().fetch("BRK.B", date(2024, 3, 1), date(2024, 3, 8))
+
+    assert not bars.empty
 
 
 def test_tiingo_error_status_is_a_source_error() -> None:
@@ -184,5 +276,7 @@ def test_synthetic_prices_are_repeatable_and_consistent() -> None:
     assert not first["close"].equals(other["close"])
     assert list(first.columns) == list(PRICE_COLUMNS)
     assert first.index.is_monotonic_increasing
+    assert (first["div_cash"] == 0.0).all()
+    assert (first["split_factor"] == 1.0).all()
     assert (first["adj_high"] >= first[["adj_open", "adj_close"]].max(axis=1)).all()
     assert (first["adj_low"] <= first[["adj_open", "adj_close"]].min(axis=1)).all()
