@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from index_core.report import ModelInfo, ScoreRow, ScoresReport
+from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport
 from index_core.sources.base import PRICE_COLUMNS
 from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
 from index_core.store import Store, StoreError, default_db_path
@@ -182,6 +182,25 @@ def test_the_latest_report_is_returned_with_rows_in_rank_order(tmp_path: Path) -
         latest = store.latest_report()
 
     assert latest == _report(date(2024, 1, 31), ["B", "A"])
+
+
+def test_a_report_keeps_its_own_sources_and_left_out_tickers(tmp_path: Path) -> None:
+    report = _report(date(2024, 1, 31), ["A"]).model_copy(
+        update={
+            "facts_source": "edgar",
+            "left_out": [
+                LeftOut(ticker="X", reason="no filings"),
+                LeftOut(ticker="Y", reason="no prices"),
+            ],
+        }
+    )
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.save_report(report)
+        latest = store.latest_report()
+        # The database holds no prices or filings, so it claims no source for them.
+        assert (store.price_source(), store.facts_source()) == (None, None)
+
+    assert latest == report
 
 
 def test_saving_a_report_again_replaces_that_date(tmp_path: Path) -> None:

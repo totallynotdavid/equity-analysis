@@ -86,6 +86,30 @@ def test_export_rewrites_the_stored_scores_unchanged(tmp_path: Path) -> None:
     assert exported.read_text() == first.read_text()
 
 
+def test_import_stores_a_scores_file_so_export_returns_it_unchanged(
+    tmp_path: Path,
+) -> None:
+    scores = json.loads(_run(tmp_path).read_text())
+    scores["price_source"], scores["facts_source"] = "tiingo", "edgar"
+    published = tmp_path / "published.json"
+    published.write_text(json.dumps(scores, indent=2) + "\n")
+    database = str(tmp_path / "published.sqlite")
+
+    main(["import", "--scores", str(published), "--db", database])
+    exported = tmp_path / "exported.json"
+    main(["export", "--db", database, "--out", str(exported)])
+
+    assert exported.read_text() == published.read_text()
+
+
+def test_import_rejects_a_file_that_is_not_a_scores_report(tmp_path: Path) -> None:
+    broken = tmp_path / "broken.json"
+    broken.write_text('{"as_of": "2026-09-30"}')
+
+    with pytest.raises(SystemExit, match=r"^eq: .*validation error"):
+        main(["import", "--scores", str(broken), "--db", str(tmp_path / "db.sqlite")])
+
+
 def test_export_without_a_database_fails_with_a_message(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match=r"does not exist; run `eq run` first"):
         main(["export", "--db", str(tmp_path / "none.sqlite")])

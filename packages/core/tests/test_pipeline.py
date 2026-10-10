@@ -12,6 +12,7 @@ from index_core.pipeline import (
     missing_prices,
     run,
 )
+from index_core.report import LeftOut
 from index_core.sources.base import NotFoundError, SourceError
 from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
 from index_core.store import Store
@@ -104,7 +105,7 @@ def test_a_run_scores_and_fetches_only_the_names_that_are_members(
     assert "LONG_GONE" not in fetched
 
 
-def test_a_company_the_filings_source_does_not_know_keeps_its_prices_only(
+def test_a_company_the_filings_source_does_not_know_is_left_out(
     tmp_path: Path,
 ) -> None:
     class Unlisted(SyntheticFilings):
@@ -123,7 +124,21 @@ def test_a_company_the_filings_source_does_not_know_keeps_its_prices_only(
 
     assert missing == ["MSFT"]
     assert counts["MSFT"] == 0
-    assert sorted(row.ticker for row in report.rows) == sorted(tickers)
+    assert sorted(row.ticker for row in report.rows) == sorted(set(tickers) - {"MSFT"})
+    assert report.left_out == [LeftOut(ticker="MSFT", reason="no filings")]
+
+
+def test_a_run_where_no_ticker_has_filings_fails_instead_of_scoring_nothing(
+    tmp_path: Path,
+) -> None:
+    class NoFilings(SyntheticFilings):
+        def facts(self, ticker: str, end: date) -> pd.DataFrame:
+            raise NotFoundError(f"no company for ticker {ticker}")
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        with pytest.raises(ValueError, match="no ticker has both prices and filings"):
+            run(SyntheticSource(), NoFilings(), store, always(["AAPL"]), START, END)
+        assert store.latest_report() is None
 
 
 def test_a_ticker_the_price_source_does_not_know_is_scored_without_it(
@@ -145,6 +160,7 @@ def test_a_ticker_the_price_source_does_not_know_is_scored_without_it(
 
     assert missing == ["MSFT"]
     assert sorted(row.ticker for row in report.rows) == sorted(set(tickers) - {"MSFT"})
+    assert report.left_out == [LeftOut(ticker="MSFT", reason="no prices")]
 
 
 def test_a_benchmark_the_price_source_does_not_know_stops_the_run(
