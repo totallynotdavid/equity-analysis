@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 import httpx2
 import pandas as pd
 
-from index_core.sources.base import PRICE_COLUMNS, SourceError, check_range
+from index_core.sources.base import (
+    PRICE_COLUMNS,
+    SourceError,
+    check_range,
+    normalise_ticker,
+)
 
 
 if TYPE_CHECKING:
@@ -24,6 +29,8 @@ _FIELDS = {
     "adjLow": "adj_low",
     "adjClose": "adj_close",
     "adjVolume": "adj_volume",
+    "divCash": "div_cash",
+    "splitFactor": "split_factor",
 }
 
 
@@ -51,7 +58,7 @@ class TiingoSource:
         check_range(start, end)
         try:
             response = self._client.get(
-                f"/tiingo/daily/{ticker}/prices",
+                f"/tiingo/daily/{normalise_ticker(ticker)}/prices",
                 params={
                     "startDate": start.isoformat(),
                     "endDate": end.isoformat(),

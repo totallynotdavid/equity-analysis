@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 
 DB_VARIABLE = "INDEX_DB"
 
+# Raise it when `_SCHEMA` changes. A database is rebuilt, never migrated.
+SCHEMA_VERSION = 1
+
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
@@ -71,6 +74,18 @@ def default_db_path() -> Path:
     return Path(os.environ.get(DB_VARIABLE, "data/index.sqlite"))
 
 
+def _require_current_layout(connection: sqlite3.Connection, path: Path) -> None:
+    """Close `connection` and raise `StoreError` if it holds tables made by a
+    layout other than `_SCHEMA`."""
+    has_tables = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE name = 'prices'"
+    ).fetchone()
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    if has_tables and version != SCHEMA_VERSION:
+        connection.close()
+        raise StoreError(f"{path} has an older layout; delete it and run again")
+
+
 class Store:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._db = connection
@@ -79,11 +94,14 @@ class Store:
     def open(cls, path: Path, *, read_only: bool = False) -> Self:
         if read_only:
             connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+            _require_current_layout(connection, path)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
             connection = sqlite3.connect(path)
             connection.execute("PRAGMA journal_mode=WAL")
+            _require_current_layout(connection, path)
             connection.executescript(_SCHEMA)
+            connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         return cls(connection)
 
     def close(self) -> None:

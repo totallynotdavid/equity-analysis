@@ -308,11 +308,11 @@ def fundamental_features(
     EBITDA are not positive. A ratio with a non-positive denominator is NaN.
     """
     closes = prices.pivot(index="date", columns="ticker", values="close")
-    volumes = prices.pivot(index="date", columns="ticker", values="volume")
-    adjusted = prices.pivot(index="date", columns="ticker", values="adj_volume")
-    # Adjusted volume over traded volume is the number of shares today that one
-    # share on that day became through later splits.
-    split = (adjusted / volumes.replace(0, np.nan)).ffill()
+    factors = prices.pivot(index="date", columns="ticker", values="split_factor")
+    # The product of every split factor up to a day. Its ratio between two days
+    # is the number of shares the later day holds for each share of the earlier
+    # one, counting the splits that took effect after the earlier day.
+    split = factors.fillna(1.0).cumprod()
 
     index = inputs.index
     dates = pd.DatetimeIndex(index.get_level_values("date"))
@@ -322,7 +322,7 @@ def fundamental_features(
     split_filed = _lookup(split, pd.DatetimeIndex(inputs["as_of"]), tickers)
     split_prev = _lookup(split, pd.DatetimeIndex(inputs["shares_prev_end"]), tickers)
 
-    shares = inputs["shares"].to_numpy() * split_filed / split_now
+    shares = inputs["shares"].to_numpy() * split_now / split_filed
     market_cap = pd.Series(close * shares, index=index)
     enterprise = market_cap + inputs["debt"] - inputs["cash"]
     positive_ev = enterprise.where(enterprise > 0)
@@ -330,7 +330,7 @@ def fundamental_features(
     free_cash_flow = inputs["operating_cash_flow"] - inputs["capex"]
     revenue = inputs["revenue"].where(inputs["revenue"] > 0)
     assets = inputs["total_assets"].where(inputs["total_assets"] > 0)
-    earlier_shares = inputs["shares_prev"].to_numpy() * split_prev / split_filed
+    earlier_shares = inputs["shares_prev"].to_numpy() * split_filed / split_prev
 
     features = pd.DataFrame(
         {

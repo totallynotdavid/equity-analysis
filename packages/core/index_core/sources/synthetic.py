@@ -92,6 +92,8 @@ class SyntheticSource:
                 "adj_low": adj_low,
                 "adj_close": close,
                 "adj_volume": volume,
+                "div_cash": 0.0,
+                "split_factor": 1.0,
             },
             index=dates,
         )

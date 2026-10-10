@@ -11,6 +11,9 @@ if TYPE_CHECKING:
 
 # `close` and `volume` are as traded. The `adj_` columns are adjusted for splits
 # and dividends, except `adj_volume`, which is adjusted for splits only.
+# `div_cash` is the dividend per share with its ex-date as the day. `split_factor`
+# is the number of new shares per old share from its ex-date on: 4 for a 4-for-1
+# split, 0.1 for a 1-for-10 reverse split, and 1 on every other day.
 PRICE_COLUMNS = (
     "close",
     "volume",
@@ -19,6 +22,8 @@ PRICE_COLUMNS = (
     "adj_low",
     "adj_close",
     "adj_volume",
+    "div_cash",
+    "split_factor",
 )
 
 
@@ -28,6 +33,12 @@ class SourceError(Exception):
 
 class NotFoundError(SourceError):
     """The source has no such ticker. Other tickers may still be fetched."""
+
+
+def normalise_ticker(ticker: str) -> str:
+    """The form both Tiingo and EDGAR list a ticker under: upper case, with a
+    dash for the dot of a share class, so `BRK.B` is `BRK-B`."""
+    return ticker.strip().upper().replace(".", "-")
 
 
 def check_range(start: date, end: date) -> None:
