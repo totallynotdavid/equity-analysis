@@ -1,11 +1,11 @@
 """SEC EDGAR company facts: what each company reported, and when it filed.
 
 `parse_companyfacts` turns one `companyfacts` JSON document into the standard
-facts frame. Network I/O lives in `EdgarSource` and nowhere else.
+facts frame. `EdgarSource` is the only caller of the network here, and it goes
+through the paced, cached transports of `transport.py`.
 """
 
 import os
-import time
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
@@ -20,10 +20,12 @@ from index_core.sources.base import (
     empty_facts,
     normalise_ticker,
 )
+from index_core.sources.transport import CachingTransport, PacedTransport
 
 
 if TYPE_CHECKING:
     from datetime import date
+    from pathlib import Path
 
 DATA_URL = "https://data.sec.gov"
 WWW_URL = "https://www.sec.gov"
@@ -187,25 +189,27 @@ class EdgarSource:
         user_agent: str,
         transport: httpx2.BaseTransport | None = None,
         min_interval: float = MIN_INTERVAL,
+        cache: Path | None = None,
     ) -> None:
-        self._client = httpx2.Client(
-            headers={"User-Agent": user_agent},
-            timeout=30.0,
-            transport=transport,
+        paced: httpx2.BaseTransport = PacedTransport(
+            transport or httpx2.HTTPTransport(), min_interval
         )
-        self._min_interval = min_interval
-        self._last_request = 0.0
+        if cache is not None:
+            paced = CachingTransport(paced, cache)
+        self._client = httpx2.Client(
+            headers={"User-Agent": user_agent}, timeout=30.0, transport=paced
+        )
         self._ciks: dict[str, int] | None = None
 
     @classmethod
-    def from_env(cls) -> EdgarSource:
+    def from_env(cls, cache: Path | None = None) -> EdgarSource:
         user_agent = os.environ.get(USER_AGENT_VARIABLE)
         if not user_agent:
             raise SourceError(
                 f"{USER_AGENT_VARIABLE} is not set; SEC requires a User-Agent "
                 'with a contact, such as "Jane Doe jane@example.com"'
             )
-        return cls(user_agent)
+        return cls(user_agent, cache=cache)
 
     def facts(self, ticker: str, end: date) -> pd.DataFrame:
         cik = self._cik(ticker)
@@ -236,15 +240,10 @@ class EdgarSource:
         return cik
 
     def _get_json(self, url: str, *, per_company: bool = False) -> object:
-        wait = self._last_request + self._min_interval - time.monotonic()
-        if wait > 0:
-            time.sleep(wait)
         try:
             response = self._client.get(url)
         except httpx2.HTTPError as error:
             raise SourceError(f"could not reach EDGAR at {url}: {error!r}") from error
-        finally:
-            self._last_request = time.monotonic()
         if response.status_code == 404 and per_company:
             raise NotFoundError(f"EDGAR has no facts at {url}")
         if response.status_code != 200:
