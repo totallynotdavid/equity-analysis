@@ -49,6 +49,28 @@ def test_the_holdout_months_are_left_out_until_asked_for(store: Store) -> None:
     assert development.price_source == "synthetic"
 
 
+def test_the_final_run_tests_the_candidate_the_development_months_chose(
+    store: Store,
+) -> None:
+    development = backtest(store, UNIVERSE, FIRST_OOS, holdout_months=12)
+    holdout = backtest(store, UNIVERSE, FIRST_OOS, holdout_months=12, final=True)
+
+    assert holdout.verdict.candidate == development.verdict.candidate
+    assert holdout.verdict.basis == development.verdict.basis
+    assert holdout.verdict.basis != {
+        name: (model.evaluation.mean_ic.value, model.spread.net.value)
+        for name, model in holdout.models.items()
+    }
+
+
+def test_a_final_run_alone_counts_the_development_look_in_the_ledger(
+    store: Store,
+) -> None:
+    backtest(store, UNIVERSE, FIRST_OOS, holdout_months=12, final=True)
+
+    assert len(store.trial_sharpes()) == 6
+
+
 def test_a_ticker_without_stored_prices_is_left_out_and_named(store: Store) -> None:
     with_gap = always([*TICKERS, "NOPE"], "planted")
 
@@ -103,7 +125,7 @@ def _store_with_days(path: Path, planted: pd.DataFrame, days: int) -> Store:
 def test_a_history_below_the_stated_need_is_refused_with_the_start_to_fetch(
     tmp_path: Path, planted: pd.DataFrame, final: bool
 ) -> None:
-    needed = history_needed(12, final=final)
+    needed = history_needed(12)
 
     with (
         _store_with_days(tmp_path / "db.sqlite", planted, needed - 1) as store,
@@ -119,7 +141,7 @@ def test_a_history_a_quarter_above_the_stated_need_backtests(
     tmp_path: Path, planted: pd.DataFrame, final: bool
 ) -> None:
     with _store_with_days(
-        tmp_path / "db.sqlite", planted, history_needed(12, final=final) + 126
+        tmp_path / "db.sqlite", planted, history_needed(12) + 126
     ) as store:
         result = backtest(store, UNIVERSE, holdout_months=12, final=final)
 
