@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Self
 import pandas as pd
 
 from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport
-from index_core.sources.base import PRICE_COLUMNS
+from index_core.sources.base import FACTOR_COLUMNS, PRICE_COLUMNS
 
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 DB_VARIABLE = "INDEX_DB"
 
 # Raise it when `_SCHEMA` changes. A database is rebuilt, never migrated.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS meta (
@@ -41,6 +41,17 @@ CREATE TABLE IF NOT EXISTS facts (
     value REAL NOT NULL,
     priority INTEGER NOT NULL,
     PRIMARY KEY (ticker, concept, start, end, filed, priority)
+);
+CREATE TABLE IF NOT EXISTS factor_returns (
+    date TEXT PRIMARY KEY,
+    {", ".join(f"{column} REAL NOT NULL" for column in FACTOR_COLUMNS)}
+);
+CREATE TABLE IF NOT EXISTS trials (
+    spec_hash TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    months INTEGER NOT NULL,
+    sharpe REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS runs (
     as_of TEXT NOT NULL,
@@ -253,6 +264,68 @@ class Store:
             frame[column] = pd.to_datetime(frame[column]).astype("datetime64[ns]")
         return frame
 
+    def replace_factors(self, source: str, factors: pd.DataFrame) -> None:
+        """Store the factor returns, dropping any stored before.
+
+        A source serves its whole history each time.
+        """
+        with self._db:
+            self._require("factors_source", "factors", source)
+            self._db.execute(
+                "INSERT OR IGNORE INTO meta (key, value) VALUES ('factors_source', ?)",
+                (source,),
+            )
+            self._db.execute("DELETE FROM factor_returns")
+            marks = ", ".join("?" * (1 + len(FACTOR_COLUMNS)))
+            self._db.executemany(
+                f"INSERT INTO factor_returns VALUES ({marks})",
+                (
+                    (day.date().isoformat(), *row)
+                    for day, row in zip(
+                        factors.index,
+                        factors[list(FACTOR_COLUMNS)].itertuples(index=False),
+                        strict=True,
+                    )
+                ),
+            )
+
+    def factors_source(self) -> str | None:
+        """The source of the stored factors, or None before any were stored."""
+        stored = self._db.execute(
+            "SELECT value FROM meta WHERE key = 'factors_source'"
+        ).fetchone()
+        return None if stored is None else str(stored[0])
+
+    def read_factors(self) -> pd.DataFrame:
+        """The `FACTOR_COLUMNS` by `date`. Empty before any were stored."""
+        frame = pd.read_sql_query(
+            f"SELECT date, {', '.join(FACTOR_COLUMNS)} FROM factor_returns "
+            "ORDER BY date",
+            self._db,
+        )
+        frame.index = pd.DatetimeIndex(pd.to_datetime(frame.pop("date")), name="date")
+        return frame
+
+    def record_trial(
+        self, spec_hash: str, description: str, as_of: date, months: int, sharpe: float
+    ) -> None:
+        """Add a backtest specification to the ledger, or replace its result.
+
+        A specification is counted once however often it is run.
+        """
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO trials VALUES (?, ?, ?, ?, ?)",
+                (spec_hash, description, as_of.isoformat(), months, sharpe),
+            )
+
+    def trial_sharpes(self) -> list[float]:
+        """The monthly Sharpe ratio of every specification in the ledger."""
+        return [
+            float(row[0])
+            for row in self._db.execute("SELECT sharpe FROM trials ORDER BY spec_hash")
+        ]
+
     def save_report(self, report: ScoresReport) -> None:
         """Store a run, replacing any earlier run of the same universe and date.
 
@@ -307,12 +380,12 @@ class Store:
             return None
         rows = self._db.execute(
             "SELECT ticker, rank, score, prob FROM scores "
-            "WHERE as_of = ? AND universe = ? ORDER BY rank",
+            "WHERE as_of = ? AND universe = ? ORDER BY rowid",
             (run[0], run[1]),
         ).fetchall()
         left_out = self._db.execute(
             "SELECT ticker, reason FROM left_out "
-            "WHERE as_of = ? AND universe = ? ORDER BY ticker",
+            "WHERE as_of = ? AND universe = ? ORDER BY rowid",
             (run[0], run[1]),
         ).fetchall()
         return ScoresReport(
