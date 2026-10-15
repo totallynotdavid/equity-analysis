@@ -48,7 +48,8 @@ features, fits and predicts, and `Store.save_report` keeps the result.
 
 - **The network.** Only the sources in
   [`sources/`](../packages/core/index_core/sources) touch it. A `PriceSource` is
-  Tiingo or synthetic, and a `FilingsSource` is EDGAR or synthetic. Both are
+  Tiingo or synthetic, a `FilingsSource` is EDGAR or synthetic, and a
+  `FactorSource` is Kenneth French's data library or synthetic. All three are
   protocols in [`sources/base.py`](../packages/core/index_core/sources/base.py).
   The pipeline sees only the protocols. Tiingo and EDGAR send their requests
   through
@@ -65,7 +66,8 @@ features, fits and predicts, and `Store.save_report` keeps the result.
   - A killed run can leave an orphan `.partial` file. It is harmless and may be
     deleted.
 - **The database.** Only [`store.py`](../packages/core/index_core/store.py)
-  speaks SQL. It enforces one price source and one filings source per file.
+  speaks SQL. It enforces one price source, one filings source and one factors
+  source per file.
 - **Time.** A feature at day `t` reads data available on day `t`. A label reads
   the following 64 days, and the training split drops rows whose label window
   overlaps the holdout or the test quarter.
@@ -74,26 +76,32 @@ features, fits and predicts, and `Store.save_report` keeps the result.
 
 ## Modules of index-core
 
-| Module                                 | Responsible for                                        |
-| -------------------------------------- | ------------------------------------------------------ |
-| `pipeline.py`                          | `run`, `score`, `backtest` and `coverage` over a store |
-| `sources/base.py`                      | The source protocols, price columns and fact columns   |
-| `sources/tiingo.py`                    | Tiingo daily prices                                    |
-| `sources/edgar.py`                     | EDGAR `companyfacts`, the concept and tag table        |
-| `sources/transport.py`                 | Request pacing and the on-disk response cache          |
-| `sources/synthetic.py`                 | Deterministic fake prices and filings                  |
-| `store.py`                             | SQLite schema, reads, writes and the source guard      |
-| `universe.py`                          | Reading a universe file and answering who was a member |
-| `features/technical.py`                | The 20 technical features                              |
-| `features/fundamental.py`              | Facts to trailing figures to the 14 ratios             |
-| `features/normalize.py`                | Percentile rank within each date                       |
-| `labels.py`                            | The excess-return label                                |
-| `model.py`                             | Snapshots, the purged split, LightGBM, AUC             |
-| `scoring.py`                           | Probabilities to ranks and decile scores               |
-| `walkforward.py`                       | Quarterly refits and out-of-sample predictions         |
-| `evaluation.py`                        | Rank IC, hit rates and block-bootstrap intervals       |
-| `report.py`                            | `ScoresReport`                                         |
-| `backtest_text.py`, `coverage_text.py` | The text that `eq backtest` and `eq coverage` print    |
+| Module                                 | Responsible for                                          |
+| -------------------------------------- | -------------------------------------------------------- |
+| `pipeline.py`                          | `run`, `score`, `backtest` and `coverage` over a store   |
+| `sources/base.py`                      | The source protocols and the columns they return         |
+| `sources/french.py`                    | The Fama-French five-factor daily file                   |
+| `sources/tiingo.py`                    | Tiingo daily prices                                      |
+| `sources/edgar.py`                     | EDGAR `companyfacts`, the concept and tag table          |
+| `sources/transport.py`                 | Request pacing and the on-disk response cache            |
+| `sources/synthetic.py`                 | Deterministic fake prices, filings and factors           |
+| `store.py`                             | SQLite schema, reads, writes and the source guard        |
+| `universe.py`                          | Reading a universe file and answering who was a member   |
+| `features/technical.py`                | The 20 technical features                                |
+| `features/fundamental.py`              | Facts to trailing figures to the 14 ratios               |
+| `features/normalize.py`                | Percentile rank within each date                         |
+| `labels.py`                            | The excess-return label                                  |
+| `model.py`                             | Snapshots, the purged split, LightGBM, AUC               |
+| `scoring.py`                           | Probabilities to ranks and decile scores                 |
+| `walkforward.py`                       | Quarterly refits and out-of-sample predictions           |
+| `baselines.py`                         | The ridge fit and the value, quality, momentum composite |
+| `evaluation.py`                        | Rank IC, hit rates and block-bootstrap intervals         |
+| `feature_ic.py`                        | Rank IC of each feature alone                            |
+| `portfolio.py`                         | Monthly decile portfolios, turnover, costs, break-even   |
+| `significance.py`                      | Deflated Sharpe Ratio and Fama-French alpha              |
+| `verdict.py`                           | The rule that decides whether a score may be shown       |
+| `report.py`                            | `ScoresReport`                                           |
+| `backtest_text.py`, `coverage_text.py` | The text that `eq backtest` and `eq coverage` print      |
 
 For the model, fundamentals and backtest behavior, see [Model](MODEL.md),
 [Fundamentals](FUNDAMENTALS.md) and [Backtest](BACKTEST.md).

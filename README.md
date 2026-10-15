@@ -83,9 +83,11 @@ TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
 - 20 technical features from daily prices and 14 fundamental ratios from SEC
   XBRL filings. A filing counts from the trading day after it was filed.
   [Model](docs/MODEL.md), [fundamentals](docs/FUNDAMENTALS.md)
-- Walk-forward backtest with a rank IC, a Newey-West t-statistic, hit rates by
-  score and 95% intervals that resample whole months. A final holdout stays out
-  of the development metrics. [`eq backtest`](docs/BACKTEST.md)
+- Walk-forward backtest of the model against a ridge and a value, quality,
+  momentum baseline, with rank IC, Newey-West t-statistics, monthly decile
+  portfolios net of cost with a break-even cost, a Deflated Sharpe probability,
+  Fama-French alpha and a written rule for showing a score. A final holdout
+  stays out of the development metrics. [`eq backtest`](docs/BACKTEST.md)
 - Fundamentals coverage report for a universe.
   [`eq coverage`](docs/FUNDAMENTALS.md#eq-coverage)
 - `scores.json` export, a read-only FastAPI service and an Astro page.
