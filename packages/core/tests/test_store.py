@@ -8,8 +8,12 @@ import pytest
 
 from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport
 from index_core.sources.base import PRICE_COLUMNS
-from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
-from index_core.store import Store, StoreError, default_db_path
+from index_core.sources.synthetic import (
+    SyntheticFactors,
+    SyntheticFilings,
+    SyntheticSource,
+)
+from index_core.store import SCHEMA_VERSION, Store, StoreError, default_db_path
 
 
 def _bars() -> pd.DataFrame:
@@ -238,3 +242,50 @@ def test_a_read_only_store_cannot_write(tmp_path: Path) -> None:
         pytest.raises(Exception, match="readonly"),
     ):
         store.save_report(_report(date(2024, 1, 31), ["A"]))
+
+
+def test_factors_round_trip_and_a_second_fetch_replaces_them(tmp_path: Path) -> None:
+    factors = SyntheticFactors().fetch().iloc[:50]
+    with Store.open(tmp_path / "db.sqlite") as store:
+        assert store.factors_source() is None
+        assert store.read_factors().empty
+
+        store.replace_factors("synthetic", factors)
+        pd.testing.assert_frame_equal(store.read_factors(), factors, check_freq=False)
+        store.replace_factors("synthetic", factors.iloc[:10])
+
+        assert len(store.read_factors()) == 10
+        assert store.factors_source() == "synthetic"
+
+
+def test_one_database_refuses_factors_from_two_sources(tmp_path: Path) -> None:
+    factors = SyntheticFactors().fetch().iloc[:10]
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.replace_factors("synthetic", factors)
+        with pytest.raises(StoreError, match="holds synthetic factors"):
+            store.replace_factors("french", factors)
+
+
+def test_the_ledger_counts_a_specification_once_and_keeps_its_latest_sharpe(
+    tmp_path: Path,
+) -> None:
+    day = date(2024, 6, 28)
+    with Store.open(tmp_path / "db.sqlite") as store:
+        assert store.trial_sharpes() == []
+
+        store.record_trial("a", "first", day, 24, 0.10)
+        store.record_trial("b", "second", day, 24, -0.05)
+        store.record_trial("a", "first again", day, 25, 0.12)
+
+        assert sorted(store.trial_sharpes()) == [-0.05, 0.12]
+
+
+def test_a_database_of_the_previous_layout_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "db.sqlite"
+    Store.open(path).close()
+    previous = sqlite3.connect(path)
+    previous.execute(f"PRAGMA user_version = {SCHEMA_VERSION - 1}")
+    previous.close()
+
+    with pytest.raises(StoreError, match="older layout; delete it"):
+        Store.open(path)

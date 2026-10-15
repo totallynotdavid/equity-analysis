@@ -103,6 +103,26 @@ def test_import_stores_a_scores_file_so_export_returns_it_unchanged(
     assert exported.read_text() == published.read_text()
 
 
+def test_export_keeps_the_order_of_the_imported_rows_and_left_out_names(
+    tmp_path: Path,
+) -> None:
+    scores = json.loads(_run(tmp_path).read_text())
+    scores["rows"].reverse()
+    scores["left_out"] = [
+        {"ticker": "ZZZ", "reason": "no prices"},
+        {"ticker": "AAA", "reason": "no filings"},
+    ]
+    published = tmp_path / "published.json"
+    published.write_text(json.dumps(scores, indent=2) + "\n")
+    database = str(tmp_path / "published.sqlite")
+
+    main(["import", "--scores", str(published), "--db", database])
+    exported = tmp_path / "exported.json"
+    main(["export", "--db", database, "--out", str(exported)])
+
+    assert exported.read_text() == published.read_text()
+
+
 def test_import_rejects_a_file_that_is_not_a_scores_report(tmp_path: Path) -> None:
     broken = tmp_path / "broken.json"
     broken.write_text('{"as_of": "2026-09-30"}')
