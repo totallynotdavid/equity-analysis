@@ -80,6 +80,23 @@ class FilingsSource(Protocol):
         ...
 
 
+# Factor returns use fractions, not percentages.
+# `rf` is the one-day risk-free rate. `mkt_rf` is the market return above it.
+FACTOR_COLUMNS = ("mkt_rf", "smb", "hml", "rmw", "cma", "rf")
+
+
+class FactorSource(Protocol):
+    name: str
+
+    def fetch(self) -> pd.DataFrame:
+        """Every daily factor return the source has.
+
+        The frame has a sorted, unique, tz-naive `DatetimeIndex` named `date` and
+        the columns in `FACTOR_COLUMNS`. Any failure is a `SourceError`.
+        """
+        ...
+
+
 class PriceSource(Protocol):
     name: str
 

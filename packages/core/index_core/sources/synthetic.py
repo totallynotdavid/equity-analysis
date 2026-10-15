@@ -1,4 +1,4 @@
-"""Deterministic fake prices and filings for tests and offline runs.
+"""Deterministic fake prices, filings and factor returns for tests and offline runs.
 
 Every ticker follows one shared market factor plus its own noise, with a fixed
 drift, beta and volatility, so features such as beta are meaningful. These are
@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from index_core.sources.base import SourceError, check_range
+from index_core.sources.base import FACTOR_COLUMNS, SourceError, check_range
 from index_core.sources.edgar import CONCEPTS, parse_companyfacts
 
 
@@ -30,7 +30,7 @@ TRADING_DAYS = 252
 FIRST_YEAR, LAST_YEAR = 2000, 2030
 
 # Stream ids keep the draws of one kind independent of the others.
-_MARKET, _RETURNS, _SHAPE, _VOLUME, _FILINGS = range(5)
+_MARKET, _RETURNS, _SHAPE, _VOLUME, _FILINGS, _FACTORS = range(6)
 
 # What each concept is as a share of quarterly revenue (flows) or of annual
 # revenue (balance sheet), before a company's own margin and noise.
@@ -105,6 +105,28 @@ class SyntheticSource:
         """Draws that depend on the position from `EPOCH`, never on `n`."""
         size = n if columns is None else (n, columns)
         return np.random.default_rng([self._seed, *stream]).standard_normal(size)
+
+
+class SyntheticFactors:
+    """Fake daily factor returns on every business day from `EPOCH` to
+    `LAST_YEAR`. They have no relation to the synthetic prices."""
+
+    name = "synthetic"
+
+    def __init__(self, seed: int = 0) -> None:
+        self._seed = seed
+
+    def fetch(self) -> pd.DataFrame:
+        dates = pd.bdate_range(EPOCH, date(LAST_YEAR, 12, 31), name="date")
+        draws = np.random.default_rng([self._seed, _FACTORS]).standard_normal(
+            (len(dates), len(FACTOR_COLUMNS))
+        )
+        scale = np.array([0.010, 0.005, 0.005, 0.004, 0.004, 0.0])
+        frame = pd.DataFrame(
+            draws * scale, index=dates, columns=pd.Index(FACTOR_COLUMNS)
+        )
+        frame["rf"] = 0.00008
+        return frame
 
 
 def _crc(ticker: str) -> int:
