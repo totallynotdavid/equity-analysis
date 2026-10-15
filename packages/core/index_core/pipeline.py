@@ -1,11 +1,17 @@
 """The daily job: fetch prices, build features, fit, score."""
 
+import hashlib
+import json
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, cast
 
+import numpy as np
 import pandas as pd
 
+from index_core.baselines import FAMILIES, RIDGE_PENALTY
 from index_core.evaluation import Evaluation, evaluate
+from index_core.feature_ic import FeatureIC, feature_ics
 from index_core.features.fundamental import (
     concept_coverage,
     fundamental_features,
@@ -15,38 +21,73 @@ from index_core.features.normalize import rank_by_date
 from index_core.features.technical import FEATURES as TECHNICAL
 from index_core.features.technical import WARMUP_BARS, technical_features
 from index_core.labels import HORIZON, LABEL_SPAN, excess_return_labels, excess_returns
-from index_core.model import SNAPSHOT_STEP, fit, load_lightgbm
+from index_core.model import NUM_ROUNDS, PARAMS, SNAPSHOT_STEP, fit, load_lightgbm
+from index_core.portfolio import (
+    MIN_PERIODS,
+    Holdings,
+    Strategy,
+    monthly_holdings,
+    strategy,
+)
 from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport
 from index_core.scoring import decile_scores
+from index_core.significance import Alpha, Deflated, deflated_sharpe, factor_alpha
 from index_core.sources.base import NotFoundError, empty_facts
 from index_core.universe import BENCHMARK
-from index_core.walkforward import MIN_TRAIN_DATES, Fold, walk_forward
+from index_core.verdict import Verdict, decide
+from index_core.walkforward import MIN_TRAIN_DATES, MODELS, Fold, walk_forward
 
 
 if TYPE_CHECKING:
     from datetime import date
 
-    from index_core.sources.base import FilingsSource, PriceSource
+    from index_core.sources.base import FactorSource, FilingsSource, PriceSource
     from index_core.store import Store
     from index_core.universe import Universe
 
 # Backtests reserve these months until `final`.
 HOLDOUT_MONTHS = 24
+# DEFAULT_COST is an assumed large-cap trading cost.
+# No source supplies the bid-ask spreads, so the break-even cost is the measured value.
+DEFAULT_COST = 0.001
 TRADING_DAYS_PER_MONTH = 21
 CALENDAR_PER_TRADING_DAY = 1.5
 
 
 @dataclass(frozen=True)
-class Backtest:
+class ModelResult:
+    """One model on the out-of-sample rows: its ranks and its portfolios."""
+
+    name: str
     evaluation: Evaluation
+    # The top decile minus every scored stock, equal-weighted, and the top decile
+    # minus the bottom decile.
+    top: Strategy
+    spread: Strategy
+    alpha: Alpha | None
+    deflated: Deflated
+
+
+@dataclass(frozen=True)
+class Backtest:
+    models: dict[str, ModelResult]
+    features: list[FeatureIC]
+    verdict: Verdict
+    cost: float
     folds: list[Fold]
     price_source: str
     facts_source: str | None
+    factors_source: str | None
     period: Literal["development", "holdout"]
     holdout_start: date
     predictions: pd.DataFrame
     members: int
     unpriced: list[str]
+
+    @property
+    def evaluation(self) -> Evaluation:
+        """The ranking metrics of LightGBM, the model that scores."""
+        return self.models["lightgbm"].evaluation
 
 
 @dataclass(frozen=True)
@@ -93,6 +134,11 @@ def ingest_filings(
         except NotFoundError:
             facts = empty_facts()
         store.replace_facts(source.name, ticker, facts)
+
+
+def ingest_factors(source: FactorSource, store: Store) -> None:
+    """Replace the stored factor returns with the source's whole file."""
+    store.replace_factors(source.name, source.fetch())
 
 
 def missing_prices(store: Store, tickers: list[str]) -> list[str]:
@@ -184,18 +230,19 @@ def score(store: Store, universe: Universe) -> ScoresReport:
     )
 
 
-def history_needed(holdout_months: int, *, final: bool) -> int:
+def history_needed(holdout_months: int) -> int:
     """Fewest trading days of stored prices a backtest can work with.
 
     The first fold needs complete features, `MIN_TRAIN_DATES` snapshots and a
-    label span between training and test. Development metrics also need the
-    held-back months after the last of their predictions; with `final` those
-    months are the metrics, so they need only one more test quarter.
+    label span between training and test. The development months must then hold
+    enough monthly rebalances to judge a portfolio, and a test quarter may start
+    up to a quarter late. The held-back months come after them. A final run
+    needs the development months too, because they choose its candidate.
     """
     first_snapshot = -(-WARMUP_BARS // SNAPSHOT_STEP) * SNAPSHOT_STEP
     first_fold = first_snapshot + (MIN_TRAIN_DATES - 1) * SNAPSHOT_STEP + LABEL_SPAN
-    held_back = 0 if final else holdout_months * TRADING_DAYS_PER_MONTH
-    return first_fold + LABEL_SPAN + held_back
+    measured = (MIN_PERIODS + 1) * TRADING_DAYS_PER_MONTH + LABEL_SPAN
+    return first_fold + measured + holdout_months * TRADING_DAYS_PER_MONTH
 
 
 def backtest(
@@ -203,6 +250,7 @@ def backtest(
     universe: Universe,
     first_oos: date | None = None,
     holdout_months: int = HOLDOUT_MONTHS,
+    cost: float = DEFAULT_COST,
     *,
     final: bool = False,
 ) -> Backtest:
@@ -212,8 +260,16 @@ def backtest(
     `universe`. A member with no stored prices is left out and listed in
     `Backtest.unpriced`.
     The last `holdout_months` months stay out of development metrics. With
-    `final`, only those months are measured.
+    `final`, only those months are measured, and the verdict tests the candidate
+    that the development months chose.
+
+    Each model's net spread is added to the store's trial ledger, on the
+    development months and, with `final`, on the held-out ones, so the deflated
+    Sharpe ratio counts every specification ever run on that store.
+    `cost` is the fraction of each trade's notional lost, one way.
     """
+    if cost < 0:
+        raise ValueError(f"the cost is {cost}; it cannot be negative")
     load_lightgbm()
     prices = store.read_prices([BENCHMARK, *universe.tickers])
     days = prices.loc[prices["ticker"] == BENCHMARK, "date"]
@@ -222,7 +278,7 @@ def backtest(
     # A name that left before the first stored day has nothing to read.
     required = universe.members_between(days.min(), days.max())
     unpriced = sorted(set(required) - set(prices["ticker"]))
-    needed = history_needed(holdout_months, final=final)
+    needed = history_needed(holdout_months)
     if len(days) < needed:
         start = days.max() - pd.Timedelta(days=int(needed * CALENDAR_PER_TRADING_DAY))
         raise ValueError(
@@ -239,23 +295,155 @@ def backtest(
     dates = predictions.index.get_level_values("date")
     holdout_start = dates.max() - pd.DateOffset(months=holdout_months)
     in_holdout = dates > holdout_start
-    chosen = predictions[in_holdout if final else ~in_holdout]
-    if chosen.empty:
-        raise ValueError(
-            f"no {'holdout' if final else 'development'} predictions; "
-            f"the history is too short for {holdout_months} held-back months"
+    development = predictions[~in_holdout]
+    chosen = predictions[in_holdout] if final else development
+    for rows, period in ((development, "development"), (chosen, "holdout")):
+        if rows.empty:
+            raise ValueError(
+                f"no {period} predictions; "
+                f"the history is too short for {holdout_months} held-back months"
+            )
+
+    adj_close = prices.pivot(index="date", columns="ticker", values="adj_close")
+    adj_close = adj_close.reindex(adj_close[BENCHMARK].dropna().index)
+    factors = store.read_factors()
+
+    def measure(rows: pd.DataFrame, *, holdout: bool) -> dict[str, _Measured]:
+        return _measure(
+            store, rows, adj_close, universe, first_oos, holdout_months, cost, holdout
         )
+
+    # The candidate is chosen on the development months. A final run measures
+    # them too, so that the ledger counts that look.
+    selection = measure(development, holdout=False)
+    tested = measure(chosen, holdout=True) if final else selection
+    trials = store.trial_sharpes()
+
+    def models_of(
+        rows: pd.DataFrame, measured: dict[str, _Measured]
+    ) -> dict[str, ModelResult]:
+        return {
+            name: ModelResult(
+                name=name,
+                evaluation=evaluate(rows, calendar, name),
+                top=top,
+                spread=spread,
+                alpha=None
+                if factors.empty
+                else factor_alpha(spread.net_returns, holdings, factors),
+                deflated=deflated_sharpe(spread.net_returns, trials),
+            )
+            for name, (holdings, top, spread) in measured.items()
+        }
+
+    selection_models = models_of(development, selection)
+    models = models_of(chosen, tested) if final else selection_models
     return Backtest(
-        evaluation=evaluate(chosen, calendar),
+        models=models,
+        features=feature_ics(
+            features.reindex(chosen.index).join(chosen["excess"]),
+            list(features.columns),
+        ),
+        verdict=decide(selection_models, models),
+        cost=cost,
         folds=result.folds,
         price_source=store.price_source() or "unknown",
         facts_source=store.facts_source(),
+        factors_source=store.factors_source(),
         period="holdout" if final else "development",
         holdout_start=holdout_start.date(),
         predictions=chosen,
         members=len(required),
         unpriced=unpriced,
     )
+
+
+type _Measured = tuple[Holdings, Strategy, Strategy]
+
+
+def _measure(
+    store: Store,
+    rows: pd.DataFrame,
+    adj_close: pd.DataFrame,
+    universe: Universe,
+    first_oos: date | None,
+    holdout_months: int,
+    cost: float,
+    holdout: bool,
+) -> dict[str, _Measured]:
+    """The holdings, the top-decile strategy and the decile-spread strategy of
+    every model on `rows`. Each model's net spread is added to the ledger."""
+    as_of = rows.index.get_level_values("date").max().date()
+    measured = {}
+    for name in MODELS:
+        holdings = monthly_holdings(rows[name], adj_close)
+        spread = strategy(
+            holdings.top - holdings.bottom,
+            holdings.top_traded + holdings.bottom_traded,
+            cost,
+        )
+        if not np.isfinite(spread.monthly_sharpe):
+            raise ValueError(f"the {name} net spread has no variation to measure")
+        measured[name] = (
+            holdings,
+            strategy(holdings.top - holdings.universe, holdings.top_traded, cost),
+            spread,
+        )
+        spec = _spec(name, universe, first_oos, holdout_months, cost, final=holdout)
+        store.record_trial(
+            spec.hash, spec.description, as_of, holdings.periods, spread.monthly_sharpe
+        )
+    return measured
+
+
+@dataclass(frozen=True)
+class _Spec:
+    hash: str
+    description: str
+
+
+def _spec(
+    model: str,
+    universe: Universe,
+    first_oos: date | None,
+    holdout_months: int,
+    cost: float,
+    *,
+    final: bool,
+) -> _Spec:
+    """The identity of a backtest, for the trial ledger.
+
+    It holds everything the author chose: the model and its settings, the
+    universe and its membership dates, the dates measured, and the cost.
+    """
+    settings: dict[str, object] = {
+        "lightgbm": {**PARAMS, "rounds": NUM_ROUNDS},
+        "ridge": {"penalty": RIDGE_PENALTY},
+        "composite": dict(FAMILIES),
+    }
+    parameters = {
+        "model": model,
+        "settings": settings[model],
+        "universe": universe.name,
+        "memberships": [
+            [m.ticker, m.start.isoformat(), m.end.isoformat() if m.end else None]
+            for m in universe.memberships
+        ],
+        "first_oos": first_oos.isoformat() if first_oos else None,
+        "holdout_months": holdout_months,
+        "final": final,
+        "cost": cost,
+    }
+    digest = hashlib.sha256(
+        json.dumps(parameters, sort_keys=True).encode()
+    ).hexdigest()[:16]
+    description = (
+        f"{model} on {universe.name}, {'holdout' if final else 'development'}, "
+        f"{holdout_months} held-back months, "
+        f"first out-of-sample {first_oos or 'as early as allowed'}, "
+        f"cost {cost * 1e4:g} bps"
+    )
+    return _Spec(digest, description)
 
 
 def run(
