@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from index_core.baselines import composite_score, fit_ridge
 from index_core.labels import LABEL_SPAN, beats_benchmark
 from index_core.model import labelled_snapshots, train_booster
 
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
 # About two years of weekly snapshots. Fewer cannot support a model.
 MIN_TRAIN_DATES = 100
+MODELS = ("lightgbm", "ridge", "composite")
 
 
 @dataclass(frozen=True)
@@ -38,8 +40,11 @@ class Fold:
 class WalkForward:
     """Out-of-sample rows indexed by (`date`, `ticker`).
 
-    The columns are `prob`, the predicted probability of beating the benchmark,
-    `label` and `excess`, the realised outcome and excess return.
+    The columns are `label` and `excess`, the realised outcome and excess
+    return, and one score per model in `MODELS`. Every model scores the same
+    rows, and a higher score means more likely to beat the benchmark. The
+    boosted trees and the ridge refit each quarter on the same training rows;
+    the composite fits nothing.
     """
 
     predictions: pd.DataFrame
@@ -95,11 +100,13 @@ def walk_forward(
         train = frame[in_train]
         test = frame[in_test]
         booster = train_booster(train, columns)
-        probabilities = np.asarray(booster.predict(test[columns]))
+        ridge = fit_ridge(train, columns)
         parts.append(
-            test[["label", "excess"]].assign(prob=probabilities)[
-                ["prob", "label", "excess"]
-            ]
+            test[["label", "excess"]].assign(
+                lightgbm=np.asarray(booster.predict(test[columns])),
+                ridge=ridge.predict(test),
+                composite=composite_score(test),
+            )[["lightgbm", "ridge", "composite", "label", "excess"]]
         )
         folds.append(Fold(start, train_dates.max(), len(train_dates), len(train)))
 
