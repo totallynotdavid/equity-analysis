@@ -1,4 +1,5 @@
 import json
+import socket
 
 from datetime import date, timedelta
 from pathlib import Path
@@ -332,12 +333,27 @@ def test_a_network_failure_ends_with_a_message_not_a_traceback(
 ) -> None:
     monkeypatch.setenv("TIINGO_API_KEY", "key")
     monkeypatch.setenv("SEC_USER_AGENT", "Jane Doe jane@example.com")
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        unused_port = probe.getsockname()[1]
     monkeypatch.setattr(
-        "index_core.sources.tiingo.BASE_URL", "http://127.0.0.1:1", raising=True
+        "index_core.sources.tiingo.BASE_URL",
+        f"http://127.0.0.1:{unused_port}",
+        raising=True,
     )
 
     with pytest.raises(SystemExit, match="eq: could not reach Tiingo"):
-        main(["run", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")])
+        main(
+            [
+                "run",
+                "--universe",
+                str(DEMO),
+                "--db",
+                str(tmp_path / "db.sqlite"),
+                "--cache",
+                str(tmp_path / "cache"),
+            ]
+        )
 
 
 def test_export_can_pick_a_universe_by_name(tmp_path: Path) -> None:
