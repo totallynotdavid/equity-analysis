@@ -10,15 +10,22 @@ from index_core.backtest_text import render
 from index_core.coverage_text import render as render_coverage
 from index_core.model import MissingRuntimeError
 from index_core.pipeline import (
+    DEFAULT_COST,
     HOLDOUT_MONTHS,
     backtest,
     coverage,
+    ingest_factors,
     run,
 )
 from index_core.report import ScoresReport
 from index_core.sources.base import SourceError
 from index_core.sources.edgar import EdgarSource
-from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
+from index_core.sources.french import FamaFrenchSource
+from index_core.sources.synthetic import (
+    SyntheticFactors,
+    SyntheticFilings,
+    SyntheticSource,
+)
 from index_core.sources.tiingo import TiingoSource
 from index_core.store import Store, StoreError, default_db_path
 from index_core.universe import read_universe
@@ -27,7 +34,7 @@ from index_core.universe import read_universe
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from index_core.sources.base import FilingsSource, PriceSource
+    from index_core.sources.base import FactorSource, FilingsSource, PriceSource
 
 DEFAULT_OUT = Path("outputs/scores.json")
 HISTORY_DAYS = 6 * 365
@@ -44,6 +51,11 @@ FILINGS: dict[str, Callable[[Path], FilingsSource]] = {
     "edgar": EdgarSource.from_env,
     "synthetic": lambda _: SyntheticFilings(),
 }
+FACTORS: dict[str, Callable[[Path], FactorSource]] = {
+    "french": FamaFrenchSource.from_env,
+    "synthetic": lambda _: SyntheticFactors(),
+}
+BPS = 1e4
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -82,11 +94,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_db_and_out(run_command)
 
+    factors_command = commands.add_parser(
+        "factors",
+        help="fetch the Fama-French five-factor daily returns",
+        description="Stores the whole file, replacing any stored before. "
+        "`eq backtest` regresses the strategy's returns on it.",
+    )
+    factors_command.add_argument(
+        "--source",
+        choices=list(FACTORS),
+        default="french",
+        help="french downloads Kenneth French's data library file; synthetic is "
+        "fake returns for offline runs (default: %(default)s)",
+    )
+    factors_command.add_argument(
+        "--cache",
+        type=Path,
+        default=DEFAULT_CACHE,
+        help="directory where the download is kept for a day (default: %(default)s)",
+    )
+    factors_command.add_argument("--db", type=Path, help=DB_HELP)
+
     backtest_command = commands.add_parser(
         "backtest",
         help="walk forward over the stored prices and print out-of-sample metrics",
         description="Reads the prices that `eq run` stored. If they do not reach "
-        "back far enough, it says which --start to run with.",
+        "back far enough, it says which --start to run with. Each model's net "
+        "spread is added to the database's trial ledger.",
     )
     backtest_command.add_argument("--universe", type=Path, required=True)
     backtest_command.add_argument(
@@ -107,10 +141,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="measure the held-back months instead. Look once, before a public claim",
     )
     backtest_command.add_argument(
+        "--cost-bps",
+        type=float,
+        default=DEFAULT_COST * BPS,
+        help="loss on each trade's notional, one way, in basis points. An assumed "
+        "figure; the output also gives the break-even cost (default: %(default)g)",
+    )
+    backtest_command.add_argument(
         "--predictions",
         type=Path,
-        help="write the measured out-of-sample rows (date, ticker, prob, label, "
-        "excess) as CSV",
+        help="write the measured out-of-sample rows (date, ticker, lightgbm, ridge, "
+        "composite, label, excess) as CSV",
     )
     backtest_command.add_argument("--db", type=Path, help=DB_HELP)
 
@@ -159,6 +200,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     try:
         if args.command == "run":
             _run(args)
+        elif args.command == "factors":
+            _factors(args)
         elif args.command == "backtest":
             _backtest(args)
         elif args.command == "coverage":
@@ -224,15 +267,30 @@ def _coverage(args: argparse.Namespace) -> None:
     sys.stdout.write(render_coverage(result, args.universe.stem, args.min_concepts))
 
 
+def _factors(args: argparse.Namespace) -> None:
+    source = FACTORS[args.source](args.cache)
+    if args.source == "synthetic":
+        sys.stderr.write("eq: synthetic factors; the alpha means nothing\n")
+    with Store.open(args.db) as store:
+        ingest_factors(source, store)
+        days = store.read_factors().index
+    sys.stdout.write(
+        f"stored {len(days)} days of {source.name} factors, "
+        f"{days.min().date()} to {days.max().date()}, in {args.db}\n"
+    )
+
+
 def _backtest(args: argparse.Namespace) -> None:
     universe = read_universe(args.universe)
     _require_database(args.db)
-    with Store.open(args.db, read_only=True) as store:
+    # Writable: the run adds its specifications to the trial ledger.
+    with Store.open(args.db) as store:
         result = backtest(
             store,
             universe,
             args.first_oos,
             args.holdout_months,
+            args.cost_bps / BPS,
             final=args.final,
         )
     if args.predictions is not None:
