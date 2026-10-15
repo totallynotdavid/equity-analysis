@@ -10,7 +10,8 @@ through uv from the repository root, for example `uv run eq run ...`.
 | `eq export`   | Writes the latest stored scores as JSON                      | [below](#eq-export)             |
 | `eq import`   | Stores a scores file, for the API to serve                   | [below](#eq-import)             |
 | `eq coverage` | Lists names with few fundamentals in the stored filings      | [Fundamentals](FUNDAMENTALS.md) |
-| `eq backtest` | Walks forward over the stored data and prints metrics        | [Backtest](BACKTEST.md)         |
+| `eq factors`  | Stores the Fama-French five-factor daily returns             | [below](#eq-factors)            |
+| `eq backtest` | Walks forward over the stored data and prints the evidence   | [Backtest](BACKTEST.md)         |
 
 A failure prints `eq: <message>` to stderr and exits non-zero.
 
@@ -175,9 +176,13 @@ One run asks Tiingo for `SPY` and every ticker that was a member in the range:
 | default start (2190 days), `--end 2026-10-09` |      613 | 44136 s, 12.3 h |
 
 The time is the number of requests times 72 s. Only requests that miss the cache
-count, so a run after an interruption pays for the tickers still to fetch. 50
-requests an hour was measured on one free key. It is not a guarantee from
-Tiingo.
+count, so a run after an interruption pays for the tickers still to fetch.
+
+Tiingo's free Starter plan allows 50 requests an hour, 1000 a day and 500 unique
+symbols a month. The 794 symbols of the first range are above the monthly cap,
+so one run of it needs two months of Starter, or one month of the $30 Power plan
+(10000 requests an hour), which makes the pause unnecessary. The plans are on
+[Tiingo's pricing page](https://www.tiingo.com/about/pricing).
 
 An entry lasts one day, so a run that is resumed more than a day after its first
 tickers were fetched asks for those tickers again.
@@ -186,19 +191,47 @@ Tiingo repeats a delisted company's last close, with zero volume, up to the end
 of the range. The Tiingo source drops those bars. A ticker with no trades in the
 range counts as having no prices.
 
+## eq factors
+
+```bash
+uv run eq factors --source synthetic
+uv run eq factors
+```
+
+| Option     | Meaning                                                  | Default                    |
+| ---------- | -------------------------------------------------------- | -------------------------- |
+| `--source` | `french` for the real file, `synthetic` for fake returns | `french`                   |
+| `--cache`  | Directory where the download is kept for a day           | `data/cache`               |
+| `--db`     | SQLite file                                              | [see below](#the-database) |
+
+Downloads `F-F_Research_Data_5_Factors_2x3_daily_CSV.zip` from Kenneth French's
+data library, which needs no key, and stores every day of Mkt-RF, SMB, HML, RMW,
+CMA and RF as a fraction in `factor_returns`, replacing what was stored. It
+prints how many days it stored and their range. The file is in percent and ends
+a month or two before today.
+[`french.py`](../packages/core/index_core/sources/french.py)
+
+The factors do not depend on the universe. Run the command once per database
+before [`eq backtest`](BACKTEST.md#alpha), which needs 12 months of overlap with
+the backtest for the alpha table. A database holds factors from one source, as
+it does for prices ([below](#the-database)).
+
 ## The database
 
-The database is one SQLite file. It holds prices, filings and every saved run.
+The database is one SQLite file. It holds prices, filings, factors, the backtest
+ledger and every saved run.
 
 - Every command uses the file given by `--db`, else `$INDEX_DB`, else
-  `data/index.sqlite`. `eq export`, `eq coverage` and `eq backtest` open it
-  read-only. When it does not exist, they fail and name the other `.sqlite`
-  files beside it.
+  `data/index.sqlite`. `eq export` and `eq coverage` open it read-only. When it
+  does not exist, they fail and name the other `.sqlite` files beside it.
+  `eq backtest` opens it for writing, because it adds to the `trials` ledger
+  ([Backtest](BACKTEST.md#multiple-testing)).
 - A run is keyed by universe and as-of date. Running the same universe again on
   the same date replaces that run. Other universes and dates stay.
 - A database holds prices from one source and filings from one source. To switch
   between `synthetic` and `tiingo`, pass a new `--db` file. A mismatch stops
   with `this database holds synthetic prices; use a new database for tiingo`.
+  Factors are the same, with `french` and `synthetic`.
 - A database written by an older version fails to open with
   `has an older layout; delete it and run again`. Databases are rebuilt, not
   migrated.
