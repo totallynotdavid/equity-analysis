@@ -86,16 +86,18 @@ def test_labels_inside_the_purge_window_cannot_change_a_quarters_predictions(
     first_quarter = (
         base.predictions.index.get_level_values("date") < base.folds[1].test_start
     )
-    expected = base.predictions.loc[first_quarter, "prob"]
+    expected = base.predictions.loc[first_quarter, "lightgbm"]
     pd.testing.assert_series_equal(
-        after.predictions.loc[expected.index, "prob"], expected
+        after.predictions.loc[expected.index, "lightgbm"], expected
     )
 
     # A control: labels the first model does train on do change it.
     changed = excess.copy()
     changed[~reaching] = rng.normal(0, 0.1, (~reaching).sum())
     control = walk_forward(features, changed, calendar, date(2020, 1, 1))
-    assert not np.allclose(control.predictions.loc[expected.index, "prob"], expected)
+    assert not np.allclose(
+        control.predictions.loc[expected.index, "lightgbm"], expected
+    )
 
 
 def test_a_planted_signal_gives_a_clearly_positive_rank_ic(

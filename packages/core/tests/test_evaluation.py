@@ -9,7 +9,7 @@ from index_core.labels import HORIZON
 def _predictions(
     dates: pd.DatetimeIndex, sign: float = 1.0, names: int = 10
 ) -> pd.DataFrame:
-    """Per date, stock k has excess return (k - 4.5) / 100 and prob 0.5 + sign * k / 100.
+    """Per date, stock k has excess return (k - 4.5) / 100 and score 0.5 + sign * k / 100.
 
     With `sign` 1 the model ranks perfectly; with -1 it ranks backwards.
     """
@@ -17,7 +17,7 @@ def _predictions(
         {
             "date": date,
             "ticker": f"T{k:02d}",
-            "prob": 0.5 + sign * k / 100,
+            "lightgbm": 0.5 + sign * k / 100,
             "excess": (k - 4.5) / 100,
         }
         for date in dates
@@ -75,7 +75,8 @@ def test_an_interval_widens_when_months_disagree() -> None:
     # Even months rank backwards: the same model, a split verdict.
     flipped = steady.copy()
     months = pd.DatetimeIndex(flipped.index.get_level_values("date")).month
-    flipped.loc[months % 2 == 0, "prob"] = 1.0 - flipped.loc[months % 2 == 0, "prob"]
+    even = months % 2 == 0
+    flipped.loc[even, "lightgbm"] = 1.0 - flipped.loc[even, "lightgbm"]
 
     mixed = evaluate(flipped, CALENDAR)
 
