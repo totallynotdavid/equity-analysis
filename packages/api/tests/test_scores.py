@@ -1,40 +1,28 @@
 import json
 import sqlite3
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi.testclient import TestClient
 from index_api.main import app
-from index_cli.main import main
 
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import pytest
 
 
-DEMO = Path(__file__).parents[3] / "universes" / "demo30.txt"
-
-
-def _run_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    database = tmp_path / "db.sqlite"
-    out = tmp_path / "scores.json"
-    main(
-        [
-            *["run", "--universe", str(DEMO)],
-            *["--prices", "synthetic", "--filings", "synthetic"],
-            *["--start", "2024-01-01", "--end", "2026-09-30"],
-            *["--db", str(database), "--out", str(out)],
-        ]
-    )
-    monkeypatch.setenv("INDEX_DB", str(database))
-    return out
+def _serve(demo_run: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Points the API at the shared `eq run` and returns its `scores.json`."""
+    monkeypatch.setenv("INDEX_DB", str(demo_run / "db.sqlite"))
+    return demo_run / "scores.json"
 
 
 def test_scores_return_the_rows_that_eq_run_exported(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    demo_run: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    exported = json.loads(_run_cli(tmp_path, monkeypatch).read_text())
+    exported = json.loads(_serve(demo_run, monkeypatch).read_text())
 
     response = TestClient(app).get("/scores")
 
@@ -44,9 +32,9 @@ def test_scores_return_the_rows_that_eq_run_exported(
 
 
 def test_health_reports_the_as_of_date_of_the_latest_scores(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    demo_run: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _run_cli(tmp_path, monkeypatch)
+    _serve(demo_run, monkeypatch)
 
     response = TestClient(app).get("/health")
 
@@ -79,9 +67,9 @@ def test_a_database_with_an_older_layout_is_unavailable_with_the_reason(
 
 
 def test_a_ticker_returns_the_report_that_eq_run_wrote(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    demo_run: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    out = _run_cli(tmp_path, monkeypatch)
+    out = _serve(demo_run, monkeypatch)
     written = json.loads((out.parent / "tickers" / "MSFT.json").read_text())
 
     response = TestClient(app).get("/tickers/msft")
@@ -92,9 +80,9 @@ def test_a_ticker_returns_the_report_that_eq_run_wrote(
 
 
 def test_a_ticker_with_no_report_is_not_found(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    demo_run: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _run_cli(tmp_path, monkeypatch)
+    _serve(demo_run, monkeypatch)
 
     response = TestClient(app).get("/tickers/NOPE")
 

@@ -75,3 +75,28 @@ def test_a_date_with_too_few_values_for_a_feature_is_not_counted_for_it() -> Non
 
     assert results["roa"].dates == 2 * MONTHS - 1
     assert results["ret_21"].dates == 2 * MONTHS
+
+
+def test_a_stock_with_no_outcome_is_left_out_of_every_features_correlation() -> None:
+    rows = _rows()
+    rows.loc[rows.index[::7], "excess"] = np.nan
+    rows.loc[rows.index[::5], "bb_pctb"] = np.nan
+
+    results = _by_name(rows)
+
+    assert results["roa"].mean_ic.value == pytest.approx(1.0)
+    assert results["ret_21"].mean_ic.value == pytest.approx(-1.0)
+    assert results["bb_pctb"].dates == 2 * MONTHS
+
+
+def test_tied_values_share_their_mean_rank() -> None:
+    rows = _rows()
+    rows["roa"] = rows["roa"].round(1)
+    rows["excess"] = rows["excess"].round(1)
+
+    by_date = [
+        group["roa"].corr(group["excess"], method="spearman")
+        for _, group in rows.groupby(level="date")
+    ]
+
+    assert _by_name(rows)["roa"].mean_ic.value == pytest.approx(np.mean(by_date))

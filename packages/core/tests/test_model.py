@@ -14,7 +14,7 @@ from index_core.model import (
     load_lightgbm,
     purged_split,
 )
-from index_core.scoring import decile_scores
+from index_core.scoring import decile_scores, scores_by_date
 from membership import of_prices
 
 
@@ -131,3 +131,26 @@ def test_decile_scores_break_ties_by_ticker() -> None:
     assert table["ticker"].tolist() == ["A", "B", "C"]
     assert table["rank"].tolist() == [1, 2, 3]
     assert set(table["score"]) <= set(range(1, 11))
+
+
+def test_scores_by_date_equal_the_deciles_of_each_date_alone() -> None:
+    rng = np.random.default_rng(3)
+    days = pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"])
+    sizes = [30, 17, 12]
+    index = pd.MultiIndex.from_tuples(
+        [
+            (day, f"T{i:02d}")
+            for day, size in zip(days, sizes, strict=True)
+            for i in range(size)
+        ],
+        names=["date", "ticker"],
+    )
+    probabilities = pd.Series(np.round(rng.random(len(index)), 1), index=index)
+
+    scores = scores_by_date(probabilities)
+
+    for day in days:
+        alone = decile_scores(probabilities.xs(day, level="date"))
+        assert scores.xs(day, level="date")[alone["ticker"]].tolist() == (
+            alone["score"].tolist()
+        )
