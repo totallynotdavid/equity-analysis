@@ -15,6 +15,7 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "happy-dom": "^21.0.3",
     "prettier": "^3.9.10",
     "prettier-plugin-astro": "^1.1.1",
     "prettier-plugin-tailwindcss": "^0.8.1",

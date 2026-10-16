@@ -3,33 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { afterEach, describe, expect, it } from "vitest";
-import Index from "../src/pages/index.astro";
 import Page, { getStaticPaths } from "../src/pages/t/[ticker].astro";
 import { loadTickers } from "../src/lib/tickers";
+import { PRICE_FIGURES, clearSite, report, scores, site } from "./support";
 
 const FIXTURE = new URL("./fixtures/AAPL.json", import.meta.url);
-
-function scoresFile(tickers: string[]): string {
-  const file = join(mkdtempSync(join(tmpdir(), "scores-")), "scores.json");
-  writeFileSync(
-    file,
-    JSON.stringify({
-      status: "experimental, not validated",
-      as_of: "2026-09-30",
-      universe: "demo30",
-      price_source: "tiingo",
-      facts_source: "edgar",
-      horizon_days: 63,
-      rows: tickers.map((ticker, i) => ({
-        ticker,
-        rank: i + 1,
-        score: 10 - i,
-        prob: 0.6,
-      })),
-    }),
-  );
-  return file;
-}
 
 function tickersDir(): string {
   const directory = mkdtempSync(join(tmpdir(), "tickers-"));
@@ -39,7 +17,7 @@ function tickersDir(): string {
 
 afterEach(() => {
   delete process.env.TICKERS_DIR;
-  delete process.env.SCORES_JSON;
+  clearSite();
 });
 
 describe("loadTickers", () => {
@@ -91,31 +69,59 @@ describe("the ticker page", () => {
   });
 });
 
-describe("the links of the index", () => {
-  async function index(tickers: string[]): Promise<string> {
-    process.env.SCORES_JSON = scoresFile(tickers);
-    const container = await AstroContainer.create();
-    return container.renderToString(Index);
-  }
+describe("a report that carries figures worked out from prices", () => {
+  it("shows none of them, nor the price", async () => {
+    const priced = { ...report({ ticker: "AAA" }), ...PRICE_FIGURES };
+    site({ scores: scores("demo30", ["AAA"]), reports: [priced] });
+    const [path] = await getStaticPaths({} as never);
 
-  it("lead only to tickers the build made a page for", async () => {
-    process.env.TICKERS_DIR = tickersDir();
+    const container = await AstroContainer.create();
+    const html = await container.renderToString(Page, {
+      params: path.params,
+      props: path.props,
+    });
+
+    expect(html).toContain("Revenue");
+    for (const shown of ["123.45", "1.37", "28.4%", "6.1%"])
+      expect(html).not.toContain(shown);
+    expect(html).not.toMatch(/valuation|beta|drawdown|volatility/i);
+  });
+});
+
+describe("the build of the ticker pages", () => {
+  const reports = ["AAA", "BBB", "CCC"].map((ticker) => report({ ticker }));
+
+  it("makes a page for every scored ticker", async () => {
+    site({ scores: scores("demo30", ["AAA", "BBB", "CCC"]), reports });
+
     const paths = await getStaticPaths({} as never);
 
-    const html = await index(["AAPL", "MSFT"]);
-
-    const linked = [...html.matchAll(/href="\/t\/([^"]+)"/g)].map((m) => m[1]);
-    expect(linked).toEqual(paths.map((path) => path.params.ticker));
-    expect(html).toContain("MSFT");
+    expect(paths.map((path) => path.params.ticker)).toEqual([
+      "AAA",
+      "BBB",
+      "CCC",
+    ]);
   });
 
-  it("do not exist when no reports were published", async () => {
-    process.env.TICKERS_DIR = join(tickersDir(), "missing");
+  it("makes a page for an unscored ticker too, so the screener can link it", async () => {
+    site({ scores: scores("demo30", ["AAA"]), reports });
 
-    const html = await index(["AAPL", "MSFT"]);
+    const paths = await getStaticPaths({} as never);
 
-    expect(html).not.toContain('href="/t/');
-    expect(html).toContain("AAPL");
-    expect(html).toContain("MSFT");
+    expect(paths).toHaveLength(3);
+  });
+
+  it("fails the build when a scored ticker has no report", () => {
+    site({ scores: scores("demo30", ["AAA", "ZZZ", "YYY"]), reports });
+
+    expect(() => getStaticPaths({} as never)).toThrow(
+      /2 scored tickers have no ticker report.*ZZZ, YYY.*eq export/,
+    );
+  });
+
+  it("builds when there are no scores to check against", async () => {
+    site({ reports });
+
+    expect(await getStaticPaths({} as never)).toHaveLength(3);
   });
 });

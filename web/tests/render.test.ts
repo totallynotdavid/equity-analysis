@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderScores } from "../src/lib/render";
+import { escape, leftOutNote, sourcesWarning } from "../src/lib/render";
 import type { Scores } from "../src/lib/scores";
 
 const scores: Scores = {
@@ -9,60 +9,40 @@ const scores: Scores = {
   price_source: "tiingo",
   facts_source: "edgar",
   horizon_days: 63,
-  rows: [{ ticker: "<b>X</b>", rank: 1, score: 10, prob: 0.6 }],
+  rows: [{ ticker: "AAPL", rank: 1, score: 10, prob: 0.6 }],
 };
 
-const NO_PAGES = new Set<string>();
-
-describe("renderScores", () => {
-  it("escapes the values it prints", () => {
-    const html = renderScores(scores, new Set(["<b>X</b>"]));
-
-    expect(html).toContain("&lt;b&gt;X&lt;/b&gt;");
-    expect(html).not.toContain("<b>");
-  });
-
-  it("links a ticker to its page when the build made one", () => {
-    const html = renderScores(
-      { ...scores, rows: [{ ticker: "BRK-B", rank: 1, score: 10, prob: 0.6 }] },
-      new Set(["BRK-B"]),
+describe("escape", () => {
+  it("makes markup and quotes inert", () => {
+    expect(escape(`<b a="x">'&</b>`)).toBe(
+      "&lt;b a=&quot;x&quot;&gt;&#39;&amp;&lt;/b&gt;",
     );
-
-    expect(html).toContain('<a class="underline" href="/t/BRK-B">BRK-B</a>');
   });
+});
 
-  it("leaves a ticker without a page as plain text", () => {
-    const html = renderScores(
-      {
-        ...scores,
-        rows: [
-          { ticker: "AAPL", rank: 1, score: 10, prob: 0.6 },
-          { ticker: "MSFT", rank: 2, score: 9, prob: 0.5 },
-        ],
-      },
-      new Set(["AAPL"]),
-    );
-
-    expect(html).toContain('href="/t/AAPL"');
-    expect(html).not.toContain("/t/MSFT");
-    expect(html).toContain("MSFT");
-  });
-
+describe("leftOutNote", () => {
   it("names the tickers that were left out and why", () => {
-    const html = renderScores(
-      {
-        ...scores,
-        left_out: [
-          { ticker: "AAA", reason: "no prices" },
-          { ticker: "BBB", reason: "no filings" },
-        ],
-      },
-      NO_PAGES,
-    );
+    const html = leftOutNote({
+      ...scores,
+      left_out: [
+        { ticker: "AAA", reason: "no prices" },
+        { ticker: "BBB", reason: "no filings" },
+      ],
+    });
 
     expect(html).toContain(
       "Left out of the scores: AAA (no prices), BBB (no filings).",
     );
+  });
+
+  it("escapes the names it prints", () => {
+    const html = leftOutNote({
+      ...scores,
+      left_out: [{ ticker: "<b>X</b>", reason: "no prices" }],
+    });
+
+    expect(html).toContain("&lt;b&gt;X&lt;/b&gt;");
+    expect(html).not.toContain("<b>");
   });
 
   it("shortens a long list of left-out tickers", () => {
@@ -71,20 +51,52 @@ describe("renderScores", () => {
       reason: "no filings",
     }));
 
-    const html = renderScores({ ...scores, left_out }, NO_PAGES);
+    const html = leftOutNote({ ...scores, left_out });
 
     expect(html).toContain("T9 (no filings) and 2 more.");
     expect(html).not.toContain("T10");
   });
 
-  it("says nothing about left-out tickers when none were", () => {
-    expect(renderScores(scores, NO_PAGES)).not.toContain("Left out");
-    expect(renderScores({ ...scores, left_out: [] }, NO_PAGES)).not.toContain(
-      "Left out",
-    );
+  it("says nothing when none were left out", () => {
+    expect(leftOutNote(scores)).toBe("");
+    expect(leftOutNote({ ...scores, left_out: [] })).toBe("");
+  });
+});
+
+describe("sourcesWarning", () => {
+  it("is empty when both sources are real", () => {
+    expect(sourcesWarning(scores)).toBe("");
   });
 
-  it("says there are no scores when given none", () => {
-    expect(renderScores(null, NO_PAGES)).toContain("No scores yet");
+  it("is empty for real prices when no filings were stored", () => {
+    expect(sourcesWarning({ ...scores, facts_source: null })).toBe("");
+  });
+
+  it("names synthetic filings behind real prices", () => {
+    const html = sourcesWarning({ ...scores, facts_source: "synthetic" });
+
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("synthetic filings");
+    expect(html).not.toContain("synthetic prices");
+  });
+
+  it("names both when both are synthetic", () => {
+    const html = sourcesWarning({
+      ...scores,
+      price_source: "synthetic",
+      facts_source: "synthetic",
+    });
+
+    expect(html).toContain("synthetic prices and synthetic filings");
+  });
+
+  it("warns for scores that record no sources", () => {
+    const html = sourcesWarning({
+      ...scores,
+      price_source: undefined,
+      facts_source: undefined,
+    } as unknown as Scores);
+
+    expect(html).toContain("prices of unknown source");
   });
 });
