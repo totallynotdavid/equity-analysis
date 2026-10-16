@@ -37,6 +37,40 @@ export interface Series {
   points: Point[];
 }
 
+export interface GridRow {
+  wacc: number;
+  implied_growth: number | null;
+  values: number[];
+}
+
+export interface DcfModel {
+  price: number;
+  shares: number;
+  market_value: number;
+  net_debt: number;
+  enterprise_value: number;
+  fcf: number;
+  fcf0: number;
+  beta_raw: number;
+  beta: number;
+  risk_free: number;
+  equity_risk_premium: number;
+  cost_of_equity: number;
+  cost_of_debt: number;
+  tax_rate: number;
+  wacc: number;
+  terminal_growth: number;
+  years: number;
+  implied_growth: number;
+  tv_share: number;
+  growths: number[];
+  rows: GridRow[];
+}
+
+export type Valuation =
+  | { status: "ok"; reason: null; model: DcfModel }
+  | { status: "not_meaningful"; reason: string; model: null };
+
 export interface TickerReport {
   ticker: string;
   universe: string;
@@ -48,6 +82,7 @@ export interface TickerReport {
   sic_description: string;
   sector: string | null;
   series: Series[];
+  valuation?: Valuation | null;
 }
 
 /**
