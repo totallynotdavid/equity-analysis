@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from index_core.backtest_text import render
 from index_core.coverage_text import render as render_coverage
+from index_core.evidence import build_evidence
 from index_core.model import MissingRuntimeError
 from index_core.pipeline import (
     DEFAULT_COST,
@@ -20,7 +21,7 @@ from index_core.pipeline import (
     missing_filings,
     run,
 )
-from index_core.report import ScoresReport, TickerReport
+from index_core.report import EvidenceReport, ScoresReport, TickerReport
 from index_core.sources.base import SourceError
 from index_core.sources.edgar import EdgarSource
 from index_core.sources.french import FamaFrenchSource
@@ -223,6 +224,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_db_and_out(export_command)
     _add_tickers(export_command)
+    export_command.add_argument(
+        "--evidence",
+        type=Path,
+        help="file for the backtest's proof page data (default: `evidence.json` "
+        "beside --out)",
+    )
 
     import_command = commands.add_parser(
         "import",
@@ -315,11 +322,13 @@ def _run(args: argparse.Namespace) -> None:
     with Store.open(args.db) as store:
         report = run(source, filings, store, universe, start, end)
         reports = store.ticker_reports(report.universe)
+        evidence = build_evidence(store, report.universe)
     for reason in ("prices", "filings"):
         tickers = [i.ticker for i in report.left_out if i.reason == f"no {reason}"]
         _warn_missing(reason, tickers, "they are left out")
     _write(report, args.out)
     _write_tickers(reports, _tickers_dir(args))
+    _write_evidence(evidence, args.out.parent / "evidence.json")
 
 
 def _filings(args: argparse.Namespace) -> None:
@@ -422,10 +431,12 @@ def _export(args: argparse.Namespace) -> None:
     with Store.open(args.db, read_only=True) as store:
         report = store.latest_report(args.universe)
         reports = [] if report is None else store.ticker_reports(report.universe)
+        evidence = None if report is None else build_evidence(store, report.universe)
     if report is None:
         raise StoreError(f"{args.db} holds no matching scores; run `eq run` first")
     _write(report, args.out)
     _write_tickers(reports, _tickers_dir(args))
+    _write_evidence(evidence, args.evidence or args.out.parent / "evidence.json")
 
 
 def _import(args: argparse.Namespace) -> None:
@@ -463,6 +474,20 @@ def _write_tickers(reports: list[TickerReport], directory: Path) -> None:
             report.model_dump_json() + "\n"
         )
     sys.stdout.write(f"wrote {len(reports)} ticker reports to {directory}\n")
+
+
+def _write_evidence(evidence: EvidenceReport | None, out: Path) -> None:
+    """Replace the proof page's file. Without a stored backtest it removes the
+    file, so an earlier universe's evidence is not published beside new scores."""
+    if evidence is None:
+        out.unlink(missing_ok=True)
+        sys.stdout.write(f"no backtest stored for the universe; no {out}\n")
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(evidence.model_dump_json(indent=2) + "\n")
+    sys.stdout.write(
+        f"wrote the {evidence.run.period} backtest of {evidence.run.universe} to {out}\n"
+    )
 
 
 def _write(report: ScoresReport, out: Path) -> None:
