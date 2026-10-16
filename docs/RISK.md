@@ -5,6 +5,8 @@ has fallen, its beta, and what share of its movement the Fama-French factors
 explain, each with a 95% interval. The code is in
 [`risk.py`](../packages/core/index_core/risk.py). `eq run` and `eq metrics`
 compute it with the rest of the [ticker report](FUNDAMENTALS.md#ticker-reports).
+It comes from prices, so the web pages do not show it and the deployed reports
+do not hold it ([Deploy](DEPLOY.md#what-runs-where)).
 
 ## The window
 
@@ -15,9 +17,9 @@ before the report's date, so the window ends where the file does, not on the
 report's date. The report gives the window's first and last day.
 
 A stock with fewer than 756 such days has `status: insufficient_history` and a
-`reason` that says how many it has. The page shows "Insufficient history" and
-that reason. A database with no factor file gives the same status for every
-ticker, with the reason `no factor returns are stored; run eq factors`.
+`reason` that says how many it has. A database with no factor file gives the
+same status for every ticker, with the reason
+`no factor returns are stored; run eq factors`.
 
 ## The figures
 
@@ -64,7 +66,7 @@ metrics are computed. The full report, with the intervals, is in
   size of its debt, has loadings that average the old and the new.
 - Six coefficients from three years of daily returns are noisy. The intervals
   show how noisy: a loading whose interval includes zero is not distinguishable
-  from zero. The page marks the others in bold.
+  from zero.
 - An alpha is the return no factor explains, over a window. Its interval is
   often wide enough to include zero, and it is not a forecast.
 - Beta against SPY and the market loading differ slightly: the loading is the

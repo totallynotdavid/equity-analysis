@@ -5,15 +5,17 @@ The page and the API run as one [Vercel](https://vercel.com/) project,
 
 | URL                                                   | Serves                                     |
 | ----------------------------------------------------- | ------------------------------------------ |
-| <https://equity-analysis.vercel.app/>                 | The static page from `web/`                |
+| <https://equity-analysis.vercel.app/>                 | The screener from `web/`                   |
 | <https://equity-analysis.vercel.app/t/AAPL>           | The page of a ticker from `web/`           |
+| <https://equity-analysis.vercel.app/evidence>         | The proof page from `web/`                 |
+| <https://equity-analysis.vercel.app/method>           | The metrics and data licences from `web/`  |
 | <https://equity-analysis.vercel.app/api/scores>       | `GET /scores` of [the API](OUTPUTS.md#api) |
 | `https://equity-analysis.vercel.app/api/tickers/AAPL` | `GET /tickers/{ticker}` of the API         |
 | <https://equity-analysis.vercel.app/api/health>       | `GET /health` of the API                   |
 | <https://equity-analysis.vercel.app/api/docs>         | The interactive API docs                   |
 
 The page and the API share one origin, so the API's CORS list does not apply.
-The page loads `/api/scores` in the browser and shows what the API returns
+The pages are built from the committed files and do not call the API
 ([Outputs](OUTPUTS.md#web-page)).
 
 The deployed scores are the committed file
@@ -23,15 +25,27 @@ EDGAR filings. It holds the scores, the as-of date and the two source names, and
 no price bars. Vercel has no Tiingo key and a real run takes too long for a
 build, so the build never scores. It publishes this file.
 
-The ticker pages come from the committed directory `deploy/tickers`, one
-[ticker report](OUTPUTS.md#ticker-reports) per ticker, written by the same run.
+The ticker pages and the screener come from the committed directory
+`deploy/tickers`, one [ticker report](OUTPUTS.md#ticker-reports) per ticker,
+written by the same run. The build stops if a scored ticker has no report. The
+reports hold no `valuation` and no `risk`: both are worked out from Tiingo
+prices, which the licence keeps internal, so the script removes them and the
+pages do not show them.
+
+The proof page comes from the committed file `deploy/evidence.json`
+([Outputs](OUTPUTS.md#evidencejson)). Without it the page says no backtest was
+stored and the screener shows no score. The score shows only when the file is a
+held-out run of the deployed universe that passed
+([Backtest](BACKTEST.md#the-verdict)).
 
 ## Refresh the scores
 
 [`scripts/deploy-data.sh`](../scripts/deploy-data.sh), also
 `mise run deploy:data`, runs `eq run` on the demo universe and writes
-`deploy/scores.json` and `deploy/tickers`. It needs the two variables of
-[Real data](CLI.md#real-data):
+`deploy/scores.json`, `deploy/tickers` and, when the database holds a backtest
+of the universe, `deploy/evidence.json`. Make the backtest first with
+[`eq backtest`](BACKTEST.md) on `data/real.sqlite`. It needs the two variables
+of [Real data](CLI.md#real-data):
 
 ```bash
 TIINGO_API_KEY=... \
@@ -47,16 +61,16 @@ costs no requests. With an empty cache the Tiingo pause sets the run time
 run with the source's message and leaves `deploy/scores.json` as it was. Run the
 task again to carry on from the cache.
 
-Commit the new `deploy/scores.json` and `deploy/tickers` and push. A ticker
-without prices or filings is left out of the scores and named in the file's
-`left_out`, which the page lists ([Outputs](OUTPUTS.md#web-page)).
+Commit the new `deploy/scores.json`, `deploy/tickers` and `deploy/evidence.json`
+and push. A ticker without prices or filings is left out of the scores and named
+in the file's `left_out`, which the page lists ([Outputs](OUTPUTS.md#web-page)).
 
 ## What runs where
 
 - **Page.** The `buildCommand` in [`vercel.json`](../vercel.json) runs
   [`scripts/deploy-db.sh`](../scripts/deploy-db.sh), then builds `web/` from
-  `deploy/scores.json` and `deploy/tickers` into `web/dist` with `SCORES_JSON`
-  and `TICKERS_DIR`.
+  `deploy/scores.json`, `deploy/tickers` and `deploy/evidence.json` into
+  `web/dist` with `SCORES_JSON`, `TICKERS_DIR` and `EVIDENCE_JSON`.
 - **API.** [`api/index.py`](../api/index.py) mounts the FastAPI app of
   [`index-api`](../packages/api/index_api/main.py) under `/api`. Vercel installs
   the Python dependencies named by the root
@@ -69,8 +83,10 @@ without prices or filings is left out of the scores and named in the file's
   `facts_source` is `edgar`, and unless every ticker report has `edgar` filings,
   so synthetic data cannot reach the live page. It also fails when a ticker
   report is for another universe or as-of date than `deploy/scores.json`
-  ([`eq import`](CLI.md#eq-import)). The synthetic path stays for tests and the
-  local demo ([README](../README.md)).
+  ([`eq import`](CLI.md#eq-import)), and when a report holds a `valuation` or a
+  `risk`. It also fails when `deploy/evidence.json` was measured on synthetic
+  prices or filings, or on another universe. The synthetic path stays for tests
+  and the local demo ([README](../README.md)).
 
 ## Redeploy
 

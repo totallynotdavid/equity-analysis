@@ -4,7 +4,9 @@ Every ticker report holds a reverse DCF: not what a stock is worth, but what
 growth its price already assumes. The code is in
 [`valuation.py`](../packages/core/index_core/valuation.py). `eq run` and
 `eq metrics` compute it with the rest of the
-[ticker report](FUNDAMENTALS.md#ticker-reports).
+[ticker report](FUNDAMENTALS.md#ticker-reports). It starts from the price, so
+the web pages do not show it and the deployed reports do not hold it
+([Deploy](DEPLOY.md#what-runs-where)).
 
 A discounted cash flow gives a value for each set of assumptions, and the
 assumptions cannot be observed. So the report gives no fair value. It gives the

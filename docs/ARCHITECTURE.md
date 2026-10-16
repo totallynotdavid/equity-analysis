@@ -11,9 +11,9 @@ Python packages and an Astro site.
 │   └── api/    index-api: read-only FastAPI over the SQLite file
 ├── api/        Vercel entrypoint that serves index-api under /api
 ├── universes/  universe files (ticker, start, end) and build_sp500.py
-├── web/        Astro site that renders outputs/scores.json
+├── web/        Astro site: the screener, the ticker pages, /evidence, /method
 ├── docs/       the manual
-├── deploy/     scores.json, the real scores the deployed page and API show
+├── deploy/     the real scores, ticker reports and evidence the deployed site shows
 ├── scripts/    deploy-data.sh refreshes deploy/, deploy-db.sh loads it
 ├── .github/    contributing guide and the CI workflow
 ├── pyproject.toml   workspace members, ruff, mypy and pytest settings
@@ -23,8 +23,9 @@ Python packages and an Astro site.
 
 `index-core` holds all the logic as functions over data and has no interface.
 `index-cli` and `index-api` call into it and add arguments, formatting and HTTP.
-`web` does not import Python. It reads the JSON file that `eq run` writes, and
-the browser refreshes it from the API.
+`web` does not import Python. It reads the JSON files that `eq run` writes and
+renders them at build time. The screener filters and sorts in the browser over
+the rows the build embedded.
 
 ## A run
 
@@ -77,38 +78,39 @@ features, fits and predicts, and `Store.save_report` keeps the result.
 
 ## Modules of index-core
 
-| Module                                 | Responsible for                                            |
-| -------------------------------------- | ---------------------------------------------------------- |
-| `pipeline.py`                          | `run`, `score`, `backtest` and `coverage` over a store     |
-| `sources/base.py`                      | The source protocols and the columns they return           |
-| `sources/french.py`                    | The Fama-French five-factor daily file                     |
-| `sources/tiingo.py`                    | Tiingo daily prices                                        |
-| `sources/edgar.py`                     | EDGAR `companyfacts`, the concept and tag table            |
-| `sources/transport.py`                 | Request pacing and the on-disk response cache              |
-| `sources/synthetic.py`                 | Deterministic fake prices, filings and factors             |
-| `store.py`                             | SQLite schema, reads, writes and the source guard          |
-| `universe.py`                          | Reading a universe file and answering who was a member     |
-| `features/technical.py`                | The 20 technical features                                  |
-| `features/fundamental.py`              | Facts to trailing figures to the 14 ratios                 |
-| `features/normalize.py`                | Percentile rank within each date                           |
-| `labels.py`                            | The excess-return label                                    |
-| `model.py`                             | Snapshots, the purged split, LightGBM, AUC                 |
-| `scoring.py`                           | Probabilities to ranks and decile scores                   |
-| `walkforward.py`                       | Quarterly refits and out-of-sample predictions             |
-| `baselines.py`                         | The ridge fit and the value, quality, momentum composite   |
-| `evaluation.py`                        | Rank IC, hit rates and block-bootstrap intervals           |
-| `feature_ic.py`                        | Rank IC of each feature alone                              |
-| `portfolio.py`                         | Monthly decile portfolios, turnover, costs, break-even     |
-| `significance.py`                      | Deflated Sharpe Ratio and Fama-French alpha                |
-| `verdict.py`                           | The rule that decides whether a score may be shown         |
-| `periods.py`                           | Trailing-twelve-month pieces from facts, with their facts  |
-| `metrics.py`                           | The metric list and its daily values with percentiles      |
-| `statements.py`                        | `TickerReport`: metrics with the filed figures behind them |
-| `valuation.py`                         | The reverse DCF: implied growth, grid, beta, risk-free     |
-| `risk.py`                              | Beta, volatility, drawdown and the five-factor regression  |
-| `regression.py`                        | Least squares with Newey-West standard errors              |
-| `report.py`                            | `ScoresReport` and `TickerReport`                          |
-| `backtest_text.py`, `coverage_text.py` | The text that `eq backtest` and `eq coverage` print        |
+| Module                                 | Responsible for                                                      |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| `pipeline.py`                          | `run`, `score`, `backtest` and `coverage` over a store               |
+| `sources/base.py`                      | The source protocols and the columns they return                     |
+| `sources/french.py`                    | The Fama-French five-factor daily file                               |
+| `sources/tiingo.py`                    | Tiingo daily prices                                                  |
+| `sources/edgar.py`                     | EDGAR `companyfacts`, the concept and tag table                      |
+| `sources/transport.py`                 | Request pacing and the on-disk response cache                        |
+| `sources/synthetic.py`                 | Deterministic fake prices, filings and factors                       |
+| `store.py`                             | SQLite schema, reads, writes and the source guard                    |
+| `universe.py`                          | Reading a universe file and answering who was a member               |
+| `features/technical.py`                | The 20 technical features                                            |
+| `features/fundamental.py`              | Facts to trailing figures to the 14 ratios                           |
+| `features/normalize.py`                | Percentile rank within each date                                     |
+| `labels.py`                            | The excess-return label                                              |
+| `model.py`                             | Snapshots, the purged split, LightGBM, AUC                           |
+| `scoring.py`                           | Probabilities to ranks and decile scores                             |
+| `walkforward.py`                       | Quarterly refits and out-of-sample predictions                       |
+| `baselines.py`                         | The ridge fit and the value, quality, momentum composite             |
+| `evaluation.py`                        | Rank IC, hit rates and block-bootstrap intervals                     |
+| `feature_ic.py`                        | Rank IC of each feature alone                                        |
+| `portfolio.py`                         | Monthly decile portfolios, turnover, costs, break-even               |
+| `significance.py`                      | Deflated Sharpe Ratio and Fama-French alpha                          |
+| `verdict.py`                           | The rule that decides whether a score may be shown                   |
+| `periods.py`                           | Trailing-twelve-month pieces from facts, with their facts            |
+| `metrics.py`                           | The metric list and its daily values with percentiles                |
+| `statements.py`                        | `TickerReport`: metrics with the filed figures behind them           |
+| `valuation.py`                         | The reverse DCF: implied growth, grid, beta, risk-free               |
+| `risk.py`                              | Beta, volatility, drawdown and the five-factor regression            |
+| `regression.py`                        | Least squares with Newey-West standard errors                        |
+| `report.py`                            | `ScoresReport`, `TickerReport` and `EvidenceReport`                  |
+| `evidence.py`                          | A backtest to its stored rows, and the stored rows to the proof page |
+| `backtest_text.py`, `coverage_text.py` | The text that `eq backtest` and `eq coverage` print                  |
 
 For the model, fundamentals and backtest behavior, see [Model](MODEL.md),
 [Fundamentals](FUNDAMENTALS.md) and [Backtest](BACKTEST.md).

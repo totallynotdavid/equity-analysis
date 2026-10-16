@@ -6,7 +6,8 @@ of a LightGBM model's estimated probability that a stock beats SPY over the next
 
 You give it a universe: tickers with the dates they were members. It fetches
 prices and SEC filings, fits the model and writes the scores to SQLite and to a
-JSON file. A read-only API and a static web page show them.
+JSON file. A read-only API and a static web page show them: a screener, a page
+for each ticker and the evidence of the backtest.
 
 **Experimental, not validated.** The model is fitted once on a chronological,
 purged split of 20 technical and 14 fundamental features. `eq backtest` measures

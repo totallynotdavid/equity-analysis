@@ -126,6 +126,10 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
 5. Computes the [metrics and ticker reports](FUNDAMENTALS.md#ticker-reports) of
    every member that has filings, stores them and writes one file each to
    `--tickers`, replacing the `.json` files there.
+6. Writes the stored [backtest](BACKTEST.md#the-stored-backtest) of the universe
+   to `evidence.json` beside `--out` ([Outputs](OUTPUTS.md#evidencejson)). If
+   there is none, it deletes that file and prints
+   `no backtest stored for the universe; no <path>`.
 
 With a synthetic source, the prices or filings are generated, and `eq run` says
 on stderr that the scores mean nothing.
@@ -275,14 +279,16 @@ does for prices ([below](#the-database)).
 ## The database
 
 The database is one SQLite file. It holds prices, filings, company identities,
-factors, the backtest ledger, every saved run, the latest ticker reports, and
-the `risk` and `exposures` tables of the latest metrics.
+factors, the backtest ledger, every saved run, the latest ticker reports, the
+latest backtest of each universe and period, and the `risk` and `exposures`
+tables of the latest metrics.
 
 - Every command uses the file given by `--db`, else `$INDEX_DB`, else
   `data/index.sqlite`. `eq export` and `eq coverage` open it read-only. When it
   does not exist, they fail and name the other `.sqlite` files beside it.
   `eq backtest` opens it for writing, because it adds to the `trials` ledger
-  ([Backtest](BACKTEST.md#multiple-testing)).
+  ([Backtest](BACKTEST.md#multiple-testing)) and stores its result
+  ([Backtest](BACKTEST.md#the-stored-backtest)).
 - A run is keyed by universe and as-of date. Running the same universe again on
   the same date replaces that run. Other universes and dates stay.
 - A database holds prices from one source and filings from one source. To switch
@@ -307,7 +313,8 @@ Writes the stored run with the latest as-of date. `--universe NAME` limits the
 choice to one universe. Without it, the latest run of any universe is written.
 `--db` and `--out` work as for `eq run`. It also writes the stored ticker
 reports to `--tickers` (default `tickers` beside `--out`), replacing the `.json`
-files there.
+files there, and the stored backtest of the universe to `--evidence` (default
+`evidence.json` beside `--out`), as step 6 of [`eq run`](#eq-run) does.
 
 ## eq import
 

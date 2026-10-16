@@ -177,6 +177,17 @@ and to run `eq factors`. With factors stored but fewer than 12 months covered,
 it says `not computed: the factor file covers too few of the holding months.`
 and does not suggest a command.
 
+## The stored backtest
+
+Each `eq backtest` stores its result in the database, replacing the earlier one
+of the same universe and period (`development` or `holdout`): the run's
+settings, the three checks and the verdict, the out-of-sample predictions, and a
+row of every metric above for each model, year, score and feature. `eq run` and
+`eq export` publish it as `evidence.json`, preferring the holdout run
+([Outputs](OUTPUTS.md#evidencejson)). The web page `/evidence` prints that file
+and computes nothing, so a number on it is a number the backtest stored. The
+ledger below is kept apart: it outlives the runs it counts.
+
 ## Multiple testing
 
 Each `eq backtest` records a specification for each model in the `trials` table
@@ -221,9 +232,13 @@ candidate on the held-out months, all three hold:
 
 Only `--final` prints a verdict, either `Verdict: show the score.` or
 `Verdict: do not show the score.` It lists the development numbers that chose
-the candidate above the three checks. The development period prints the same
-checks on its own months and `Verdict: none`, because it chooses and tests on
-the same months and the settings were also chosen on them.
+the candidate above the three checks. The score is LightGBM's, so the verdict
+shows it only when LightGBM is the candidate. When a baseline is the candidate
+and passes, the verdict is
+`Verdict: do not show the score. The <name> baseline passes the checks, but the score is LightGBM's.`
+The development period prints the same checks on its own months and
+`Verdict: none`, because it chooses and tests on the same months and the
+settings were also chosen on them.
 
 Two looks remain. On unchanged data every `--final` run, whatever its cost or
 settings, tests the same held-out months; each run adds to the ledger, which
