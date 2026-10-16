@@ -4,7 +4,7 @@ import hashlib
 import json
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import pandas as pd
@@ -13,14 +13,16 @@ from index_core.baselines import FAMILIES, RIDGE_PENALTY
 from index_core.evaluation import Evaluation, evaluate
 from index_core.feature_ic import FeatureIC, feature_ics
 from index_core.features.fundamental import (
-    concept_coverage,
+    concept_matrix,
     fundamental_features,
     fundamental_inputs,
+    tag_usage,
 )
 from index_core.features.normalize import rank_by_date
 from index_core.features.technical import FEATURES as TECHNICAL
 from index_core.features.technical import WARMUP_BARS, technical_features
 from index_core.labels import HORIZON, LABEL_SPAN, excess_return_labels, excess_returns
+from index_core.metrics import daily_metrics, optional_float
 from index_core.model import NUM_ROUNDS, PARAMS, SNAPSHOT_STEP, fit, load_lightgbm
 from index_core.portfolio import (
     MIN_PERIODS,
@@ -33,12 +35,14 @@ from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport
 from index_core.scoring import decile_scores
 from index_core.significance import Alpha, Deflated, deflated_sharpe, factor_alpha
 from index_core.sources.base import NotFoundError, empty_facts
+from index_core.statements import ticker_report
 from index_core.universe import BENCHMARK
 from index_core.verdict import Verdict, decide
 from index_core.walkforward import MIN_TRAIN_DATES, MODELS, Fold, walk_forward
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import date
 
     from index_core.sources.base import FactorSource, FilingsSource, PriceSource
@@ -92,8 +96,18 @@ class Backtest:
 
 @dataclass(frozen=True)
 class Coverage:
+    """What the stored filings hold for the members of a universe at `as_of`.
+
+    `present` says per member which concepts have a fresh fact, `concepts`
+    counts them, `tags` is `tag_usage` and `no_company` lists the members the
+    filings source has no company for.
+    """
+
     as_of: date
     concepts: pd.Series
+    present: pd.DataFrame
+    tags: pd.DataFrame
+    no_company: list[str]
     facts_source: str | None
 
 
@@ -119,21 +133,32 @@ def ingest(
 
 
 def ingest_filings(
-    source: FilingsSource, store: Store, tickers: list[str], end: date
+    source: FilingsSource,
+    store: Store,
+    tickers: list[str],
+    end: date,
+    sectors: Mapping[str, str] | None = None,
 ) -> None:
-    """Fetch every company's filed facts again, as filed up to `end`.
+    """Fetch every company's filed facts and identity again, as filed up to `end`.
 
-    A ticker the source does not know has no facts, since a company can lack
-    filings, and whatever an earlier run stored for it is dropped so scoring
-    never uses stale facts. `missing_filings` lists such tickers and
-    `eq coverage` reports them.
+    A ticker the source does not know has no facts and no identity, since a
+    company can lack filings, and whatever an earlier run stored for it is
+    dropped so scoring never uses stale facts. `missing_filings` lists such
+    tickers and `eq coverage` reports them. `sectors` gives the current sector
+    of a ticker, which the source does not know.
     """
+    sectors = sectors or {}
     for ticker in tickers:
         try:
             facts = source.facts(ticker, end)
         except NotFoundError:
             facts = empty_facts()
         store.replace_facts(source.name, ticker, facts)
+        try:
+            security = source.security(ticker)
+        except NotFoundError:
+            security = None
+        store.replace_security(ticker, security, sectors.get(ticker))
 
 
 def ingest_factors(source: FactorSource, store: Store) -> None:
@@ -174,19 +199,87 @@ def ranked_features(
     return rank_by_date(features[universe.mask(features.index)])
 
 
-def coverage(store: Store, universe: Universe) -> Coverage:
-    """Concepts each member has fresh facts for at the latest stored price date."""
-    last = store.read_prices([BENCHMARK])["date"].max()
-    if pd.isna(last):
-        raise ValueError(f"no stored prices for {BENCHMARK}; run `eq run` first")
-    tickers = universe.members_on(last)
-    # A fact filed on the last day is not usable until the next one.
-    counts = concept_coverage(
-        store.read_facts(tickers), tickers, last + pd.Timedelta(days=1)
-    )
+def coverage(store: Store, universe: Universe, as_of: date | None = None) -> Coverage:
+    """Concepts each member has fresh facts for on `as_of`, by default the
+    latest stored price date."""
+    if as_of is None:
+        last = store.read_prices([BENCHMARK])["date"].max()
+        if pd.isna(last):
+            raise ValueError(
+                f"no stored prices for {BENCHMARK}; run `eq run` first or pass --as-of"
+            )
+        day = last
+    else:
+        day = pd.Timestamp(as_of)
+    tickers = universe.members_on(day)
+    facts = store.read_facts(tickers)
+    # A fact filed on the day is not usable until the next one.
+    known = day + pd.Timedelta(days=1)
+    present = concept_matrix(facts, tickers, known)
+    companies = set(store.read_security(tickers)["ticker"])
     return Coverage(
-        as_of=last.date(), concepts=counts, facts_source=store.facts_source()
+        as_of=day.date(),
+        concepts=present.sum(axis=1).rename("concepts").astype(int),
+        present=present,
+        tags=tag_usage(facts, tickers, known),
+        no_company=[t for t in tickers if t not in companies],
+        facts_source=store.facts_source(),
     )
+
+
+def compute_metrics(store: Store, universe: Universe) -> pd.Timestamp:
+    """Compute the daily metrics and the ticker reports of the members, and
+    store them in place of the universe's earlier ones. Returns the date they
+    are as of: the latest stored `SPY` date.
+
+    The dates are those of the stored `SPY` prices, so the prices of the
+    members are not needed. A member the filings source has no company for has
+    no report.
+    """
+    days = store.read_prices([BENCHMARK])["date"]
+    if days.empty:
+        raise ValueError(f"no stored prices for {BENCHMARK}; run `eq run` first")
+    calendar = pd.DatetimeIndex(days.sort_values().unique())
+    as_of = calendar[-1]
+    facts = store.read_facts(universe.tickers)
+    security = store.read_security(universe.tickers).set_index("ticker")
+    sectors = {str(t): str(s) for t, s in security["sector"].dropna().items()}
+
+    metrics = daily_metrics(fundamental_inputs(facts, calendar), universe, sectors)
+    store.replace_metrics(universe.name, metrics)
+
+    percentiles: dict[str, dict[str, tuple[float | None, float | None]]] = {}
+    today = metrics[metrics["as_of"] == as_of]
+    for ticker, metric, pct_universe, pct_sector in zip(
+        today["ticker"],
+        today["metric"],
+        today["pct_universe"],
+        today["pct_sector"],
+        strict=True,
+    ):
+        percentiles.setdefault(ticker, {})[metric] = (
+            optional_float(pct_universe),
+            optional_float(pct_sector),
+        )
+
+    reports = []
+    source = store.facts_source()
+    for ticker in universe.members_on(as_of):
+        if source is None or ticker not in security.index:
+            continue
+        report = ticker_report(
+            ticker,
+            universe.name,
+            as_of,
+            source,
+            cast("dict[str, Any]", security.loc[ticker].to_dict()),
+            facts[facts["ticker"] == ticker],
+            percentiles.get(ticker, {}),
+        )
+        if report is not None:
+            reports.append(report)
+    store.replace_ticker_reports(universe.name, reports)
+    return as_of
 
 
 def score(store: Store, universe: Universe) -> ScoresReport:
@@ -464,7 +557,7 @@ def run(
     store.require_sources(source.name, filings.name)
     tickers = universe.members_between(start, end)
     ingest(source, store, tickers, start, end)
-    ingest_filings(filings, store, tickers, end)
+    ingest_filings(filings, store, tickers, end, universe.sectors)
     unpriced = missing_prices(store, tickers)
     unfiled = [t for t in missing_filings(store, tickers) if t not in unpriced]
     left_out = [
@@ -476,4 +569,5 @@ def run(
         raise ValueError("no ticker has both prices and filings")
     report = score(store, scored).model_copy(update={"left_out": left_out})
     store.save_report(report)
+    compute_metrics(store, scored)
     return report

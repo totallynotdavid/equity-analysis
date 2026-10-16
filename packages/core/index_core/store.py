@@ -9,17 +9,27 @@ from typing import TYPE_CHECKING, Self
 
 import pandas as pd
 
-from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport
-from index_core.sources.base import FACTOR_COLUMNS, PRICE_COLUMNS
+from index_core.metrics import optional_float
+from index_core.report import (
+    LeftOut,
+    ModelInfo,
+    ScoreRow,
+    ScoresReport,
+    TickerReport,
+)
+from index_core.sources.base import FACT_COLUMNS, FACTOR_COLUMNS, PRICE_COLUMNS
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from types import TracebackType
+
+    from index_core.sources.base import Security
 
 DB_VARIABLE = "INDEX_DB"
 
 # Raise it when `_SCHEMA` changes. A database is rebuilt, never migrated.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS meta (
@@ -40,7 +50,37 @@ CREATE TABLE IF NOT EXISTS facts (
     filed TEXT NOT NULL,
     value REAL NOT NULL,
     priority INTEGER NOT NULL,
+    accn TEXT NOT NULL,
+    form TEXT NOT NULL,
+    fy INTEGER NOT NULL,
+    fp TEXT NOT NULL,
+    cik INTEGER NOT NULL,
     PRIMARY KEY (ticker, concept, start, end, filed, priority)
+);
+CREATE TABLE IF NOT EXISTS security (
+    ticker TEXT PRIMARY KEY,
+    cik INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    sic TEXT NOT NULL,
+    sic_description TEXT NOT NULL,
+    sector TEXT
+);
+CREATE TABLE IF NOT EXISTS metrics (
+    universe TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    value REAL NOT NULL,
+    pct_universe REAL,
+    pct_sector REAL,
+    PRIMARY KEY (universe, ticker, metric, as_of)
+);
+CREATE TABLE IF NOT EXISTS ticker_reports (
+    universe TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    body TEXT NOT NULL,
+    PRIMARY KEY (universe, ticker)
 );
 CREATE TABLE IF NOT EXISTS factor_returns (
     date TEXT PRIMARY KEY,
@@ -147,6 +187,10 @@ class Store:
         after the first request.
         """
         self._require("price_source", "prices", prices)
+        self.require_filings(filings)
+
+    def require_filings(self, filings: str) -> None:
+        """Raise `StoreError` if the stored facts come from another source."""
         self._require("facts_source", "facts", filings)
 
     def _require(self, key: str, kind: str, source: str) -> None:
@@ -228,16 +272,21 @@ class Store:
                 for column in ("start", "end", "filed")
             }
             self._db.executemany(
-                "INSERT INTO facts VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO facts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    (ticker, concept, start, end, filed, value, priority)
-                    for concept, start, end, filed, value, priority in zip(
+                    (ticker, concept, start, end, filed, value, priority, *filing)
+                    for concept, start, end, filed, value, priority, *filing in zip(
                         facts["concept"],
                         days["start"].fillna(""),
                         days["end"],
                         days["filed"],
                         facts["value"],
                         facts["priority"],
+                        facts["accn"],
+                        facts["form"],
+                        facts["fy"],
+                        facts["fp"],
+                        facts["cik"],
                         strict=True,
                     )
                 ),
@@ -253,9 +302,11 @@ class Store:
     def read_facts(self, tickers: list[str]) -> pd.DataFrame:
         """Long frame with `ticker` and the `FACT_COLUMNS`."""
         marks = ", ".join("?" * len(tickers))
+        columns = ", ".join(FACT_COLUMNS)
         frame = pd.read_sql_query(
-            "SELECT ticker, concept, start, end, filed, value, priority FROM facts "
-            f"WHERE ticker IN ({marks}) ORDER BY ticker, concept, end, start, filed",
+            f"SELECT ticker, {columns} FROM facts "
+            f"WHERE ticker IN ({marks}) "
+            "ORDER BY ticker, concept, end, start, filed, priority",
             self._db,
             params=tickers,
         )
@@ -263,6 +314,128 @@ class Store:
         for column in ("start", "end", "filed"):
             frame[column] = pd.to_datetime(frame[column]).astype("datetime64[ns]")
         return frame
+
+    def replace_security(
+        self, ticker: str, security: Security | None, sector: str | None
+    ) -> None:
+        """Store who a ticker is, dropping what was stored before. `None` for a
+        ticker the filings source has no company for."""
+        with self._db:
+            self._db.execute("DELETE FROM security WHERE ticker = ?", (ticker,))
+            if security is not None:
+                self._db.execute(
+                    "INSERT INTO security VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        ticker,
+                        security.cik,
+                        security.name,
+                        security.sic,
+                        security.sic_description,
+                        sector,
+                    ),
+                )
+
+    def read_security(self, tickers: Sequence[str]) -> pd.DataFrame:
+        """The stored securities among `tickers`: `ticker`, `cik`, `name`, `sic`,
+        `sic_description` and `sector`, which is the current GICS sector."""
+        marks = ", ".join("?" * len(tickers))
+        return pd.read_sql_query(
+            "SELECT ticker, cik, name, sic, sic_description, sector FROM security "
+            f"WHERE ticker IN ({marks}) ORDER BY ticker",
+            self._db,
+            params=list(tickers),
+        )
+
+    def replace_metrics(self, universe: str, metrics: pd.DataFrame) -> None:
+        """Store the daily metrics of a universe, dropping those stored before.
+
+        `metrics` has `ticker`, `as_of`, `metric`, `value`, `pct_universe` and
+        `pct_sector`.
+        """
+        days = metrics["as_of"].dt.strftime("%Y-%m-%d")
+        with self._db:
+            self._db.execute("DELETE FROM metrics WHERE universe = ?", (universe,))
+            self._db.executemany(
+                "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    (
+                        universe,
+                        ticker,
+                        metric,
+                        day,
+                        value,
+                        optional_float(pu),
+                        optional_float(ps),
+                    )
+                    for ticker, metric, day, value, pu, ps in zip(
+                        metrics["ticker"],
+                        metrics["metric"],
+                        days,
+                        metrics["value"],
+                        metrics["pct_universe"],
+                        metrics["pct_sector"],
+                        strict=True,
+                    )
+                ),
+            )
+
+    def read_metrics(self, universe: str, ticker: str) -> pd.DataFrame:
+        """The stored daily metrics of one ticker: `as_of`, `metric`, `value`,
+        `pct_universe` and `pct_sector`, oldest first."""
+        frame = pd.read_sql_query(
+            "SELECT as_of, metric, value, pct_universe, pct_sector FROM metrics "
+            "WHERE universe = ? AND ticker = ? ORDER BY as_of, metric",
+            self._db,
+            params=[universe, ticker],
+        )
+        frame["as_of"] = pd.to_datetime(frame["as_of"])
+        return frame
+
+    def replace_ticker_reports(
+        self, universe: str, reports: Sequence[TickerReport]
+    ) -> None:
+        """Store the ticker reports of a universe, dropping those stored before."""
+        with self._db:
+            self._db.execute(
+                "DELETE FROM ticker_reports WHERE universe = ?", (universe,)
+            )
+            self.add_ticker_reports(reports)
+
+    def add_ticker_reports(self, reports: Sequence[TickerReport]) -> None:
+        """Store ticker reports, replacing any of the same universe and ticker."""
+        with self._db:
+            self._db.executemany(
+                "INSERT OR REPLACE INTO ticker_reports VALUES (?, ?, ?, ?)",
+                (
+                    (
+                        report.universe,
+                        report.ticker,
+                        report.as_of.isoformat(),
+                        report.model_dump_json(),
+                    )
+                    for report in reports
+                ),
+            )
+
+    def ticker_report(self, ticker: str) -> TickerReport | None:
+        """The report of `ticker` with the latest as-of date, the last stored on
+        a tie."""
+        row = self._db.execute(
+            "SELECT body FROM ticker_reports WHERE ticker = ? "
+            "ORDER BY as_of DESC, rowid DESC LIMIT 1",
+            (ticker,),
+        ).fetchone()
+        return None if row is None else TickerReport.model_validate_json(row[0])
+
+    def ticker_reports(self, universe: str) -> list[TickerReport]:
+        """Every stored report of a universe, by ticker."""
+        return [
+            TickerReport.model_validate_json(row[0])
+            for row in self._db.execute(
+                "SELECT body FROM ticker_reports WHERE universe = ? ORDER BY ticker",
+                (universe,),
+            )
+        ]
 
     def replace_factors(self, source: str, factors: pd.DataFrame) -> None:
         """Store the factor returns, dropping any stored before.

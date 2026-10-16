@@ -16,6 +16,7 @@ import pandas as pd
 from index_core.sources.base import (
     FACT_COLUMNS,
     NotFoundError,
+    Security,
     SourceError,
     empty_facts,
     normalise_ticker,
@@ -24,6 +25,7 @@ from index_core.sources.transport import CachingTransport, PacedTransport
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import date
     from pathlib import Path
 
@@ -45,10 +47,14 @@ class Concept:
     Companies change tags over time (revenue has several), so the tags are in
     priority order and a period takes the first tag that reports it.
 
+    A `flow` is a quantity over a period that adds up across periods. An
+    `average` is a quantity over a period that does not, such as the weighted
+    share count. An `instant` is a value on one date.
+
     A `payment` is kept as a positive amount paid. Filers differ on its sign.
     """
 
-    kind: Literal["flow", "instant"]
+    kind: Literal["flow", "instant", "average"]
     unit: str
     tags: tuple[str, ...]
     taxonomy: str = "us-gaap"
@@ -64,11 +70,43 @@ CONCEPTS = {
             "RevenueFromContractWithCustomerExcludingAssessedTax",
             "RevenueFromContractWithCustomerIncludingAssessedTax",
             "SalesRevenueNet",
+            "RevenuesNetOfInterestExpense",
         ),
     ),
     "gross_profit": Concept("flow", "USD", ("GrossProfit",)),
     "operating_income": Concept("flow", "USD", ("OperatingIncomeLoss",)),
     "net_income": Concept("flow", "USD", ("NetIncomeLoss", "ProfitLoss")),
+    "pretax_income": Concept(
+        "flow",
+        "USD",
+        (
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+            "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+        ),
+    ),
+    "income_tax": Concept("flow", "USD", ("IncomeTaxExpenseBenefit",)),
+    "interest_expense": Concept(
+        "flow",
+        "USD",
+        (
+            "InterestExpense",
+            "InterestExpenseNonoperating",
+            "InterestExpenseDebt",
+            "InterestAndDebtExpense",
+        ),
+        payment=True,
+    ),
+    "stock_compensation": Concept(
+        "flow",
+        "USD",
+        ("ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"),
+    ),
+    "eps_diluted": Concept("flow", "USD/shares", ("EarningsPerShareDiluted",)),
+    "diluted_shares": Concept(
+        "average",
+        "shares",
+        ("WeightedAverageNumberOfDilutedSharesOutstanding",),
+    ),
     "depreciation": Concept(
         "flow",
         "USD",
@@ -92,7 +130,13 @@ CONCEPTS = {
     ),
     "total_assets": Concept("instant", "USD", ("Assets",)),
     "long_term_debt": Concept(
-        "instant", "USD", ("LongTermDebtNoncurrent", "LongTermDebt")
+        "instant",
+        "USD",
+        (
+            "LongTermDebtNoncurrent",
+            "LongTermDebt",
+            "LongTermDebtAndCapitalLeaseObligations",
+        ),
     ),
     "current_debt": Concept("instant", "USD", ("DebtCurrent", "LongTermDebtCurrent")),
     "equity": Concept(
@@ -118,6 +162,13 @@ def _is_balance(concept: str) -> bool:
     return CONCEPTS[concept].kind == "instant"
 
 
+def filing_url(cik: int, accn: str) -> str:
+    """The EDGAR page that lists the documents of one filing."""
+    return (
+        f"{WWW_URL}/Archives/edgar/data/{cik}/{accn.replace('-', '')}/{accn}-index.htm"
+    )
+
+
 def parse_companyfacts(payload: object, ticker: str = "?") -> pd.DataFrame:
     """The facts of one `companyfacts` document in the `FACT_COLUMNS` columns.
 
@@ -125,7 +176,8 @@ def parse_companyfacts(payload: object, ticker: str = "?") -> pd.DataFrame:
     `FORMS`. `start` is NaT for a balance-sheet value. `priority` is the tag's
     position in its concept's list. A fact reported more than once keeps one row
     per filing, which is how a restatement shows up. A cover-page share count
-    that a filing gives per class is summed.
+    that a filing gives per class is summed. `accn`, `form`, `fy` and `fp` are
+    the filing's own, as EDGAR sends them, and `cik` is the document's company.
     """
     if not isinstance(payload, dict) or not isinstance(payload.get("facts"), dict):
         raise SourceError(f"EDGAR sent no facts for {ticker}")
@@ -140,12 +192,16 @@ def parse_companyfacts(payload: object, ticker: str = "?") -> pd.DataFrame:
                 rows.extend(
                     {
                         "concept": concept,
-                        "start": entry.get("start") if spec.kind == "flow" else None,
+                        "start": entry.get("start") if spec.kind != "instant" else None,
                         "end": entry["end"],
                         "filed": entry["filed"],
                         "value": abs(entry["val"]) if spec.payment else entry["val"],
                         "priority": priority,
-                        "accn": entry.get("accn", ""),
+                        "accn": entry["accn"],
+                        "form": entry["form"],
+                        "fy": entry["fy"],
+                        "fp": entry["fp"],
+                        "cik": int(payload["cik"]),
                     }
                     for entry in entries
                     if entry.get("form") in FORMS
@@ -159,15 +215,17 @@ def parse_companyfacts(payload: object, ticker: str = "?") -> pd.DataFrame:
     for column in ("start", "end", "filed"):
         frame[column] = pd.to_datetime(frame[column]).astype("datetime64[ns]")
     frame["value"] = frame["value"].astype(float)
+    frame["fy"] = frame["fy"].astype(int)
     frame = frame.dropna(subset=["end", "filed", "value"])
     # A period without a start cannot be told apart from a quarter or a year.
     frame = frame[frame["start"].notna() | frame["concept"].map(_is_balance)]
     is_shares = frame["concept"] == "shares"
     per_filing = (
         frame[is_shares]
-        .groupby(["concept", "end", "filed", "priority", "accn"], as_index=False)[
-            "value"
-        ]
+        .groupby(
+            ["concept", "end", "filed", "priority", "accn", "form", "fy", "fp", "cik"],
+            as_index=False,
+        )["value"]
         .sum()
         .assign(start=pd.NaT)
     )
@@ -190,6 +248,7 @@ class EdgarSource:
         transport: httpx2.BaseTransport | None = None,
         min_interval: float = MIN_INTERVAL,
         cache: Path | None = None,
+        ciks: Mapping[str, tuple[int, ...]] | None = None,
     ) -> None:
         paced: httpx2.BaseTransport = PacedTransport(
             transport or httpx2.HTTPTransport(), min_interval
@@ -199,45 +258,82 @@ class EdgarSource:
         self._client = httpx2.Client(
             headers={"User-Agent": user_agent}, timeout=30.0, transport=paced
         )
-        self._ciks: dict[str, int] | None = None
+        self._known = {normalise_ticker(t): cik for t, cik in (ciks or {}).items()}
+        self._listed: dict[str, int] | None = None
 
     @classmethod
-    def from_env(cls, cache: Path | None = None) -> EdgarSource:
+    def from_env(
+        cls,
+        cache: Path | None = None,
+        ciks: Mapping[str, tuple[int, ...]] | None = None,
+    ) -> EdgarSource:
         user_agent = os.environ.get(USER_AGENT_VARIABLE)
         if not user_agent:
             raise SourceError(
-                f"{USER_AGENT_VARIABLE} is not set; SEC requires a User-Agent "
-                'with a contact, such as "Jane Doe jane@example.com"'
+                f"{USER_AGENT_VARIABLE} is not set; the SEC refuses a request "
+                "without a User-Agent"
             )
-        return cls(user_agent, cache=cache)
+        return cls(user_agent, cache=cache, ciks=ciks)
 
     def facts(self, ticker: str, end: date) -> pd.DataFrame:
-        cik = self._cik(ticker)
-        frame = parse_companyfacts(
-            self._get_json(
-                f"{DATA_URL}/api/xbrl/companyfacts/CIK{cik:010d}.json",
-                per_company=True,
-            ),
-            ticker,
-        )
-        return frame[frame["filed"] <= pd.Timestamp(end)].reset_index(drop=True)
+        frames = [
+            parse_companyfacts(
+                self._get_json(
+                    f"{DATA_URL}/api/xbrl/companyfacts/CIK{cik:010d}.json",
+                    per_company=True,
+                ),
+                ticker,
+            )
+            for cik in self._ciks(ticker)
+        ]
+        frame = frames[0] if len(frames) == 1 else pd.concat(frames)
+        frame = frame.sort_values(["concept", "end", "start", "filed", "priority"])
+        frame = frame[frame["filed"] <= pd.Timestamp(end)]
+        return frame.reset_index(drop=True)
 
-    def _cik(self, ticker: str) -> int:
-        if self._ciks is None:
+    def security(self, ticker: str) -> Security:
+        """Who the ticker is now: the first of its registrants."""
+        cik = self._ciks(ticker)[0]
+        document = self._get_json(
+            f"{DATA_URL}/submissions/CIK{cik:010d}.json", per_company=True
+        )
+        if not isinstance(document, dict):
+            raise SourceError(f"EDGAR sent no submissions for {ticker}")
+        try:
+            return Security(
+                cik=cik,
+                name=str(document["name"]),
+                sic=str(document.get("sic") or ""),
+                sic_description=str(document.get("sicDescription") or ""),
+            )
+        except KeyError as error:
+            raise SourceError(
+                f"EDGAR sent malformed submissions for {ticker}"
+            ) from error
+
+    def _ciks(self, ticker: str) -> tuple[int, ...]:
+        """The registrants of the company, current first: those given, else the
+        one in the SEC's ticker list, which is fetched on the first ticker that
+        needs it.
+        """
+        key = normalise_ticker(ticker)
+        if key in self._known:
+            return self._known[key]
+        if self._listed is None:
             listing = self._get_json(f"{WWW_URL}/files/company_tickers.json")
             if not isinstance(listing, dict):
                 raise SourceError("EDGAR sent no ticker list")
             try:
-                self._ciks = {
+                self._listed = {
                     str(entry["ticker"]).upper(): int(entry["cik_str"])
                     for entry in listing.values()
                 }
             except (KeyError, TypeError, ValueError) as error:
                 raise SourceError("EDGAR sent a malformed ticker list") from error
-        cik = self._ciks.get(normalise_ticker(ticker))
+        cik = self._listed.get(key)
         if cik is None:
             raise NotFoundError(f"EDGAR has no company for ticker {ticker}")
-        return cik
+        return (cik,)
 
     def _get_json(self, url: str, *, per_company: bool = False) -> object:
         try:

@@ -1,5 +1,6 @@
 """The source interfaces. Network I/O lives behind them and nowhere else."""
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 import pandas as pd
@@ -51,7 +52,23 @@ def check_range(start: date, end: date) -> None:
 # `start` is NaT for a balance-sheet value. `filed` is the day the filing
 # reached the SEC. Nothing in it is known before then. `priority` is the
 # position of the tag that reported the value in its concept's list.
-FACT_COLUMNS = ("concept", "start", "end", "filed", "value", "priority")
+# `accn`, `form`, `fy` and `fp` name the filing that reported the value: its
+# accession number, its form, and the fiscal year and period it describes.
+# `cik` is the registrant that filed it, which differs between the filings of a
+# company that moved to a new registrant.
+FACT_COLUMNS = (
+    "concept",
+    "start",
+    "end",
+    "filed",
+    "value",
+    "priority",
+    "accn",
+    "form",
+    "fy",
+    "fp",
+    "cik",
+)
 
 
 def empty_facts() -> pd.DataFrame:
@@ -63,8 +80,24 @@ def empty_facts() -> pd.DataFrame:
             "filed": pd.Series(dtype="datetime64[ns]"),
             "value": pd.Series(dtype=float),
             "priority": pd.Series(dtype=int),
+            "accn": pd.Series(dtype=str),
+            "form": pd.Series(dtype=str),
+            "fy": pd.Series(dtype=int),
+            "fp": pd.Series(dtype=str),
+            "cik": pd.Series(dtype=int),
         }
     )
+
+
+@dataclass(frozen=True)
+class Security:
+    """Who a ticker is, as the filings source names it. `sic` is the SEC's
+    Standard Industrial Classification code and `sic_description` its title."""
+
+    cik: int
+    name: str
+    sic: str
+    sic_description: str
 
 
 class FilingsSource(Protocol):
@@ -77,6 +110,11 @@ class FilingsSource(Protocol):
         which `ingest_filings` treats as no filings. Any other `SourceError`
         stops the run.
         """
+        ...
+
+    def security(self, ticker: str) -> Security:
+        """The company behind `ticker`. A ticker with no company is a
+        `NotFoundError`; any other failure is a `SourceError`."""
         ...
 
 

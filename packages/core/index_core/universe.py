@@ -4,9 +4,15 @@ A universe file has one membership per line, `ticker,start,end`, and `#` starts
 a comment. A name is a member from `start` through the day before `end`, so
 `end` is the first day it is not. An empty or missing `end` means it still is.
 A ticker can have several memberships if it left and came back.
+
+A file `<name>.companies.csv` beside it, with one `ticker,cik,sector` per line,
+gives the SEC identifier and the current GICS sector of the tickers it lists. A
+company that moved to a new registrant lists the new CIK first and the
+registrants whose filings it continues after it, joined with `+`, as in
+`2115436+34088`. A universe with no such file has neither.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING
 
@@ -32,6 +38,8 @@ class Membership:
 class Universe:
     name: str
     memberships: tuple[Membership, ...]
+    sectors: dict[str, str] = field(default_factory=dict)
+    ciks: dict[str, tuple[int, ...]] = field(default_factory=dict)
 
     @property
     def tickers(self) -> list[str]:
@@ -43,6 +51,8 @@ class Universe:
         return Universe(
             self.name,
             tuple(m for m in self.memberships if m.ticker not in tickers),
+            self.sectors,
+            self.ciks,
         )
 
     def members_between(
@@ -92,7 +102,36 @@ def read_universe(path: Path) -> Universe:
     if not memberships:
         raise ValueError(f"{path} lists no tickers")
     _check_overlaps(memberships, path)
-    return Universe(path.stem, tuple(memberships))
+    sectors, ciks = _read_companies(path)
+    return Universe(path.stem, tuple(memberships), sectors, ciks)
+
+
+def _read_companies(
+    path: Path,
+) -> tuple[dict[str, str], dict[str, tuple[int, ...]]]:
+    companies_path = path.with_suffix(".companies.csv")
+    sectors: dict[str, str] = {}
+    ciks: dict[str, tuple[int, ...]] = {}
+    if not companies_path.exists():
+        return sectors, ciks
+    for number, line in enumerate(companies_path.read_text().splitlines(), start=1):
+        text = line.split("#", 1)[0].strip()
+        if not text:
+            continue
+        fields = [part.strip() for part in text.split(",", 2)]
+        if (
+            len(fields) != 3
+            or not fields[0]
+            or not all(cik.isdigit() for cik in fields[1].split("+"))
+            or not fields[2]
+        ):
+            raise ValueError(
+                f"{companies_path}:{number}: expected `ticker,cik,sector`, got `{text}`"
+            )
+        ticker = fields[0].upper()
+        ciks[ticker] = tuple(int(cik) for cik in fields[1].split("+"))
+        sectors[ticker] = fields[2]
+    return sectors, ciks
 
 
 def _parse(text: str, where: str) -> Membership:

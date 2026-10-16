@@ -10,14 +10,25 @@ balance-sheet values, and share counts known on each date. `fundamental_features
 joins them with the day's price into ratios that compare across companies.
 """
 
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
+from index_core.periods import (
+    YEAR,
+    YEAR_AGO_DAYS,
+    Fact,
+    cumulative_ends,
+    latest_average,
+    near,
+    ttm,
+)
+from index_core.sources.edgar import CONCEPTS
+
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Sequence
 
 FEATURES = (
     "sales_to_ev",
@@ -55,6 +66,12 @@ INPUTS = (
     "shares_prev",
     "shares_prev_end",
     "as_of",
+    "pretax_income",
+    "income_tax",
+    "interest_expense",
+    "stock_compensation",
+    "eps_diluted",
+    "diluted_shares",
 )
 _DATE_INPUTS = ("shares_prev_end", "as_of")
 
@@ -66,23 +83,9 @@ MAX_LAG = 460
 # The oldest period a feature reads is a year before a TTM that itself reads two
 # years, from a concept that may lag the newest period by about `MAX_LAG`.
 _WINDOW = 4 * 365
-_YEAR = 365
-# Fiscal quarters of 52 and 53 week years differ by a few days. Cumulative
-# periods of a fiscal year end after about 3, 6, 9 and 12 months.
-_SPANS = ((80, 100), (170, 195), (260, 285), (350, 380))
-_ANNUAL = _SPANS[-1]
-_YEAR_AGO_DAYS = 14
 _BALANCE_DAYS = 20
 # A cover-page date moves by several weeks from one year to the next.
 _SHARES_DAYS = 60
-
-
-class _Fact(NamedTuple):
-    """A period as days since 1970. A balance-sheet value has `start == end`."""
-
-    start: int
-    end: int
-    value: float
 
 
 def fundamental_inputs(facts: pd.DataFrame, calendar: pd.DatetimeIndex) -> pd.DataFrame:
@@ -161,7 +164,7 @@ def _snapshot(
     each one is current."""
     rows = {
         concept: [
-            _Fact(start, end, value)
+            Fact(start, end, value)
             for (start, end), value in versions.items()
             if end >= newest_end - _WINDOW
         ]
@@ -188,6 +191,12 @@ def _snapshot(
     capex, _, capex_end = flow("capex")
     equity, _, _, equity_end = balance("equity")
     cash, _, _, cash_end = balance("cash")
+    pretax_income, _, pretax_income_end = flow("pretax_income")
+    income_tax, _, income_tax_end = flow("income_tax")
+    interest_expense, _, interest_expense_end = flow("interest_expense")
+    stock_compensation, _, stock_compensation_end = flow("stock_compensation")
+    eps_diluted, _, eps_diluted_end = flow("eps_diluted")
+    diluted_shares, diluted_shares_end = _average(rows.get("diluted_shares", []))
     values = {
         "revenue": (revenue, revenue_end),
         "revenue_prev": (revenue_prev, revenue_end),
@@ -207,6 +216,12 @@ def _snapshot(
         "shares_prev": (shares_prev, shares_end),
         "shares_prev_end": (shares_prev_end, shares_end),
         "as_of": (float(as_of), shares_end),
+        "pretax_income": (pretax_income, pretax_income_end),
+        "income_tax": (income_tax, income_tax_end),
+        "interest_expense": (interest_expense, interest_expense_end),
+        "stock_compensation": (stock_compensation, stock_compensation_end),
+        "eps_diluted": (eps_diluted, eps_diluted_end),
+        "diluted_shares": (diluted_shares, diluted_shares_end),
     }
     return (
         {name: value for name, (value, _) in values.items()},
@@ -214,75 +229,43 @@ def _snapshot(
     )
 
 
-def _span(fact: _Fact) -> int:
-    return fact.end - fact.start
-
-
-def _is_cumulative(fact: _Fact) -> bool:
-    return any(low <= _span(fact) <= high for low, high in _SPANS)
-
-
-def _is_annual(fact: _Fact) -> bool:
-    return _ANNUAL[0] <= _span(fact) <= _ANNUAL[1]
-
-
-def _near(facts: Iterable[_Fact], target: int, days: int) -> list[_Fact]:
-    """Facts ending within `days` of `target`, the closest first."""
-    close = [fact for fact in facts if abs(fact.end - target) <= days]
-    return sorted(close, key=lambda fact: abs(fact.end - target))
-
-
-def _ttm(facts: Sequence[_Fact], end: int) -> float | None:
-    """Twelve months to `end`: the last fiscal year plus this year's cumulative
-    period minus the same period a year ago. None if a piece is missing."""
-    cumulative = [fact for fact in facts if fact.end == end and _is_cumulative(fact)]
-    if not cumulative:
-        return None
-    current = max(cumulative, key=_span)
-    if _is_annual(current):
-        return current.value
-    fiscal_year = [
-        fact for fact in _near(facts, current.start - 1, 7) if _is_annual(fact)
-    ]
-    year_ago = [
-        fact
-        for fact in _near(facts, end - _YEAR, _YEAR_AGO_DAYS)
-        if abs(_span(fact) - _span(current)) <= 10
-    ]
-    if not fiscal_year or not year_ago:
-        return None
-    return fiscal_year[0].value + current.value - year_ago[0].value
-
-
-def _flow_ttm(facts: list[_Fact]) -> tuple[float, float, float]:
+def _flow_ttm(facts: list[Fact]) -> tuple[float, float, float]:
     """The latest TTM, the TTM a year before it and the end of the latest, NaN
     where unknown."""
-    ends = sorted({fact.end for fact in facts if _is_cumulative(fact)}, reverse=True)
-    for end in ends:
-        latest = _ttm(facts, end)
+    for end in cumulative_ends(facts):
+        latest = ttm(facts, end)
         if latest is None:
             continue
-        for fact in _near(facts, end - _YEAR, _YEAR_AGO_DAYS):
-            earlier = _ttm(facts, fact.end)
+        for fact in near(facts, end - YEAR, YEAR_AGO_DAYS):
+            earlier = ttm(facts, fact.end)
             if earlier is not None:
                 return latest, earlier, float(end)
         return latest, np.nan, float(end)
     return np.nan, np.nan, np.nan
 
 
-def _balance(facts: list[_Fact], days: int) -> tuple[float, float, float, float]:
+def _average(facts: list[Fact]) -> tuple[float, float]:
+    """The latest period's average and the end of that period, NaN where
+    unknown."""
+    latest = latest_average(facts)
+    if latest is None:
+        return np.nan, np.nan
+    return latest.value, float(latest.end)
+
+
+def _balance(facts: list[Fact], days: int) -> tuple[float, float, float, float]:
     """The latest value, the one a year before it, that one's date and the
     latest date."""
     if not facts:
         return np.nan, np.nan, np.nan, np.nan
     latest = max(facts, key=lambda fact: fact.end)
-    earlier = _near(facts, latest.end - _YEAR, days)
+    earlier = near(facts, latest.end - YEAR, days)
     if not earlier:
         return latest.value, np.nan, np.nan, float(latest.end)
     return latest.value, earlier[0].value, float(earlier[0].end), float(latest.end)
 
 
-def _debt(rows: dict[str, list[_Fact]]) -> tuple[float, float]:
+def _debt(rows: dict[str, list[Fact]]) -> tuple[float, float]:
     """Long-term debt plus the current portion reported for the same date, and
     that date. A company that reports no current debt then is taken to have
     none."""
@@ -376,6 +359,27 @@ def _lookup(
     return out
 
 
+def _fresh(facts: pd.DataFrame, as_of: pd.Timestamp) -> pd.DataFrame:
+    """The facts filed before `as_of` whose period ended within `MAX_LAG` days of
+    it."""
+    known = facts[facts["filed"] < as_of]
+    return known[known["end"] >= as_of - pd.Timedelta(days=MAX_LAG)]
+
+
+def concept_matrix(
+    facts: pd.DataFrame, tickers: Sequence[str], as_of: pd.Timestamp
+) -> pd.DataFrame:
+    """Whether each ticker has a fresh fact of each concept at `as_of`, one row
+    per ticker and one column per concept. A ticker with no facts has none."""
+    present = _fresh(facts, as_of).groupby(["ticker", "concept"]).size().unstack()
+    return (
+        present.notna()
+        .reindex(index=list(tickers), columns=list(CONCEPTS), fill_value=False)
+        .fillna(False)
+        .astype(bool)
+    )
+
+
 def concept_coverage(
     facts: pd.DataFrame, tickers: Sequence[str], as_of: pd.Timestamp
 ) -> pd.Series:
@@ -384,9 +388,32 @@ def concept_coverage(
     A fact counts if it was filed before `as_of` and its period ended within
     `MAX_LAG` days of `as_of`. A ticker with no facts has 0.
     """
-    known = facts[facts["filed"] < as_of]
-    counts = dict.fromkeys(tickers, 0)
-    for ticker, group in known.groupby("ticker"):
-        fresh = group[group["end"] >= as_of - pd.Timedelta(days=MAX_LAG)]
-        counts[str(ticker)] = fresh["concept"].nunique()
-    return pd.Series(counts, name="concepts").loc[list(tickers)].astype(int)
+    counts = concept_matrix(facts, tickers, as_of).sum(axis=1)
+    return counts.rename("concepts").astype(int)
+
+
+def tag_usage(
+    facts: pd.DataFrame, tickers: Sequence[str], as_of: pd.Timestamp
+) -> pd.DataFrame:
+    """How many of `tickers` report each tag of each concept.
+
+    The frame has one row per tag, in the order of `CONCEPTS`, with `concept`,
+    `tag`, `fresh`, the tickers with a fresh fact under it at `as_of`, and
+    `ever`, the tickers with any fact filed before `as_of`. A tag with no fresh
+    ticker is dead for these tickers.
+    """
+    wanted = facts[facts["ticker"].isin(tickers)]
+    known = wanted[wanted["filed"] < as_of]
+    ever = known.groupby(["concept", "priority"])["ticker"].nunique()
+    fresh = _fresh(wanted, as_of).groupby(["concept", "priority"])["ticker"].nunique()
+    rows = [
+        {
+            "concept": concept,
+            "tag": tag,
+            "fresh": int(fresh.get((concept, priority), 0)),
+            "ever": int(ever.get((concept, priority), 0)),
+        }
+        for concept, spec in CONCEPTS.items()
+        for priority, tag in enumerate(spec.tags)
+    ]
+    return pd.DataFrame(rows, columns=["concept", "tag", "fresh", "ever"])

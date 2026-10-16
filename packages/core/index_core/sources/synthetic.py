@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from index_core.sources.base import FACTOR_COLUMNS, SourceError, check_range
+from index_core.sources.base import FACTOR_COLUMNS, Security, SourceError, check_range
 from index_core.sources.edgar import CONCEPTS, parse_companyfacts
 
 
@@ -39,6 +39,10 @@ _FLOW_SHARE = {
     "gross_profit": 0.45,
     "operating_income": 0.15,
     "net_income": 0.10,
+    "pretax_income": 0.13,
+    "income_tax": 0.03,
+    "interest_expense": 0.01,
+    "stock_compensation": 0.02,
     "depreciation": 0.04,
     "operating_cash_flow": 0.13,
     "capex": 0.05,
@@ -152,6 +156,14 @@ class SyntheticFilings:
         frame = parse_companyfacts(self.companyfacts(ticker), ticker)
         return frame[frame["filed"] <= pd.Timestamp(end)].reset_index(drop=True)
 
+    def security(self, ticker: str) -> Security:
+        return Security(
+            cik=_crc(ticker),
+            name=f"{ticker} Holdings Inc.",
+            sic="7372",
+            sic_description="Services-Prepackaged Software",
+        )
+
     def companyfacts(self, ticker: str) -> dict[str, Any]:
         quarters = 4 * (LAST_YEAR - FIRST_YEAR + 1)
         rng = np.random.default_rng([self._seed, _FILINGS, _crc(ticker)])
@@ -183,6 +195,9 @@ class SyntheticFilings:
             * np.exp(np.cumsum(0.002 * rng.standard_normal(quarters)))
         )
 
+        diluted = balance["shares"] * 1.02
+        flows["eps_diluted"] = flows["net_income"] / diluted
+
         facts: dict[str, dict[str, dict[str, Any]]] = {"dei": {}, "us-gaap": {}}
         units: dict[str, list[dict[str, Any]]] = {name: [] for name in CONCEPTS}
         for position in range(quarters):
@@ -208,6 +223,14 @@ class SyntheticFilings:
                         **filing,
                     }
                 )
+            units["diluted_shares"].append(
+                {
+                    "start": f"{year}-01-01",
+                    "end": period_end.date().isoformat(),
+                    "val": float(round(diluted[position])),
+                    **filing,
+                }
+            )
             for name, series in balance.items():
                 end_date = (
                     period_end if name != "shares" else filed - pd.Timedelta(days=8)
