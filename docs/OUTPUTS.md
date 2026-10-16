@@ -56,6 +56,7 @@ beside `--out` unless `--tickers` says otherwise ([CLI](CLI.md)), on one line.
 | `series[].pct_universe`  | Percent of the universe at or below the latest value, `null` if too few                                                                                       |
 | `series[].pct_sector`    | The same within the sector                                                                                                                                    |
 | `series[].points[]`      | The latest twelve periods, oldest first: `end`, `value`, `formula`, `parts`                                                                                   |
+| `valuation`              | What the price implies ([Valuation](VALUATION.md)): `status` is `ok` with a `model`, or `not_meaningful` with a `reason`. A file made before it has none      |
 | `parts[]`                | A filed figure: `metric`, `sign` (1 or -1), `tag`, `start` (`null` for a balance), `end`, `value` and its `filing`                                            |
 | `filing`                 | `accn`, `form`, `fy`, `fp`, `filed` and `url`, the EDGAR page that lists the filing's documents                                                               |
 
@@ -128,4 +129,8 @@ formula instead. Below each metric a list shows every filed figure its values
 are made of, with sign, tag, period and a link to its filing. A page of
 `synthetic` filings warns that its figures mean nothing. Dollar and share
 amounts that are whole millions or thousands are written in them, as the
-statements are; others are written in full.
+statements are; others are written in full. After the tables, the valuation
+section says what growth the price implies, shows the grid of the model's value
+of a share by discount rate and growth with the cells at or above the price in
+bold, and lists the inputs. A ticker that is not meaningful to value shows the
+reason instead.

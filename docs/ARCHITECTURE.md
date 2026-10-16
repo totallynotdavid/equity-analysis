@@ -104,6 +104,7 @@ features, fits and predicts, and `Store.save_report` keeps the result.
 | `periods.py`                           | Trailing-twelve-month pieces from facts, with their facts  |
 | `metrics.py`                           | The metric list and its daily values with percentiles      |
 | `statements.py`                        | `TickerReport`: metrics with the filed figures behind them |
+| `valuation.py`                         | The reverse DCF: implied growth, grid, beta, risk-free     |
 | `report.py`                            | `ScoresReport` and `TickerReport`                          |
 | `backtest_text.py`, `coverage_text.py` | The text that `eq backtest` and `eq coverage` print        |
 

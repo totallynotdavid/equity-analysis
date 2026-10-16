@@ -88,7 +88,8 @@ when earnings or EBITDA are not positive.
 A ticker report is what the page of a ticker shows
 ([Outputs](OUTPUTS.md#ticker-reports)). For each of the 21 metrics in
 [`metrics.py`](../packages/core/index_core/metrics.py) it holds the latest
-twelve points, oldest first, and the percentile of the latest value.
+twelve points, oldest first, and the percentile of the latest value. It also
+holds the [valuation](VALUATION.md) of the ticker.
 
 | Group            | Metrics                                                                                                                        |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
