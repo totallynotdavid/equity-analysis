@@ -11,6 +11,7 @@ import pandas as pd
 
 from index_core.baselines import FAMILIES, RIDGE_PENALTY
 from index_core.evaluation import Evaluation, evaluate
+from index_core.evidence import backtest_record
 from index_core.feature_ic import FeatureIC, feature_ics
 from index_core.features.fundamental import (
     concept_matrix,
@@ -448,7 +449,9 @@ def backtest(
 
     Each model's net spread is added to the store's trial ledger, on the
     development months and, with `final`, on the held-out ones, so the deflated
-    Sharpe ratio counts every specification ever run on that store.
+    Sharpe ratio counts every specification ever run on that store. The result
+    is stored too, in place of the earlier backtest of the same universe and
+    period, for the proof page.
     `cost` is the fraction of each trade's notional lost, one way.
     """
     if cost < 0:
@@ -521,7 +524,7 @@ def backtest(
 
     selection_models = models_of(development, selection)
     models = models_of(chosen, tested) if final else selection_models
-    return Backtest(
+    backtested = Backtest(
         models=models,
         features=feature_ics(
             features.reindex(chosen.index).join(chosen["excess"]),
@@ -539,6 +542,8 @@ def backtest(
         members=len(required),
         unpriced=unpriced,
     )
+    store.save_backtest(*backtest_record(backtested, universe.name))
+    return backtested
 
 
 type _Measured = tuple[Holdings, Strategy, Strategy]

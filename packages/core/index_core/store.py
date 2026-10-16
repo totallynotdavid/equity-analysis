@@ -5,20 +5,25 @@ import sqlite3
 
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, NamedTuple, Self
 
 import pandas as pd
 
 from index_core.metrics import optional_float
 from index_core.report import (
+    Check,
+    EvidenceRun,
     LeftOut,
     ModelInfo,
     Risk,
     ScoreRow,
     ScoresReport,
     TickerReport,
+    Trial,
+    Verdict,
 )
 from index_core.sources.base import FACT_COLUMNS, FACTOR_COLUMNS, PRICE_COLUMNS
+from index_core.walkforward import MODELS
 
 
 if TYPE_CHECKING:
@@ -30,7 +35,7 @@ if TYPE_CHECKING:
 DB_VARIABLE = "INDEX_DB"
 
 # Raise it when `_SCHEMA` changes. A database is rebuilt, never migrated.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS meta (
@@ -117,6 +122,57 @@ CREATE TABLE IF NOT EXISTS trials (
     months INTEGER NOT NULL,
     sharpe REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS backtests (
+    run_id INTEGER PRIMARY KEY,
+    universe TEXT NOT NULL,
+    period TEXT NOT NULL,
+    holdout_start TEXT NOT NULL,
+    first_date TEXT NOT NULL,
+    last_date TEXT NOT NULL,
+    dates INTEGER NOT NULL,
+    months INTEGER NOT NULL,
+    rows INTEGER NOT NULL,
+    independent_windows INTEGER NOT NULL,
+    base_rate REAL NOT NULL,
+    horizon_days INTEGER NOT NULL,
+    cost_bps REAL NOT NULL,
+    members INTEGER NOT NULL,
+    unpriced INTEGER NOT NULL,
+    price_source TEXT NOT NULL,
+    facts_source TEXT,
+    factors_source TEXT,
+    candidate TEXT NOT NULL,
+    lightgbm_stays INTEGER NOT NULL,
+    UNIQUE (universe, period)
+);
+CREATE TABLE IF NOT EXISTS verdict_checks (
+    run_id INTEGER NOT NULL REFERENCES backtests (run_id),
+    position INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    passed INTEGER NOT NULL,
+    PRIMARY KEY (run_id, position)
+);
+CREATE TABLE IF NOT EXISTS oos (
+    run_id INTEGER NOT NULL REFERENCES backtests (run_id),
+    date TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    {", ".join(f"{model} REAL NOT NULL" for model in MODELS)},
+    label INTEGER NOT NULL,
+    excess REAL NOT NULL,
+    PRIMARY KEY (run_id, date, ticker)
+);
+CREATE TABLE IF NOT EXISTS eval (
+    run_id INTEGER NOT NULL REFERENCES backtests (run_id),
+    model TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value REAL,
+    lo REAL,
+    hi REAL,
+    net_of_cost_bps REAL
+);
+CREATE INDEX IF NOT EXISTS eval_run ON eval (run_id);
 CREATE TABLE IF NOT EXISTS runs (
     as_of TEXT NOT NULL,
     universe TEXT NOT NULL,
@@ -151,6 +207,30 @@ CREATE TABLE IF NOT EXISTS left_out (
 
 class StoreError(Exception):
     pass
+
+
+class EvalRow(NamedTuple):
+    """One measured figure of a backtest. `model` is empty for a figure that
+    belongs to no model. `key` names the part it measures (a score, a feature, a
+    factor) and is empty for a whole-model figure. `net_of_cost_bps` is the cost
+    a net figure assumes."""
+
+    model: str
+    metric: str
+    key: str
+    value: float | None
+    lo: float | None = None
+    hi: float | None = None
+    net_of_cost_bps: float | None = None
+
+
+class StoredBacktest(NamedTuple):
+    """A backtest as `Store.save_backtest` stored it."""
+
+    run: EvidenceRun
+    verdict: Verdict
+    rows: list[EvalRow]
+    oos: pd.DataFrame
 
 
 def default_db_path() -> Path:
@@ -659,3 +739,113 @@ class Store:
             ],
             left_out=[LeftOut(ticker=t, reason=reason) for t, reason in left_out],
         )
+
+    def save_backtest(
+        self,
+        run: EvidenceRun,
+        verdict: Verdict,
+        rows: Sequence[EvalRow],
+        oos: pd.DataFrame,
+    ) -> None:
+        """Store a backtest, replacing the earlier one of the same universe and
+        period.
+
+        `oos` is indexed by (`date`, `ticker`) and has a column for each of
+        `MODELS`, `label` and `excess`. The trial ledger is kept apart: it
+        outlives the runs it counts.
+        """
+        fields = run.model_dump(mode="json")
+        with self._db:
+            old = self._db.execute(
+                "SELECT run_id FROM backtests WHERE universe = ? AND period = ?",
+                (run.universe, run.period),
+            ).fetchone()
+            if old is not None:
+                for table in ("verdict_checks", "oos", "eval", "backtests"):
+                    self._db.execute(f"DELETE FROM {table} WHERE run_id = ?", old)
+            cursor = self._db.execute(
+                f"INSERT INTO backtests ({', '.join(fields)}, candidate, "
+                f"lightgbm_stays) VALUES ({', '.join('?' * (len(fields) + 2))})",
+                (*fields.values(), verdict.candidate, int(verdict.lightgbm_stays)),
+            )
+            run_id = cursor.lastrowid
+            self._db.executemany(
+                "INSERT INTO verdict_checks VALUES (?, ?, ?, ?, ?)",
+                (
+                    (run_id, position, check.name, check.value, int(check.passed))
+                    for position, check in enumerate(verdict.checks)
+                ),
+            )
+            self._db.executemany(
+                "INSERT INTO eval VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ((run_id, *row) for row in rows),
+            )
+            columns = [*MODELS, "label", "excess"]
+            self._db.executemany(
+                f"INSERT INTO oos VALUES (?, ?, ?, {', '.join('?' * len(columns))})",
+                (
+                    (run_id, day.date().isoformat(), ticker, *values)
+                    for (day, ticker), values in zip(
+                        oos.index,
+                        oos[columns].itertuples(index=False),
+                        strict=True,
+                    )
+                ),
+            )
+
+    def latest_backtest(self, universe: str) -> StoredBacktest | None:
+        """The held-out backtest of `universe`, else its development one, else
+        None. Only the held-out months test a candidate."""
+        fields = list(EvidenceRun.model_fields)
+        head = self._db.execute(
+            f"SELECT run_id, candidate, lightgbm_stays, {', '.join(fields)} "
+            "FROM backtests WHERE universe = ? ORDER BY period = 'holdout' DESC "
+            "LIMIT 1",
+            (universe,),
+        ).fetchone()
+        if head is None:
+            return None
+        run_id, candidate, stays, *values = head
+        run = EvidenceRun.model_validate(dict(zip(fields, values, strict=True)))
+        checks = [
+            Check(name=name, value=value, passed=bool(passed))
+            for name, value, passed in self._db.execute(
+                "SELECT name, value, passed FROM verdict_checks "
+                "WHERE run_id = ? ORDER BY position",
+                (run_id,),
+            )
+        ]
+        oos = pd.read_sql_query(
+            "SELECT * FROM oos WHERE run_id = ? ORDER BY date, ticker",
+            self._db,
+            params=[run_id],
+        ).drop(columns="run_id")
+        oos["date"] = pd.to_datetime(oos["date"])
+        decided = run.period == "holdout"
+        return StoredBacktest(
+            run=run,
+            verdict=Verdict(
+                candidate=candidate,
+                lightgbm_stays=bool(stays),
+                decided=decided,
+                checks=checks,
+            ),
+            rows=[
+                EvalRow(*row)
+                for row in self._db.execute(
+                    "SELECT model, metric, key, value, lo, hi, net_of_cost_bps "
+                    "FROM eval WHERE run_id = ? ORDER BY rowid",
+                    (run_id,),
+                )
+            ],
+            oos=oos.set_index(["date", "ticker"]),
+        )
+
+    def trials(self) -> list[Trial]:
+        """Every specification in the ledger, in the order last recorded."""
+        return [
+            Trial(description=d, as_of=date.fromisoformat(a), months=m, sharpe=s)
+            for d, a, m, s in self._db.execute(
+                "SELECT description, as_of, months, sharpe FROM trials ORDER BY rowid"
+            )
+        ]

@@ -4,7 +4,12 @@ ticker files and the API share them."""
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, computed_field, model_validator
+
+
+# The model whose scores `eq run` publishes. A verdict about another model says
+# nothing about them.
+SCORED_MODEL = "lightgbm"
 
 
 class ScoreRow(BaseModel):
@@ -237,3 +242,165 @@ class TickerReport(BaseModel):
     series: list[Series]
     valuation: Valuation | None = None
     risk: Risk | None = None
+
+
+class Interval(BaseModel):
+    """A value with its 95% interval. A part is `None` where it could not be
+    computed, such as a feature in a run without filings."""
+
+    value: float | None
+    lo: float | None
+    hi: float | None
+
+
+class EvidenceRun(BaseModel):
+    """What was measured. `period` is `holdout` for the months held back from
+    every choice and `development` for the months that chose the candidate.
+    `cost_bps` is the assumed one-way cost the net figures use."""
+
+    universe: str
+    period: Literal["development", "holdout"]
+    holdout_start: date
+    first_date: date
+    last_date: date
+    dates: int
+    months: int
+    rows: int
+    independent_windows: int
+    base_rate: float
+    horizon_days: int
+    cost_bps: float
+    members: int
+    unpriced: int
+    price_source: str
+    facts_source: str | None
+    factors_source: str | None
+
+
+class Check(BaseModel):
+    name: str
+    value: str
+    passed: bool
+
+
+class Verdict(BaseModel):
+    """Whether the score may be shown. `decided` is false for development
+    months, which choose the candidate and so cannot test it. `shown` is true
+    only for a decided verdict whose checks all passed for the model that
+    makes the score."""
+
+    candidate: str
+    lightgbm_stays: bool
+    decided: bool
+    checks: list[Check]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def shown(self) -> bool:
+        return (
+            self.decided
+            and self.candidate == SCORED_MODEL
+            and all(check.passed for check in self.checks)
+        )
+
+
+class Portfolio(BaseModel):
+    """Annualised returns of a monthly portfolio, before and after costs.
+    `break_even` is the one-way cost that makes the net return zero, `None`
+    where there is no gross edge."""
+
+    gross: Interval
+    net: Interval
+    sharpe: float | None
+    turnover: float
+    break_even: Interval | None
+
+
+class Ladder(BaseModel):
+    """The annualised net decile spread if each trade lost `cost_bps`."""
+
+    cost_bps: float
+    net: float
+
+
+class FactorAlpha(BaseModel):
+    annual: float
+    t_stat: float
+    r2: float
+    months: int
+    loadings: dict[str, float]
+
+
+class DeflatedSharpe(BaseModel):
+    sharpe: float
+    benchmark: float
+    probability: float
+    trials: int
+
+
+class ModelEvidence(BaseModel):
+    """One model on the out-of-sample rows. `top` is the top decile minus every
+    scored stock and `spread` the top decile minus the bottom decile.
+    `spread_excess` is the mean excess return of score 10 minus score 1 over the
+    label horizon. `selection_*` are the figures that chose the candidate."""
+
+    model: str
+    mean_ic: Interval
+    ic_t_stat: float | None
+    mean_auc: Interval
+    top_hit_rate: Interval
+    spread_excess: Interval
+    top: Portfolio
+    spread: Portfolio
+    ladder: list[Ladder]
+    alpha: FactorAlpha | None
+    deflated: DeflatedSharpe
+    selection_ic: float
+    selection_net_spread: float
+
+
+class YearEvidence(BaseModel):
+    """Mean rank IC of each model in one calendar year of the out-of-sample
+    rows. A year of under three months has no interval."""
+
+    year: int
+    dates: int
+    months: int
+    ic: dict[str, Interval]
+
+
+class ScoreEvidence(BaseModel):
+    score: int
+    rows: int
+    hit_rate: Interval
+    mean_excess: Interval
+
+
+class FeatureEvidence(BaseModel):
+    feature: str
+    family: Literal["technical", "fundamental"]
+    mean_ic: Interval
+    t_stat: float | None
+    dates: int
+
+
+class Trial(BaseModel):
+    description: str
+    as_of: date
+    months: int
+    sharpe: float
+
+
+class EvidenceReport(BaseModel):
+    """The published proof page: the out-of-sample result of a stored backtest
+    and the ledger of every specification tried."""
+
+    status: Literal["experimental, not validated"] = "experimental, not validated"
+    run: EvidenceRun
+    verdict: Verdict
+    models: list[ModelEvidence]
+    by_year: list[YearEvidence]
+    by_score: list[ScoreEvidence]
+    features: list[FeatureEvidence]
+    feature_hurdle_t: float
+    trials: list[Trial]
