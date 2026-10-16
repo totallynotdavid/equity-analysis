@@ -4,7 +4,7 @@ ticker files and the API share them."""
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class ScoreRow(BaseModel):
@@ -90,6 +90,76 @@ class Series(BaseModel):
     points: list[Point]
 
 
+class GridRow(BaseModel):
+    """The model at one discount rate. `values` is the value of a share at each
+    growth of `DcfModel.growths`, never below zero, and `implied_growth` the
+    growth that makes the model's value of a share the market price, or None
+    where no growth in the solver's range does."""
+
+    wacc: float
+    implied_growth: float | None
+    values: list[float]
+
+
+class DcfModel(BaseModel):
+    """A two-stage free-cash-flow model solved for the growth the price implies.
+
+    Free cash flow grows at `implied_growth` for `years` years, then at
+    `terminal_growth` for ever, discounted at `wacc`. `fcf` is the filed
+    trailing free cash flow and `fcf0` the same plus the after-tax interest its
+    company paid: the flow that belongs to debt and equity together.
+    `enterprise_value` is the market's: market value plus `net_debt`.
+    `tv_share` is the part of it the terminal value accounts for at the implied
+    growth. `rows` run from the lowest `wacc` to the highest.
+    """
+
+    price: float
+    shares: float
+    market_value: float
+    net_debt: float
+    enterprise_value: float
+    fcf: float
+    fcf0: float
+    beta_raw: float
+    beta: float
+    risk_free: float
+    equity_risk_premium: float
+    cost_of_equity: float
+    cost_of_debt: float
+    tax_rate: float
+    wacc: float
+    terminal_growth: float
+    years: int
+    implied_growth: float
+    tv_share: float
+    growths: list[float]
+    rows: list[GridRow]
+
+
+class Valuation(BaseModel):
+    """What the price of a stock implies, or why that is not meaningful.
+
+    The status is `ok` with a `model`, or `not_meaningful` with a `reason`.
+    There is no fair value: the grid of the model is the range.
+    """
+
+    status: Literal["ok", "not_meaningful"]
+    reason: str | None = None
+    model: DcfModel | None = None
+
+    @model_validator(mode="after")
+    def _one_outcome(self) -> Valuation:
+        ok = self.status == "ok" and self.reason is None and self.model is not None
+        refused = (
+            self.status == "not_meaningful"
+            and self.reason is not None
+            and self.model is None
+        )
+        if not (ok or refused):
+            raise ValueError("an ok valuation has a model and no reason, else a reason")
+        return self
+
+
 class TickerReport(BaseModel):
     """The fundamentals of a ticker as of a date. `facts_source` says where the
     filings came from: `synthetic` ones have no real filing behind them."""
@@ -104,3 +174,4 @@ class TickerReport(BaseModel):
     sic_description: str
     sector: str | None
     series: list[Series]
+    valuation: Valuation | None = None

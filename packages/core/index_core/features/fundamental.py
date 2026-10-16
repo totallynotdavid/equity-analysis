@@ -290,12 +290,7 @@ def fundamental_features(
     price multiples: they stay defined and keep their order when earnings or
     EBITDA are not positive. A ratio with a non-positive denominator is NaN.
     """
-    closes = prices.pivot(index="date", columns="ticker", values="close")
-    factors = prices.pivot(index="date", columns="ticker", values="split_factor")
-    # The product of every split factor up to a day. Its ratio between two days
-    # is the number of shares the later day holds for each share of the earlier
-    # one, counting the splits that took effect after the earlier day.
-    split = factors.fillna(1.0).cumprod()
+    closes, split = _closes_and_splits(prices)
 
     index = inputs.index
     dates = pd.DatetimeIndex(index.get_level_values("date"))
@@ -340,6 +335,36 @@ def fundamental_features(
         }
     )[list(FEATURES)]
     return features.replace([np.inf, -np.inf], np.nan)
+
+
+def _closes_and_splits(prices: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """The as-traded close and the cumulative split factor, by date and ticker."""
+    closes = prices.pivot(index="date", columns="ticker", values="close")
+    factors = prices.pivot(index="date", columns="ticker", values="split_factor")
+    # The product of every split factor up to a day. Its ratio between two days
+    # is the number of shares the later day holds for each share of the earlier
+    # one, counting the splits that took effect after the earlier day.
+    return closes, factors.fillna(1.0).cumprod()
+
+
+def quotes(inputs: pd.DataFrame, prices: pd.DataFrame) -> pd.DataFrame:
+    """The as-traded `close` of each (`date`, `ticker`) row of `inputs` and the
+    filed `shares` scaled for any split since the count was filed.
+
+    `prices` is the long frame from `Store.read_prices`.
+    """
+    closes, split = _closes_and_splits(prices)
+    dates = pd.DatetimeIndex(inputs.index.get_level_values("date"))
+    tickers = inputs.index.get_level_values("ticker")
+    split_now = _lookup(split, dates, tickers)
+    split_filed = _lookup(split, pd.DatetimeIndex(inputs["as_of"]), tickers)
+    return pd.DataFrame(
+        {
+            "close": _lookup(closes, dates, tickers),
+            "shares": inputs["shares"].to_numpy() * split_now / split_filed,
+        },
+        index=inputs.index,
+    )
 
 
 def _lookup(

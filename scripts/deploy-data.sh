@@ -6,5 +6,6 @@
 set -euo pipefail
 
 uv sync --all-packages --locked
+uv run eq factors --db data/real.sqlite --cache data/cache
 uv run eq run --universe universes/demo30.txt \
   --db data/real.sqlite --cache data/cache --out deploy/scores.json "$@"

@@ -16,6 +16,7 @@ from index_core.features.fundamental import (
     concept_matrix,
     fundamental_features,
     fundamental_inputs,
+    quotes,
     tag_usage,
 )
 from index_core.features.normalize import rank_by_date
@@ -31,12 +32,13 @@ from index_core.portfolio import (
     monthly_holdings,
     strategy,
 )
-from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport
+from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport, Valuation
 from index_core.scoring import decile_scores
 from index_core.significance import Alpha, Deflated, deflated_sharpe, factor_alpha
 from index_core.sources.base import NotFoundError, empty_facts
 from index_core.statements import ticker_report
 from index_core.universe import BENCHMARK
+from index_core.valuation import Company, betas, risk_free_rate, valuate
 from index_core.verdict import Verdict, decide
 from index_core.walkforward import MIN_TRAIN_DATES, MODELS, Fold, walk_forward
 
@@ -232,11 +234,12 @@ def compute_metrics(store: Store, universe: Universe) -> pd.Timestamp:
     store them in place of the universe's earlier ones. Returns the date they
     are as of: the latest stored `SPY` date.
 
-    The dates are those of the stored `SPY` prices, so the prices of the
-    members are not needed. A member the filings source has no company for has
-    no report.
+    A report holds the reverse DCF of its ticker, which reads the prices of the
+    members and the stored factor file's risk-free rate. A member the filings
+    source has no company for has no report.
     """
-    days = store.read_prices([BENCHMARK])["date"]
+    prices = store.read_prices([BENCHMARK, *universe.tickers])
+    days = prices.loc[prices["ticker"] == BENCHMARK, "date"]
     if days.empty:
         raise ValueError(f"no stored prices for {BENCHMARK}; run `eq run` first")
     calendar = pd.DatetimeIndex(days.sort_values().unique())
@@ -245,7 +248,8 @@ def compute_metrics(store: Store, universe: Universe) -> pd.Timestamp:
     security = store.read_security(universe.tickers).set_index("ticker")
     sectors = {str(t): str(s) for t, s in security["sector"].dropna().items()}
 
-    metrics = daily_metrics(fundamental_inputs(facts, calendar), universe, sectors)
+    inputs = fundamental_inputs(facts, calendar)
+    metrics = daily_metrics(inputs, universe, sectors)
     store.replace_metrics(universe.name, metrics)
 
     percentiles: dict[str, dict[str, tuple[float | None, float | None]]] = {}
@@ -261,6 +265,9 @@ def compute_metrics(store: Store, universe: Universe) -> pd.Timestamp:
             optional_float(pct_universe),
             optional_float(pct_sector),
         )
+    valuations = _valuations(
+        today, inputs, prices, security["sic"], store.read_factors(), as_of
+    )
 
     reports = []
     source = store.facts_source()
@@ -275,11 +282,64 @@ def compute_metrics(store: Store, universe: Universe) -> pd.Timestamp:
             cast("dict[str, Any]", security.loc[ticker].to_dict()),
             facts[facts["ticker"] == ticker],
             percentiles.get(ticker, {}),
+            valuations.get(ticker),
         )
         if report is not None:
             reports.append(report)
     store.replace_ticker_reports(universe.name, reports)
     return as_of
+
+
+# A ticker whose last bar is older than this many days before the date has no
+# price to value.
+MAX_PRICE_AGE = pd.Timedelta(days=7)
+
+
+def _valuations(
+    today: pd.DataFrame,
+    inputs: pd.DataFrame,
+    prices: pd.DataFrame,
+    sics: pd.Series[str],
+    factors: pd.DataFrame,
+    as_of: pd.Timestamp,
+) -> dict[str, Valuation]:
+    """The reverse DCF of every ticker with a metric on `as_of`. `today` is
+    the `daily_metrics` rows of that day and `sics` the SIC code by ticker."""
+    figures = cast(
+        "dict[str, dict[str, float]]",
+        today.pivot(index="ticker", columns="metric", values="value").to_dict("index"),
+    )
+    last_bar = prices.groupby("ticker")["date"].max().to_dict()
+    latest = inputs[inputs.index.get_level_values("date") == as_of]
+    market = quotes(latest, prices).droplevel("date")
+    closes = cast("dict[str, float]", market["close"].to_dict())
+    shares = cast("dict[str, float]", market["shares"].to_dict())
+    beta = cast(
+        "dict[str, float]",
+        betas(
+            prices.pivot(index="date", columns="ticker", values="adj_close"), BENCHMARK
+        ).to_dict(),
+    )
+    rate = np.nan if factors.empty else risk_free_rate(factors)
+
+    result = {}
+    for ticker, metrics in figures.items():
+        fresh = last_bar.get(ticker, pd.Timestamp(0)) >= as_of - MAX_PRICE_AGE
+        result[ticker] = valuate(
+            Company(
+                sic=str(sics.get(ticker, "")),
+                price=closes.get(ticker, np.nan) if fresh else np.nan,
+                shares=shares.get(ticker, np.nan),
+                free_cash_flow=metrics.get("free_cash_flow", np.nan),
+                interest_expense=metrics.get("interest_expense", np.nan),
+                tax_rate=metrics.get("tax_rate", np.nan),
+                debt=metrics.get("debt", np.nan),
+                cash=metrics.get("cash", np.nan),
+                beta_raw=beta.get(ticker, np.nan),
+                risk_free=np.nan if rate is None else rate,
+            )
+        )
+    return result
 
 
 def score(store: Store, universe: Universe) -> ScoresReport:

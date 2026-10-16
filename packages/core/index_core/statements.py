@@ -19,7 +19,14 @@ from index_core.periods import (
     span,
     ttm_pieces,
 )
-from index_core.report import Filing, Part, Point, Series, TickerReport
+from index_core.report import (
+    Filing,
+    Part,
+    Point,
+    Series,
+    TickerReport,
+    Valuation,
+)
 from index_core.sources.edgar import CONCEPTS, filing_url
 
 
@@ -94,12 +101,14 @@ def ticker_report(
     security: Mapping[str, Any],
     facts: pd.DataFrame,
     percentiles: Mapping[str, tuple[float | None, float | None]],
+    valuation: Valuation | None = None,
 ) -> TickerReport | None:
     """The report of one ticker, or None where no metric can be computed.
 
     `security` is its row of `Store.read_security` and `facts` its facts, which
     came from `facts_source`. `percentiles` gives, per metric, the percentile in
-    the universe and in the sector as of the date.
+    the universe and in the sector as of the date. `valuation` is what its
+    price implies, where that was worked out.
     """
     found = statements(facts, as_of)
     if not found:
@@ -126,6 +135,7 @@ def ticker_report(
             )
             for name, points in found.items()
         ],
+        valuation=valuation,
     )
 
 
