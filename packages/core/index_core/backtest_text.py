@@ -234,6 +234,11 @@ def _verdict(result: Backtest) -> list[str]:
         )
     elif verdict.show_score:
         rows.append("Verdict: show the score.")
+    elif verdict.checks_passed:
+        rows.append(
+            f"Verdict: do not show the score. The {NAMES[verdict.candidate]} "
+            "baseline passes the checks, but the score is LightGBM's."
+        )
     else:
         rows.append("Verdict: do not show the score.")
     return rows

@@ -18,6 +18,8 @@ and tests on the same ones and prints no verdict.
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from index_core.report import SCORED_MODEL
+
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -46,8 +48,13 @@ class Verdict:
     basis: dict[str, tuple[float, float]]
 
     @property
-    def show_score(self) -> bool:
+    def checks_passed(self) -> bool:
         return all(check.passed for check in self.checks)
+
+    @property
+    def show_score(self) -> bool:
+        """The score is LightGBM's, so a baseline that passes does not show it."""
+        return self.candidate == SCORED_MODEL and self.checks_passed
 
 
 def decide(
