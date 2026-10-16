@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from index_core.portfolio import MONTHS_PER_YEAR
+from index_core.regression import ols_hac
 from index_core.sources.base import FACTOR_COLUMNS
 
 
@@ -96,7 +97,7 @@ def factor_alpha(
     design = np.column_stack(
         [np.ones(covered.sum()), exposures[covered].to_numpy(dtype=float)]
     )
-    fit = _ols_hac(returns[covered], design, ALPHA_LAGS)
+    fit = ols_hac(returns[covered], design, ALPHA_LAGS)
     return Alpha(
         monthly=float(fit.coefficients[0]),
         annual=float(MONTHS_PER_YEAR * fit.coefficients[0]),
@@ -133,30 +134,3 @@ def _period_factors(holdings: Holdings, factors: pd.DataFrame) -> pd.DataFrame:
 
 def _compound(returns: pd.Series) -> float:
     return float(np.prod(1 + returns.to_numpy(dtype=float)) - 1)
-
-
-@dataclass(frozen=True)
-class _Fit:
-    coefficients: np.ndarray
-    errors: np.ndarray
-    r2: float
-
-
-def _ols_hac(y: np.ndarray, design: np.ndarray, lags: int) -> _Fit:
-    """Least squares with Newey-West (Bartlett) errors, scaled by n / (n - k)."""
-    rows, columns = design.shape
-    inverse = np.linalg.inv(design.T @ design)
-    coefficients = inverse @ design.T @ y
-    residual = y - design @ coefficients
-    scores = design * residual[:, None]
-    middle = scores.T @ scores
-    for lag in range(1, min(lags, rows - 1) + 1):
-        cross = scores[lag:].T @ scores[:-lag]
-        middle += (1 - lag / (lags + 1)) * (cross + cross.T)
-    covariance = rows / (rows - columns) * inverse @ middle @ inverse
-    total = float(((y - y.mean()) ** 2).sum())
-    return _Fit(
-        coefficients,
-        np.sqrt(np.diag(covariance)),
-        1 - float(residual @ residual) / total if total > 0 else float("nan"),
-    )
