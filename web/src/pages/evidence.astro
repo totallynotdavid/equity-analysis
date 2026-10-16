@@ -1,0 +1,19 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import { loadEvidence } from "@/lib/evidence";
+import { renderEvidence } from "@/lib/render-evidence";
+---
+
+<Layout title="Evidence · index">
+  <main class="container mx-auto max-w-5xl px-4 py-12 sm:py-16">
+    <p
+      class="border-warning bg-warning/10 text-foreground rounded-md border px-4 py-3 text-sm font-medium"
+      role="note"
+    >
+      Experimental, not validated. Nothing here is investment advice or a
+      recommendation to buy or sell a security.
+    </p>
+
+    <div id="evidence-root" set:html={renderEvidence(loadEvidence())} />
+  </main>
+</Layout>

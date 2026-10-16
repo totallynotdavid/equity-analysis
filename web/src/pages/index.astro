@@ -1,20 +1,31 @@
 ---
 import Layout from "@/layouts/Layout.astro";
-import { renderScores } from "@/lib/render";
+import { loadEvidence } from "@/lib/evidence";
+import { leftOutNote, sourcesWarning } from "@/lib/render";
+import {
+  buildScreener,
+  parseState,
+  renderControls,
+  renderResults,
+  renderScoreNote,
+} from "@/lib/screener";
 import { loadScores } from "@/lib/scores";
 import { loadTickers } from "@/lib/tickers";
 
-const pages = loadTickers().map((report) => report.ticker);
-const scores = renderScores(loadScores(), new Set(pages));
+const scores = loadScores();
+const data = buildScreener(scores, loadTickers(), loadEvidence());
+const state = parseState("", data);
+// A `<` in the data must not end the script element that holds it.
+const json = JSON.stringify(data).replaceAll("<", "\\u003c");
 ---
 
 <Layout>
-  <main class="container mx-auto max-w-3xl px-4 py-12 sm:py-20">
+  <main class="container mx-auto max-w-6xl px-4 py-12 sm:py-16">
     <h1 class="text-primary text-5xl font-bold tracking-tight sm:text-6xl">
       index
     </h1>
     <p class="text-muted-foreground mt-3 text-base">
-      A daily score from 1 to 10 for US stocks. Internal tool.
+      Screen US stocks by their filed fundamentals. Internal tool.
     </p>
 
     <p
@@ -25,25 +36,43 @@ const scores = renderScores(loadScores(), new Set(pages));
       recommendation to buy or sell a security. You can lose money.
     </p>
 
-    <div
-      id="scores-root"
-      data-pages={JSON.stringify(pages)}
-      set:html={scores}
-    />
+    {scores !== null && (
+      <Fragment set:html={sourcesWarning(scores) + leftOutNote(scores)} />
+    )}
+    <Fragment set:html={renderScoreNote(data)} />
+
+    {data.rows.length === 0 ? (
+      <p class="text-muted-foreground mt-8 text-sm">
+        No ticker reports yet. Run <code>eq run</code> and build again.
+      </p>
+    ) : (
+      <div id="screener">
+        <p class="text-muted-foreground mt-6 text-sm">
+          As of {data.asOf}, {data.rows.length} stocks of the {data.universe}{" "}
+          universe. The latest filed figure of each metric is shown. Click a
+          heading to sort. The address holds the filters, so a copied link opens
+          the same table.
+        </p>
+        <div id="screener-controls" set:html={renderControls(data, state)} />
+        <div id="screener-results" set:html={renderResults(data, state)} />
+        <script
+          is:inline
+          type="application/json"
+          id="screener-data"
+          set:html={json}
+        />
+      </div>
+    )}
   </main>
 </Layout>
 
 <script>
-  import { renderScores } from "@/lib/render";
+  import { mount } from "@/lib/screener-client";
+  import type { ScreenerData } from "@/lib/screener";
 
-  // The build-time scores stay when the API is absent, as in `mise run web`.
-  const base = import.meta.env.PUBLIC_API_URL ?? "/api";
-  const root = document.getElementById("scores-root");
-  const pages = new Set<string>(JSON.parse(root?.dataset.pages ?? "[]"));
-  fetch(`${base}/scores`)
-    .then((response) => (response.ok ? response.json() : null))
-    .then((scores) => {
-      if (scores && root) root.innerHTML = renderScores(scores, pages);
-    })
-    .catch(() => {});
+  const controls = document.getElementById("screener-controls");
+  const results = document.getElementById("screener-results");
+  const json = document.getElementById("screener-data");
+  if (controls && results && json)
+    mount(controls, results, JSON.parse(json.textContent) as ScreenerData);
 </script>

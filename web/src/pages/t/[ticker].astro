@@ -2,27 +2,30 @@
 import type { GetStaticPaths } from "astro";
 import Layout from "@/layouts/Layout.astro";
 import { renderTicker } from "@/lib/render-ticker";
+import { loadScores } from "@/lib/scores";
+import { unpaged } from "@/lib/screener";
 import { loadTickers } from "@/lib/tickers";
 
-export const getStaticPaths = (() =>
-  loadTickers().map((report) => ({
+export const getStaticPaths = (() => {
+  const reports = loadTickers();
+  const missing = unpaged(loadScores(), reports);
+  if (missing.length > 0)
+    throw new Error(
+      `${missing.length} scored tickers have no ticker report, so the build would leave them without a page: ${missing.join(", ")}. Run \`eq export\` and build again.`,
+    );
+  return reports.map((report) => ({
     params: { ticker: report.ticker },
     props: { report },
-  }))) satisfies GetStaticPaths;
+  }));
+}) satisfies GetStaticPaths;
 
 const { report } = Astro.props;
 ---
 
 <Layout title={`${report.ticker} · index`}>
   <main class="container mx-auto max-w-5xl px-4 py-12 sm:py-16">
-    <p class="text-sm">
-      <a class="underline" href="/">
-        index
-      </a>
-    </p>
-
     <p
-      class="border-warning bg-warning/10 text-foreground mt-6 rounded-md border px-4 py-3 text-sm font-medium"
+      class="border-warning bg-warning/10 text-foreground rounded-md border px-4 py-3 text-sm font-medium"
       role="note"
     >
       Experimental, not validated. Nothing here is investment advice or a

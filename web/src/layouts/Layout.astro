@@ -7,6 +7,12 @@ interface Props {
 }
 
 const { title = "index" } = Astro.props;
+
+const links = [
+  { href: "/", label: "Screener" },
+  { href: "/evidence", label: "Evidence" },
+  { href: "/method", label: "Method" },
+];
 ---
 
 <!doctype html>
@@ -19,6 +25,20 @@ const { title = "index" } = Astro.props;
     <title>{title}</title>
   </head>
   <body class="bg-background text-foreground min-h-screen font-sans antialiased">
+    <nav
+      class="container mx-auto flex max-w-6xl gap-6 px-4 pt-6 text-sm"
+      aria-label="Pages"
+    >
+      {links.map(({ href, label }) => (
+        <a
+          class="underline-offset-4 hover:underline"
+          href={href}
+          aria-current={Astro.url.pathname === href ? "page" : undefined}
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
     <slot />
   </body>
 </html>
