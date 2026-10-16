@@ -71,6 +71,37 @@ export type Valuation =
   | { status: "ok"; reason: null; model: DcfModel }
   | { status: "not_meaningful"; reason: string; model: null };
 
+export interface Estimate {
+  value: number;
+  se: number;
+  lo: number;
+  hi: number;
+}
+
+export interface Loading extends Estimate {
+  factor: string;
+}
+
+export interface RiskFit {
+  start: string;
+  end: string;
+  beta: Estimate;
+  volatility: number;
+  max_drawdown: number;
+  r2: number;
+  alpha: Estimate;
+  loadings: Loading[];
+}
+
+export type Risk =
+  | { status: "ok"; reason: null; window: number; fit: RiskFit }
+  | {
+      status: "insufficient_history" | "not_estimable";
+      reason: string;
+      window: number;
+      fit: null;
+    };
+
 export interface TickerReport {
   ticker: string;
   universe: string;
@@ -83,6 +114,7 @@ export interface TickerReport {
   sector: string | null;
   series: Series[];
   valuation?: Valuation | null;
+  risk?: Risk | null;
 }
 
 /**
