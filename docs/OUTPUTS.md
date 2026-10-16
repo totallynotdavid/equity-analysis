@@ -44,21 +44,22 @@ none.
 beside `--out` unless `--tickers` says otherwise ([CLI](CLI.md)), on one line.
 `eq import --tickers` loads them. A ticker with no filings has none.
 
-| Field                    | Meaning                                                                                                                                                       |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ticker`, `universe`     | The ticker and the universe file's name                                                                                                                       |
-| `as_of`                  | The trading day. Only filings made before it are used                                                                                                         |
-| `facts_source`           | Where the filings came from: `edgar` or `synthetic`                                                                                                           |
-| `name`, `cik`            | The company and its SEC identifier                                                                                                                            |
-| `sic`, `sic_description` | The SEC's industry code and its title                                                                                                                         |
-| `sector`                 | The GICS sector from the universe's companies file, `null` without one                                                                                        |
-| `series[]`               | One per metric the company has ([Fundamentals](FUNDAMENTALS.md#ticker-reports)): `metric`, `group`, `label`, `unit` (`USD`, `USD/share`, `shares` or `ratio`) |
-| `series[].pct_universe`  | Percent of the universe at or below the latest value, `null` if too few                                                                                       |
-| `series[].pct_sector`    | The same within the sector                                                                                                                                    |
-| `series[].points[]`      | The latest twelve periods, oldest first: `end`, `value`, `formula`, `parts`                                                                                   |
-| `valuation`              | What the price implies ([Valuation](VALUATION.md)): `status` is `ok` with a `model`, or `not_meaningful` with a `reason`. A file made before it has none      |
-| `parts[]`                | A filed figure: `metric`, `sign` (1 or -1), `tag`, `start` (`null` for a balance), `end`, `value` and its `filing`                                            |
-| `filing`                 | `accn`, `form`, `fy`, `fp`, `filed` and `url`, the EDGAR page that lists the filing's documents                                                               |
+| Field                    | Meaning                                                                                                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ticker`, `universe`     | The ticker and the universe file's name                                                                                                                              |
+| `as_of`                  | The trading day. Only filings made before it are used                                                                                                                |
+| `facts_source`           | Where the filings came from: `edgar` or `synthetic`                                                                                                                  |
+| `name`, `cik`            | The company and its SEC identifier                                                                                                                                   |
+| `sic`, `sic_description` | The SEC's industry code and its title                                                                                                                                |
+| `sector`                 | The GICS sector from the universe's companies file, `null` without one                                                                                               |
+| `series[]`               | One per metric the company has ([Fundamentals](FUNDAMENTALS.md#ticker-reports)): `metric`, `group`, `label`, `unit` (`USD`, `USD/share`, `shares` or `ratio`)        |
+| `series[].pct_universe`  | Percent of the universe at or below the latest value, `null` if too few                                                                                              |
+| `series[].pct_sector`    | The same within the sector                                                                                                                                           |
+| `series[].points[]`      | The latest twelve periods, oldest first: `end`, `value`, `formula`, `parts`                                                                                          |
+| `valuation`              | What the price implies ([Valuation](VALUATION.md)): `status` is `ok` with a `model`, or `not_meaningful` with a `reason`. A file made before it has none             |
+| `risk`                   | How the stock behaves ([Risk](RISK.md)): `status` is `ok` with a `fit`, or `insufficient_history` or `not_estimable` with a `reason`. A file made before it has none |
+| `parts[]`                | A filed figure: `metric`, `sign` (1 or -1), `tag`, `start` (`null` for a balance), `end`, `value` and its `filing`                                                   |
+| `filing`                 | `accn`, `form`, `fy`, `fp`, `filed` and `url`, the EDGAR page that lists the filing's documents                                                                      |
 
 The `value` of a point is the sum of `sign * value` over its `parts`, or, where
 `formula` is set, that formula over the parts. Every figure on the page is a
@@ -133,4 +134,8 @@ statements are; others are written in full. After the tables, the valuation
 section says what growth the price implies, shows the grid of the model's value
 of a share by discount rate and growth with the cells at or above the price in
 bold, and lists the inputs. A ticker that is not meaningful to value shows the
-reason instead.
+reason instead. The risk section gives the volatility, the largest fall from a
+peak and the beta over the window, then a table of the alpha and the five factor
+loadings with their 95% intervals, in bold where the interval excludes zero, and
+the R². A ticker with fewer days than the window shows "Insufficient history"
+and the reason.

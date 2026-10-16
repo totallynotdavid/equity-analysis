@@ -105,6 +105,8 @@ features, fits and predicts, and `Store.save_report` keeps the result.
 | `metrics.py`                           | The metric list and its daily values with percentiles      |
 | `statements.py`                        | `TickerReport`: metrics with the filed figures behind them |
 | `valuation.py`                         | The reverse DCF: implied growth, grid, beta, risk-free     |
+| `risk.py`                              | Beta, volatility, drawdown and the five-factor regression  |
+| `regression.py`                        | Least squares with Newey-West standard errors              |
 | `report.py`                            | `ScoresReport` and `TickerReport`                          |
 | `backtest_text.py`, `coverage_text.py` | The text that `eq backtest` and `eq coverage` print        |
 

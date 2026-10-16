@@ -156,9 +156,9 @@ uv run eq metrics --universe universes/demo30.txt
 
 Recomputes the metrics and ticker reports from the stored filings, prices and
 factors, without fetching. The reports are as of the last stored SPY date. Each
-holds the [valuation](VALUATION.md) of its ticker, which needs the stored
-factors ([`eq factors`](#eq-factors)). `--tickers` selects the directory
-(default `outputs/tickers`) and `--db` the database.
+holds the [valuation](VALUATION.md) and the [risk](RISK.md) of its ticker, which
+need the stored factors ([`eq factors`](#eq-factors)). `--tickers` selects the
+directory (default `outputs/tickers`) and `--db` the database.
 
 ## Real data
 
@@ -266,15 +266,17 @@ a month or two before today.
 
 The factors do not depend on the universe. Run the command once per database
 before [`eq run`](#eq-run) or [`eq metrics`](#eq-metrics), whose
-[valuations](VALUATION.md#the-inputs) take the risk-free rate from it, and
-before [`eq backtest`](BACKTEST.md#alpha), which needs 12 months of overlap with
-the backtest for the alpha table. A database holds factors from one source, as
-it does for prices ([below](#the-database)).
+[valuations](VALUATION.md#the-inputs) take the risk-free rate from it and the
+[risk](RISK.md#the-window) of a ticker is regressed on it, and before
+[`eq backtest`](BACKTEST.md#alpha), which needs 12 months of overlap with the
+backtest for the alpha table. A database holds factors from one source, as it
+does for prices ([below](#the-database)).
 
 ## The database
 
 The database is one SQLite file. It holds prices, filings, company identities,
-factors, the backtest ledger, every saved run, and the latest ticker reports.
+factors, the backtest ledger, every saved run, the latest ticker reports, and
+the `risk` and `exposures` tables of the latest metrics.
 
 - Every command uses the file given by `--db`, else `$INDEX_DB`, else
   `data/index.sqlite`. `eq export` and `eq coverage` open it read-only. When it
