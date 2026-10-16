@@ -50,7 +50,7 @@ MIN_YEAR_MONTHS = 3
 
 
 def _number(value: float | None) -> float | None:
-    """`value`, or None where it is missing: SQLite and JSON hold no NaN."""
+    """Return None for missing or NaN values because JSON has no NaN."""
     return None if value is None or math.isnan(value) else float(value)
 
 
@@ -180,8 +180,6 @@ def _portfolio_rows(
 
 
 class _Figures:
-    """The stored figures of a backtest, looked up by model, metric and key."""
-
     def __init__(self, rows: Iterable[EvalRow]) -> None:
         self._rows = {(r.model, r.metric, r.key): r for r in rows}
 
@@ -205,7 +203,6 @@ class _Figures:
         return Interval(value=row.value, lo=row.lo, hi=row.hi)
 
     def keys(self, model: str, metric: str) -> list[str]:
-        """The keys stored for a model's metric, in the order stored."""
         return [key for (m, name, key) in self._rows if (m, name) == (model, metric)]
 
 

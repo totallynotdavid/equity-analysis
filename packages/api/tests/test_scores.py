@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 
 def _serve(demo_run: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Points the API at the shared `eq run` and returns its `scores.json`."""
     monkeypatch.setenv("INDEX_DB", str(demo_run / "db.sqlite"))
     return demo_run / "scores.json"
 

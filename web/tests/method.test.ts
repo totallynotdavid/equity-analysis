@@ -29,7 +29,9 @@ describe("the method page", () => {
         new RegExp(`data-metric="${series.metric}".*?</tr>`, "s"),
       )?.[0];
       expect(row, series.metric).toContain(series.group);
-      expect(row, series.metric).toContain(series.label.replace("&", "&amp;"));
+      expect(row, series.metric).toContain(
+        series.label.replaceAll("&", "&amp;"),
+      );
       expect(row, series.metric).toContain(
         `<td class="py-2 pr-4">${series.unit}</td>`,
       );

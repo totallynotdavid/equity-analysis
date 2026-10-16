@@ -432,6 +432,15 @@ describe("the address", () => {
     expect(serializeState(state)).toBe("");
   });
 
+  it("never lets a query key reach the prototype of a bound", () => {
+    const state = parseState("min.__proto__=1&max.constructor=2", data);
+
+    expect(Object.getPrototypeOf(state.min)).toBeNull();
+    expect(Object.getPrototypeOf(state.max)).toBeNull();
+    expect(({} as Record<string, unknown>).__proto__).toBe(Object.prototype);
+    expect(serializeState(state)).toBe("");
+  });
+
   it("drops a choice equal to the default", () => {
     expect(serializeState(parseState("sort=-score", data))).toBe("");
     expect(

@@ -17,12 +17,9 @@ interface Figures {
   ticker: string;
   name?: string;
   sector?: string | null;
-  /** Dollars. */
   revenue?: number | null;
-  /** A ratio, 0.3 for 30%. */
   op_margin?: number | null;
   revenue_pct?: number | null;
-  /** A ratio, 0.1 for 10%. */
   net_margin?: number | null;
   filed?: string;
 }
@@ -67,7 +64,6 @@ function series(
   };
 }
 
-/** A ticker report with the figures a screener test cares about. */
 export function report(figures: Figures): TickerReport {
   const filed = figures.filed ?? "2026-08-01";
   const all: Series[] = [];

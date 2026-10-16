@@ -25,11 +25,11 @@ const SECTIONS = [
 function text(html: string): string {
   return html
     .replace(/<[^>]*>/g, " ")
-    .replaceAll("&amp;", "&")
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">")
     .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'");
+    .replaceAll("&#39;", "'")
+    .replaceAll("&amp;", "&");
 }
 
 function numbersIn(value: unknown, into: number[] = []): number[] {

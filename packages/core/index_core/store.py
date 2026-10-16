@@ -842,7 +842,6 @@ class Store:
         )
 
     def trials(self) -> list[Trial]:
-        """Every specification in the ledger, in the order last recorded."""
         return [
             Trial(description=d, as_of=date.fromisoformat(a), months=m, sharpe=s)
             for d, a, m, s in self._db.execute(
