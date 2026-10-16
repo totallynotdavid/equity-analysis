@@ -15,7 +15,7 @@ import pandas as pd
 
 from index_core.labels import HORIZON
 from index_core.model import SNAPSHOT_STEP, auc
-from index_core.scoring import SCORE_LEVELS, decile_scores
+from index_core.scoring import SCORE_LEVELS, scores_by_date
 
 
 if TYPE_CHECKING:
@@ -134,7 +134,7 @@ def evaluate(
     if frame.empty:
         raise ValueError(f"no date has {MIN_NAMES} stocks to rank")
 
-    scored = frame.join(_scores(frame))
+    scored = frame.join(scores_by_date(frame["prob"]))
     per_date = _per_date(scored)
     scored = scored[scored.index.get_level_values("date").isin(per_date.index)]
     months = pd.DatetimeIndex(per_date.index).to_period("M")
@@ -201,20 +201,6 @@ def _ratio(numerator: list[int], denominator: list[int]) -> Statistic:
     return lambda sums: (
         sums[..., numerator].sum(axis=-1) / sums[..., denominator].sum(axis=-1)
     )
-
-
-def _scores(frame: pd.DataFrame) -> pd.Series:
-    """The decile score of every row, ranked among the stocks of its own date."""
-    parts = []
-    for date, group in frame.groupby(level="date"):
-        table = decile_scores(group["prob"].droplevel("date"))
-        parts.append(
-            pd.Series(
-                table["score"].to_numpy(),
-                index=pd.MultiIndex.from_product([[date], table["ticker"]]),
-            )
-        )
-    return pd.concat(parts).rename("score").rename_axis(["date", "ticker"])
 
 
 def _per_date(scored: pd.DataFrame) -> pd.DataFrame:

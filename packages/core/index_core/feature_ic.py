@@ -38,6 +38,10 @@ class FeatureIC:
     dates: int
 
 
+def family_of(feature: str) -> Literal["technical", "fundamental"]:
+    return "technical" if feature in TECHNICAL else "fundamental"
+
+
 def feature_ics(rows: pd.DataFrame, features: Sequence[str]) -> list[FeatureIC]:
     """Mean Spearman correlation of each feature with `excess`, date by date.
 
@@ -48,13 +52,13 @@ def feature_ics(rows: pd.DataFrame, features: Sequence[str]) -> list[FeatureIC]:
     """
     columns = list(features)
     per_date = pd.DataFrame(
-        {date: _spearman(group, columns) for date, group in rows.groupby(level="date")}
-    ).T.sort_index()
+        {name: _spearman_by_date(rows, name) for name in columns}
+    ).sort_index()
     estimates = mean_by_month_block(per_date)
     return [
         FeatureIC(
             feature=name,
-            family="technical" if name in TECHNICAL else "fundamental",
+            family=family_of(name),
             mean_ic=estimate,
             t_stat=_t_stat(per_date[name]),
             dates=int(per_date[name].count()),
@@ -63,20 +67,20 @@ def feature_ics(rows: pd.DataFrame, features: Sequence[str]) -> list[FeatureIC]:
     ]
 
 
-def _spearman(group: pd.DataFrame, columns: list[str]) -> pd.Series:
-    """One date's correlations. Columns without a gap are ranked together; a
-    column with a gap is correlated on the stocks that have it."""
-    excess = group["excess"]
-    values = group[columns]
-    present = values.notna().sum()
-    whole = present[(present == len(group)) & (present >= MIN_NAMES)].index
-    result = pd.Series(np.nan, index=columns)
-    if excess.notna().all() and len(whole):
-        result[whole] = values[whole].rank().corrwith(excess.rank())
-    for name in present.index.difference(whole):
-        if present[name] >= MIN_NAMES:
-            result[name] = values[name].corr(excess, method="spearman")
-    return result
+def _spearman_by_date(rows: pd.DataFrame, name: str) -> pd.Series:
+    """Each date's Spearman correlation of one feature with `excess`, on the
+    stocks that have both. A date where fewer than `MIN_NAMES` stocks have the
+    feature has none. Ranks tie at their mean, as in `Series.corr`."""
+    dates = rows.index.get_level_values("date")
+    counts = rows[name].notna().astype(int).groupby(dates).sum()
+    pair = rows[[name, "excess"]].dropna()
+    ranks = pair.groupby(level="date").rank()
+    centred = ranks - ranks.groupby(level="date").transform("mean")
+    num = (centred[name] * centred["excess"]).groupby(level="date").sum()
+    spread = (centred**2).groupby(level="date").sum()
+    den = pd.Series(np.sqrt(spread[name] * spread["excess"]), index=spread.index)
+    ic = (num / den.where(den > 0)).reindex(counts.index)
+    return ic.where(counts >= MIN_NAMES).rename(name)
 
 
 def _t_stat(series: pd.Series) -> float:

@@ -35,8 +35,13 @@ def span(fact: Fact) -> int:
     return fact.end - fact.start
 
 
+_CUMULATIVE_SPANS = frozenset(
+    days for low, high in SPANS for days in range(low, high + 1)
+)
+
+
 def is_cumulative(fact: Fact) -> bool:
-    return any(low <= span(fact) <= high for low, high in SPANS)
+    return span(fact) in _CUMULATIVE_SPANS
 
 
 def is_annual(fact: Fact) -> bool:
