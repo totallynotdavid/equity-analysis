@@ -7,8 +7,10 @@ through uv from the repository root, for example `uv run eq run ...`.
 | Command       | What it does                                                 | Details                         |
 | ------------- | ------------------------------------------------------------ | ------------------------------- |
 | `eq run`      | Fetches prices and filings, fits, scores, stores and exports | [below](#eq-run)                |
-| `eq export`   | Writes the latest stored scores as JSON                      | [below](#eq-export)             |
-| `eq import`   | Stores a scores file, for the API to serve                   | [below](#eq-import)             |
+| `eq filings`  | Fetches only the filings and company names of a universe     | [below](#eq-filings)            |
+| `eq metrics`  | Recomputes the ticker reports from the stored filings        | [below](#eq-metrics)            |
+| `eq export`   | Writes the latest stored scores and ticker reports as JSON   | [below](#eq-export)             |
+| `eq import`   | Stores a scores file and ticker reports, for the API         | [below](#eq-import)             |
 | `eq coverage` | Lists names with few fundamentals in the stored filings      | [Fundamentals](FUNDAMENTALS.md) |
 | `eq factors`  | Stores the Fama-French five-factor daily returns             | [below](#eq-factors)            |
 | `eq backtest` | Walks forward over the stored data and prints the evidence   | [Backtest](BACKTEST.md)         |
@@ -43,12 +45,24 @@ Every command uses the dates:
 - The labels, the model's training rows and the backtest use a stock on a date
   only when it was a member then. The cross-sectional ranks of the features are
   taken among that date's members. A name stays in the history until its `end`.
-- `eq coverage` reports the members on the latest stored price date.
+- `eq coverage` reports the members on the latest stored price date, or on
+  `--as-of`.
 
-| File                                    | Contents                                                                                     |
-| --------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [`demo30.txt`](../universes/demo30.txt) | Today's 30 large caps, all members from 2000. For offline runs. It has survivorship bias.    |
-| [`sp500.txt`](../universes/sp500.txt)   | S&P 500 members from 2011-01-01, including the names that left. 810 tickers, from Wikipedia. |
+A file `<name>.companies.csv` beside the universe file gives the SEC identifier
+(CIK) and the current GICS sector of its tickers, one `ticker,cik,sector` per
+line, with `#` comments. The ticker pages group stocks by the sector. A ticker
+without a line has no sector and no sector percentile, and its CIK is looked up
+in the SEC's ticker list. A company that moved to a new registrant lists the new
+CIK first and the earlier ones after it, joined with `+`, as `XOM` does: its
+filings from every registrant make one history, and a figure links to the filing
+under the registrant that filed it.
+
+| File                                                        | Contents                                                                                     |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [`demo30.txt`](../universes/demo30.txt)                     | Today's 30 large caps, all members from 2000. For offline runs. It has survivorship bias.    |
+| [`demo30.companies.csv`](../universes/demo30.companies.csv) | The CIK and sector of the 30                                                                 |
+| [`sp500.txt`](../universes/sp500.txt)                       | S&P 500 members from 2011-01-01, including the names that left. 810 tickers, from Wikipedia. |
+| [`sp500.companies.csv`](../universes/sp500.companies.csv)   | The CIK and sector of today's members. A name that left has none                             |
 
 ### Rebuilding sp500.txt
 
@@ -61,7 +75,9 @@ a declared `User-Agent` (`--user-agent` changes it), reads their HTML tables and
 walks the changes table backwards from today's members. It writes the page URLs,
 the fetch date and the CC BY-SA 4.0 licence into the file header, and prints the
 rows it could not place on stderr. `--since` moves the first date, and `--out`
-the file.
+the file. Beside it, it writes `sp500.companies.csv`, the CIK and GICS sector
+columns of today's members, and the earlier registrants it lists in
+`PREDECESSORS`.
 
 The changes table is dense from 2011: at least 16 rows a year. Before that it
 has at most 13 a year, so the script's default start is 2011-01-01 and an
@@ -88,6 +104,7 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
 | `--cache`    | Directory for the responses of Tiingo and the SEC   | `data/cache`               |
 | `--db`       | SQLite file                                         | [see below](#the-database) |
 | `--out`      | JSON file to write                                  | `outputs/scores.json`      |
+| `--tickers`  | Directory for the ticker reports, one file each     | `tickers` beside `--out`   |
 
 `eq run` does this, in order:
 
@@ -97,15 +114,18 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
    [cache](#the-cache) day reuses the cached responses. A ticker Tiingo does not
    list, or lists with no bars in the range, has no prices. `eq run` names those
    tickers on stderr and leaves them out. A missing SPY stops the run.
-2. Fetches every company's filed facts up to `--end`. A ticker the SEC does not
-   list has no filings. `eq run` names those tickers on stderr and leaves them
-   out.
+2. Fetches every company's filed facts up to `--end`, and its name and SIC code
+   from the SEC's submissions API. A ticker the SEC does not list has no
+   filings. `eq run` names those tickers on stderr and leaves them out.
 3. Builds the features, fits the model and scores the latest date
    ([Model](MODEL.md)).
 4. Stores the run in the database and writes `--out` ([Outputs](OUTPUTS.md)).
    The tickers left out in steps 1 and 2 are in the file's `left_out`, with the
    reason. When none is left, the run stops with
    `no ticker has both prices and filings`.
+5. Computes the [metrics and ticker reports](FUNDAMENTALS.md#ticker-reports) of
+   every member that has filings, stores them and writes one file each to
+   `--tickers`, replacing the `.json` files there.
 
 With a synthetic source, the prices or filings are generated, and `eq run` says
 on stderr that the scores mean nothing.
@@ -116,22 +136,50 @@ snapshot dates ([Model](MODEL.md#fit)). Use an earlier `--start`.
 `too little history at <date> for [...]` names tickers that lack a technical
 feature on the latest date, such as a recent listing. Remove them from the list.
 
+## eq filings
+
+```bash
+uv run eq filings --universe universes/demo30.txt --filings edgar
+```
+
+Fetches and stores the filed facts and the company names of the universe, as
+step 2 of [`eq run`](#eq-run) does, and no prices. `--filings`, `--start`,
+`--end`, `--cache` and `--db` work as for `eq run`. It replaces the facts stored
+before. Then [`eq coverage --as-of DATE`](FUNDAMENTALS.md#eq-coverage) reports
+what the filings hold.
+
+## eq metrics
+
+```bash
+uv run eq metrics --universe universes/demo30.txt
+```
+
+Recomputes the metrics and ticker reports from the stored filings and the dates
+of the stored SPY prices, without fetching. `--tickers` selects the directory
+(default `outputs/tickers`) and `--db` the database.
+
 ## Real data
 
 `--prices tiingo` and `--filings edgar` each read one environment variable and
 fail without it.
 
-| Variable         | Meaning                                                     | Default |
-| ---------------- | ----------------------------------------------------------- | ------- |
-| `TIINGO_API_KEY` | [Tiingo](https://www.tiingo.com/) API token for prices      | none    |
-| `SEC_USER_AGENT` | Your name and an email address, sent to the SEC for filings | none    |
+| Variable         | Meaning                                                | Default |
+| ---------------- | ------------------------------------------------------ | ------- |
+| `TIINGO_API_KEY` | [Tiingo](https://www.tiingo.com/) API token for prices | none    |
+| `SEC_USER_AGENT` | The `User-Agent` header sent to the SEC for filings    | none    |
 
 `INDEX_DB` selects the database ([below](#the-database)). `SCORES_JSON` is read
 by the web page ([Outputs](OUTPUTS.md#web-page)).
 
-The SEC asks every client to identify itself, so `SEC_USER_AGENT` must hold a
-contact such as `Jane Doe jane@example.com`. The client waits 0.12 seconds
-between requests to stay under the SEC's limit of 10 a second.
+The SEC refuses a request without a `User-Agent`, so `SEC_USER_AGENT` must be
+set. Use this browser string, and put no name or email address in it:
+
+```text
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36
+```
+
+The client waits 0.12 seconds between requests to stay under the SEC's limit of
+10 a second.
 
 A database that holds synthetic data rejects real data ([below](#the-database)),
 so after a synthetic run give the real run a new file. `INDEX_DB` makes every
@@ -139,13 +187,16 @@ later command read that file too:
 
 ```bash
 export INDEX_DB=data/real.sqlite
-TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
+TIINGO_API_KEY=... \
+SEC_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36' \
   uv run eq run --universe universes/demo30.txt
 ```
 
 Tiingo costs one request per ticker plus one for SPY: 31 for `demo30`, which the
 72-second pause stretches to about 36 minutes when none is cached. The SEC costs
-one request for its ticker list and at most one per ticker.
+two requests per ticker, its `companyfacts` and its submissions, and one more
+`companyfacts` for each earlier registrant. It adds one for its ticker list when
+a ticker has no CIK in the universe's companies file.
 
 ### The cache
 
@@ -218,8 +269,8 @@ it does for prices ([below](#the-database)).
 
 ## The database
 
-The database is one SQLite file. It holds prices, filings, factors, the backtest
-ledger and every saved run.
+The database is one SQLite file. It holds prices, filings, company identities,
+factors, the backtest ledger, every saved run, and the latest ticker reports.
 
 - Every command uses the file given by `--db`, else `$INDEX_DB`, else
   `data/index.sqlite`. `eq export` and `eq coverage` open it read-only. When it
@@ -248,16 +299,23 @@ uv run eq export --universe demo30 --out outputs/scores.json
 
 Writes the stored run with the latest as-of date. `--universe NAME` limits the
 choice to one universe. Without it, the latest run of any universe is written.
-`--db` and `--out` work as for `eq run`.
+`--db` and `--out` work as for `eq run`. It also writes the stored ticker
+reports to `--tickers` (default `tickers` beside `--out`), replacing the `.json`
+files there.
 
 ## eq import
 
 ```bash
-uv run eq import --scores deploy/scores.json --db data/deploy.sqlite
+uv run eq import --scores deploy/scores.json --tickers deploy/tickers \
+  --db data/deploy.sqlite
 ```
 
 Reads a file in the shape of `eq run`'s `--out` ([Outputs](OUTPUTS.md)) and
-stores it as the run of its universe and as-of date. The database then holds the
-scores and their two sources, and no prices or filings, so `index-api` serves it
-and `eq export` writes the file back unchanged. A file that is not a scores
-report fails with the fields that are wrong. `--db` works as for `eq run`.
+stores it as the run of its universe and as-of date. With `--tickers` it also
+stores every ticker report file of that directory, replacing a stored report of
+the same universe and ticker. The database then holds the scores and their two
+sources and the reports, and no prices or filings, so `index-api` serves it and
+`eq export` writes the files back unchanged. A file that is not a scores report
+fails with the fields that are wrong. A ticker report of another universe or
+another as-of date than the scores file fails the import and stores nothing.
+`--db` works as for `eq run`.

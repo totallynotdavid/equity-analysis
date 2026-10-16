@@ -9,20 +9,31 @@ code is in [`sources/edgar.py`](../packages/core/index_core/sources/edgar.py)
 ## What is read
 
 [`EdgarSource`](../packages/core/index_core/sources/edgar.py) maps a ticker to
-its company with the SEC's ticker list, then fetches that company's
-`companyfacts` document. It keeps facts from forms 10-K and 10-Q, their
-amendments and their transition reports, for 13 concepts:
+its company with the CIK in the universe's companies file
+([CLI](CLI.md#universe-files)), else with the SEC's ticker list, then fetches
+that company's `companyfacts` document, and those of its earlier registrants. It
+keeps facts from forms 10-K and 10-Q, their amendments and their transition
+reports, for 19 concepts. Each fact keeps the accession number (`accn`), form,
+fiscal year (`fy`), fiscal period (`fp`) and registrant (`cik`) of the filing
+that reported it.
 
-| Kind          | Concepts                                                                                      |
-| ------------- | --------------------------------------------------------------------------------------------- |
-| Period flows  | revenue, gross profit, operating income, net income, depreciation, operating cash flow, capex |
-| Balance sheet | total assets, long-term debt, current debt, equity, cash                                      |
-| Cover page    | shares outstanding (summed over share classes)                                                |
+| Kind          | Concepts                                                                                                                                                        |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Period flows  | revenue, gross profit, operating income, net income, pre-tax income, income tax, interest expense, stock compensation, depreciation, operating cash flow, capex |
+| Per share     | diluted EPS, diluted weighted-average shares                                                                                                                    |
+| Balance sheet | total assets, long-term debt, current debt, equity, cash                                                                                                        |
+| Cover page    | shares outstanding (summed over share classes)                                                                                                                  |
 
 Companies change XBRL tags over time, so each concept lists several tags in
 priority order. A period takes the first tag that reports it. Capital spending
-is read as a positive amount paid, because filers differ on its sign. Debt is
-long-term debt plus the current portion reported for the same date.
+and interest expense are read as positive amounts, because filers differ on
+their sign. Debt is long-term debt plus the current portion reported for the
+same date. The tag lists are `CONCEPTS` in
+[`sources/edgar.py`](../packages/core/index_core/sources/edgar.py).
+
+The same module reads the company behind a ticker from the SEC's submissions
+API: its name, CIK, SIC code and the SIC title. The GICS sector is not in EDGAR.
+It comes from the universe's companies file.
 
 ## When a fact is known
 
@@ -72,23 +83,78 @@ missing. Like the technical features, each ratio is then ranked within its date.
 Yields stand in for price multiples. They stay defined, and keep their order,
 when earnings or EBITDA are not positive.
 
+## Ticker reports
+
+A ticker report is what the page of a ticker shows
+([Outputs](OUTPUTS.md#ticker-reports)). For each of the 21 metrics in
+[`metrics.py`](../packages/core/index_core/metrics.py) it holds the latest
+twelve points, oldest first, and the percentile of the latest value.
+
+| Group            | Metrics                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Income statement | revenue, gross profit, operating income, interest expense, pre-tax income, income tax, net income, diluted EPS, diluted shares |
+| Cash flow        | stock compensation, free cash flow (operating cash flow minus capex)                                                           |
+| Balance sheet    | total assets, cash, debt, net debt (debt minus cash), equity, shares outstanding                                               |
+| Ratios           | gross margin, operating margin, net margin, tax rate (income tax over pre-tax income)                                          |
+
+- A flow is a [trailing twelve-month](#trailing-twelve-months) figure at each
+  fiscal period end. Diluted shares are the weighted average of the longest
+  period reported to that date. A balance sheet quantity is its value at the
+  date.
+- A point lists the filed figures it is made of: each with its tag, period,
+  value and sign, and the filing that first reported that value (accession
+  number, form, fiscal year and period, filing date and the EDGAR page that
+  lists the filing's documents). A TTM adds the latest fiscal year to the
+  year-to-date period and subtracts the prior year's period, so it has three
+  figures. The point's value is their signed sum, or the stated formula of a
+  derived metric over its figures.
+- A point uses only filings made before the report's as-of date. A restated
+  figure is the latest filed value, and links to the first filing that reported
+  it.
+- `pct_universe` is the percent of the universe's members, on the same day, at
+  or below the value, so tied members share the higher percent. `pct_sector` is
+  the same among members with the same sector in the companies file. A group of
+  fewer than 5 values, and a ticker without a sector, has no percentile
+  (`null`). Only the percentile of the latest value is in the report. The stored
+  daily series, 260 dates per member, stay in the `metrics` table of the local
+  database.
+- A metric with no point, because a company does not report the concept, is not
+  in the report. Interest expense and stock compensation are absent for
+  companies that do not tag them.
+
 ## eq coverage
 
 ```bash
 uv run eq coverage --universe universes/demo30.txt
 ```
 
-`eq coverage` reads the stored filings, so run [`eq run`](CLI.md#eq-run) first.
-It counts, for each member at the latest stored SPY date, how many of the 13
-concepts have a fresh value then. It lists the tickers with fewer than
-`--min-concepts` (default 10), so a name that a ticker change or an unusual
-taxonomy leaves bare is visible. `--db` selects the database
-([CLI](CLI.md#the-database)).
+`eq coverage` reads the stored filings, so run [`eq run`](CLI.md#eq-run) or
+[`eq filings`](CLI.md#eq-filings) first. It counts, for each member at the
+latest stored SPY date (or `--as-of`), how many of the 19 concepts have a fresh
+value then. It lists the tickers with fewer than `--min-concepts` (default 10)
+and why: the concepts they lack, or that the filings source has no company for.
+It then counts the names with a fresh value for each concept, and for each tag
+of each concept the names that report it fresh and ever. A tag that no name
+reports freshly is marked `DEAD`: it is listed, not left out. `--db` selects the
+database ([CLI](CLI.md#the-database)).
 
 ```text
-Fundamentals coverage, demo30 universe, synthetic filings, as of 2026-10-08
-30 of 30 names have at least 10 of 13 concepts with a fresh filed value.
+Fundamentals coverage, toy universe, synthetic filings, as of 2026-09-30
+8 of 8 names have at least 10 of 19 concepts with a fresh filed value.
 No name has fewer.
+Names with a fresh value, by concept (of 8):
+  revenue: 8
+  ...
+Names reporting each tag, fresh now and ever filed (a concept takes the first tag that has the period):
+  revenue
+    Revenues: 8 fresh, 8 ever
+    RevenueFromContractWithCustomerExcludingAssessedTax: 0 fresh, 0 ever  DEAD
+    ...
+18 dead tags of 37.
 ```
 
-A missing value stays missing, and the model reads it as missing.
+The synthetic filings use one tag per concept, so the other tags are dead.
+
+A tag is dead for the universe given, not for every company: a tag that only a
+bank or an insurer uses is dead in a list of industrial companies. A missing
+value stays missing, and the model reads it as missing.

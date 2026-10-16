@@ -55,12 +55,13 @@ localhost. They run beside `mise run web`.
 
 `acme_companyfacts_handwritten.json` holds edge cases with known answers. To
 record a real `companyfacts` response as a fixture, trimmed to the tags the
-parser reads and to filings since `--since` (default `2022-01-01`), give the SEC
-your contact:
+parser reads and to filings since `--since` (default `2022-01-01`), give each
+company as `TICKER:CIK`, with the `SEC_USER_AGENT` of
+[the CLI](../docs/CLI.md#real-data):
 
 ```bash
-SEC_USER_AGENT="Jane Doe jane@example.com" \
-  uv run python packages/core/tests/record_companyfacts.py 320193 aapl
+SEC_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36' \
+  uv run python packages/core/tests/record_companyfacts.py AAPL:320193
 ```
 
 The file is written as `recorded_aapl_companyfacts.json` in the fixtures

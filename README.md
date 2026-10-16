@@ -70,7 +70,8 @@ rejects real data ([the database](docs/CLI.md#the-database)), so point
 
 ```bash
 export INDEX_DB=data/real.sqlite
-TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
+TIINGO_API_KEY=... \
+SEC_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36' \
   uv run eq run --universe universes/demo30.txt
 ```
 
@@ -90,6 +91,9 @@ TIINGO_API_KEY=... SEC_USER_AGENT="Jane Doe jane@example.com" \
   stays out of the development metrics. [`eq backtest`](docs/BACKTEST.md)
 - Fundamentals coverage report for a universe.
   [`eq coverage`](docs/FUNDAMENTALS.md#eq-coverage)
+- A page for each ticker with its fundamentals, the percentile of each in the
+  universe and its sector, and every figure linked to the SEC filing it was
+  reported in. [Ticker reports](docs/OUTPUTS.md#ticker-reports)
 - `scores.json` export, a read-only FastAPI service and an Astro page.
   [Outputs](docs/OUTPUTS.md)
 - Deterministic synthetic prices and filings for offline runs and tests.
