@@ -2,13 +2,14 @@ from datetime import date
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from index_core.report import ScoresReport  # noqa: TC002
+from index_core.report import ScoresReport, TickerReport  # noqa: TC002
+from index_core.sources.base import normalise_ticker
 from index_core.store import Store, StoreError, default_db_path
 from pydantic import BaseModel
 
 
-# FastAPI evaluates route annotations at runtime, so keep `ScoresReport` imported
-# at module scope.
+# FastAPI evaluates route annotations at runtime, so keep `ScoresReport` and
+# `TickerReport` imported at module scope.
 
 
 class Health(BaseModel):
@@ -53,3 +54,19 @@ def scores() -> ScoresReport:
     if report is None:
         raise HTTPException(status_code=404, detail="no scores have been computed")
     return report
+
+
+@app.get("/tickers/{ticker}")
+def ticker_report(ticker: str) -> TickerReport:
+    """The fundamentals of one ticker, each figure with the filing it is from."""
+    path = default_db_path()
+    found = None
+    if path.exists():
+        try:
+            with Store.open(path, read_only=True) as store:
+                found = store.ticker_report(normalise_ticker(ticker))
+        except StoreError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+    if found is None:
+        raise HTTPException(status_code=404, detail=f"no report for {ticker}")
+    return found
