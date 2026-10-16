@@ -10,7 +10,12 @@ on a date was a member from then on, and a name removed was a member until then.
 Whoever is still a member when the walk reaches `--since` was a member since
 that date, as far as the table says.
 
-Wikipedia's text is licensed CC BY-SA 4.0. The output carries the page URLs and
+Beside it the script writes `sp500.companies.csv`, the SEC identifier and the
+GICS sector of today's members from the same table. The ticker pages show the
+sector, and the filings source takes the identifier from it. `PREDECESSORS`
+adds the earlier registrants of a company that moved to a new one.
+
+Wikipedia's text is licensed CC BY-SA 4.0. The outputs carry the page URLs and
 the fetch date, and the same licence.
 """
 
@@ -33,6 +38,10 @@ USER_AGENT = (
     "equity-analysis-universe-builder/1.0 "
     "(https://github.com/totallynotdavid/equity-analysis)"
 )
+# A company that moved to a new registrant keeps the history of its filings under
+# the old one, and neither EDGAR nor the table links the two. The old CIK follows
+# the new one in the companies file. XOM moved to ExxonMobil Holdings Corp in 2026.
+PREDECESSORS: dict[str, tuple[int, ...]] = {"XOM": (34088,)}
 DEFAULT_OUT = Path(__file__).with_name("sp500.txt")
 # The default starts in the first year with at least 16 rows in the changes
 # table. A member that joined earlier starts on this date.
@@ -170,6 +179,20 @@ def current_members(rows: list[list[str]]) -> dict[str, date | None]:
     return members
 
 
+def current_companies(rows: list[list[str]]) -> dict[str, tuple[int, str]]:
+    """Each current ticker with its SEC identifier and GICS sector.
+
+    The sector is the third column and the identifier the seventh. A row
+    without either is not kept.
+    """
+    companies: dict[str, tuple[int, str]] = {}
+    for row in rows:
+        ticker = normalise(row[0])
+        if ticker and row[2] and row[6].isdigit():
+            companies[ticker] = (int(row[6]), row[2])
+    return companies
+
+
 def parse_changes(rows: list[list[str]]) -> tuple[list[Change], list[str]]:
     """The changes table as changes, and a message for each row it cannot read.
 
@@ -260,6 +283,22 @@ def render(spans: list[Span], since: date, fetched: date) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_companies(companies: dict[str, tuple[int, str]], fetched: date) -> str:
+    lines = [
+        "# SEC identifier and current GICS sector of the S&P 500 members, generated "
+        "by universes/build_sp500.py. Do not edit.",
+        f"# Source: {CURRENT_URL}, fetched {fetched}.",
+        f"# Wikipedia text is CC BY-SA 4.0: {LICENCE}",
+        "# Format: ticker,cik,sector. A name that has left the index is not listed.",
+    ]
+    lines.extend(
+        f"{ticker},{'+'.join(str(c) for c in (cik, *PREDECESSORS.get(ticker, ())))},"
+        f"{sector}"
+        for ticker, (cik, sector) in sorted(companies.items())
+    )
+    return "\n".join(lines) + "\n"
+
+
 def fetch(url: str, user_agent: str) -> str:
     response = httpx2.get(
         url, headers={"User-Agent": user_agent}, timeout=60.0, follow_redirects=True
@@ -275,20 +314,23 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--user-agent", default=USER_AGENT)
     args = parser.parse_args(argv)
 
-    current = current_members(
-        read_tables(fetch(CURRENT_URL, args.user_agent), {"constituents"})[
-            "constituents"
-        ]
-    )
+    constituents = read_tables(fetch(CURRENT_URL, args.user_agent), {"constituents"})[
+        "constituents"
+    ]
+    current = current_members(constituents)
     changes, problems = parse_changes(
         read_tables(fetch(CHANGES_URL, args.user_agent), {"changes"})["changes"]
     )
     spans, walk_problems = build_spans(current, changes, args.since)
     args.out.write_text(render(spans, args.since, date.today()))
+    companies = current_companies(constituents)
+    companies_out = args.out.with_suffix(".companies.csv")
+    companies_out.write_text(render_companies(companies, date.today()))
 
     sys.stderr.write(
         f"wrote {len(spans)} spans for {len({s.ticker for s in spans})} tickers "
         f"to {args.out}; {len(current)} current members, {len(changes)} changes\n"
+        f"wrote {len(companies)} companies to {companies_out}\n"
     )
     for problem in [*problems, *walk_problems]:
         sys.stderr.write(f"warning: {problem}\n")

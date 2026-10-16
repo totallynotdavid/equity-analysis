@@ -1,0 +1,33 @@
+# SEC identifier and current GICS sector of the demo30 members, from universes/sp500.companies.csv.
+# Source: https://en.wikipedia.org/wiki/List_of_S%26P_500_companies, fetched 2026-10-16.
+# Wikipedia text is CC BY-SA 4.0: https://creativecommons.org/licenses/by-sa/4.0/
+AAPL,320193,Information Technology
+MSFT,789019,Information Technology
+AMZN,1018724,Consumer Discretionary
+GOOGL,1652044,Communication Services
+META,1326801,Communication Services
+NVDA,1045810,Information Technology
+JPM,19617,Financials
+JNJ,200406,Health Care
+XOM,2115436+34088,Energy
+PG,80424,Consumer Staples
+V,1403161,Financials
+UNH,731766,Health Care
+HD,354950,Consumer Discretionary
+MA,1141391,Financials
+CVX,93410,Energy
+KO,21344,Consumer Staples
+PEP,77476,Consumer Staples
+ABBV,1551152,Health Care
+MRK,310158,Health Care
+COST,909832,Consumer Staples
+WMT,104169,Consumer Staples
+BAC,70858,Financials
+DIS,1744489,Communication Services
+CSCO,858877,Information Technology
+ADBE,796343,Information Technology
+CRM,1108524,Information Technology
+NKE,320187,Consumer Discretionary
+MCD,63908,Consumer Discretionary
+TMO,97745,Health Care
+LLY,59478,Health Care
