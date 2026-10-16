@@ -61,8 +61,8 @@ def test_unknown_argument_exits_nonzero() -> None:
     assert exit_info.value.code != 0
 
 
-def test_run_writes_thirty_scored_rows_with_an_as_of_date(tmp_path: Path) -> None:
-    scores = json.loads(_run(tmp_path).read_text())
+def test_run_writes_thirty_scored_rows_with_an_as_of_date(ran: Path) -> None:
+    scores = json.loads(ran.read_text())
 
     assert scores["as_of"] == "2026-09-30"
     assert scores["status"] == "experimental, not validated"
@@ -79,19 +79,19 @@ def test_run_writes_thirty_scored_rows_with_an_as_of_date(tmp_path: Path) -> Non
     assert len({row["ticker"] for row in rows}) == 30
 
 
-def test_export_rewrites_the_stored_scores_unchanged(tmp_path: Path) -> None:
-    first = _run(tmp_path)
-    exported = tmp_path / "exported.json"
+def test_export_rewrites_the_stored_scores_unchanged(ran: Path) -> None:
+    exported = ran.parent / "exported.json"
 
-    main(["export", "--db", str(tmp_path / "db.sqlite"), "--out", str(exported)])
+    main(["export", "--db", str(ran.parent / "db.sqlite"), "--out", str(exported)])
 
-    assert exported.read_text() == first.read_text()
+    assert exported.read_text() == ran.read_text()
 
 
 def test_import_stores_a_scores_file_so_export_returns_it_unchanged(
-    tmp_path: Path,
+    ran: Path,
 ) -> None:
-    scores = json.loads(_run(tmp_path).read_text())
+    tmp_path = ran.parent
+    scores = json.loads(ran.read_text())
     scores["price_source"], scores["facts_source"] = "tiingo", "edgar"
     published = tmp_path / "published.json"
     published.write_text(json.dumps(scores, indent=2) + "\n")
@@ -105,9 +105,10 @@ def test_import_stores_a_scores_file_so_export_returns_it_unchanged(
 
 
 def test_export_keeps_the_order_of_the_imported_rows_and_left_out_names(
-    tmp_path: Path,
+    ran: Path,
 ) -> None:
-    scores = json.loads(_run(tmp_path).read_text())
+    tmp_path = ran.parent
+    scores = json.loads(ran.read_text())
     scores["rows"].reverse()
     scores["left_out"] = [
         {"ticker": "ZZZ", "reason": "no prices"},
@@ -137,11 +138,9 @@ def test_export_without_a_database_fails_with_a_message(tmp_path: Path) -> None:
         main(["export", "--db", str(tmp_path / "none.sqlite")])
 
 
-def test_a_missing_database_points_to_the_one_beside_it(tmp_path: Path) -> None:
-    _run(tmp_path)
-
+def test_a_missing_database_points_to_the_one_beside_it(ran: Path) -> None:
     with pytest.raises(SystemExit, match=r"found db\.sqlite beside it.*--db"):
-        main(["export", "--db", str(tmp_path / "index.sqlite")])
+        main(["export", "--db", str(ran.parent / "index.sqlite")])
 
 
 def test_tiingo_run_without_a_key_fails_before_fetching(
@@ -164,9 +163,8 @@ def test_tiingo_run_without_a_contact_fails_before_fetching(
 
 
 def test_a_run_on_a_database_of_other_sources_fails_before_fetching(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ran: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _run(tmp_path)
     monkeypatch.setenv("TIINGO_API_KEY", "key")
     monkeypatch.setenv("SEC_USER_AGENT", "Mozilla/5.0 Chrome/155.0.0.0 Safari/537.36")
     monkeypatch.setattr(
@@ -174,7 +172,7 @@ def test_a_run_on_a_database_of_other_sources_fails_before_fetching(
     )
 
     with pytest.raises(SystemExit, match="holds synthetic prices"):
-        main(["run", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")])
+        main(["run", "--universe", str(DEMO), "--db", str(ran.parent / "db.sqlite")])
 
 
 def test_prices_and_filings_are_chosen_independently(
@@ -286,9 +284,9 @@ def test_a_missing_openmp_runtime_stops_a_run_before_it_fetches(
 
 
 def test_export_and_coverage_work_without_the_openmp_runtime(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ran: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _run(tmp_path)
+    tmp_path = ran.parent
     capsys.readouterr()
     _without_openmp(monkeypatch)
     database = str(tmp_path / "db.sqlite")
@@ -300,8 +298,8 @@ def test_export_and_coverage_work_without_the_openmp_runtime(
     assert "Fundamentals coverage" in capsys.readouterr().out
 
 
-def test_run_writes_a_report_per_ticker_beside_the_scores(tmp_path: Path) -> None:
-    _run(tmp_path)
+def test_run_writes_a_report_per_ticker_beside_the_scores(ran: Path) -> None:
+    tmp_path = ran.parent
 
     files = sorted((tmp_path / "tickers").glob("*.json"))
     assert len(files) == 30
@@ -329,8 +327,8 @@ def test_a_run_replaces_the_reports_of_an_earlier_run(tmp_path: Path) -> None:
     assert not stale.exists()
 
 
-def test_export_and_import_carry_the_ticker_reports(tmp_path: Path) -> None:
-    _run(tmp_path)
+def test_export_and_import_carry_the_ticker_reports(ran: Path) -> None:
+    tmp_path = ran.parent
     database = str(tmp_path / "published.sqlite")
 
     main(
@@ -358,9 +356,9 @@ def test_export_and_import_carry_the_ticker_reports(tmp_path: Path) -> None:
     ("field", "other"), [("universe", "other"), ("as_of", "2020-01-02")]
 )
 def test_import_refuses_ticker_reports_that_differ_from_the_scores_file(
-    tmp_path: Path, field: str, other: str
+    ran: Path, field: str, other: str
 ) -> None:
-    _run(tmp_path)
+    tmp_path = ran.parent
     stray = tmp_path / "tickers" / "AAA.json"
     report = json.loads(next((tmp_path / "tickers").glob("*.json")).read_text())
     report["ticker"], report[field] = "AAA", other
@@ -404,8 +402,8 @@ def test_filings_store_the_facts_and_names_without_any_prices(
         assert store.read_prices(["SPY"]).empty
 
 
-def test_metrics_recompute_the_reports_of_stored_facts(tmp_path: Path) -> None:
-    _run(tmp_path)
+def test_metrics_recompute_the_reports_of_stored_facts(ran: Path) -> None:
+    tmp_path = ran.parent
     kept = (tmp_path / "tickers" / "AAPL.json").read_text()
     again = tmp_path / "again"
 
@@ -445,9 +443,9 @@ def test_coverage_counts_a_name_with_no_stored_filings_as_zero(
 
 
 def test_coverage_lists_names_with_few_concepts(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ran: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _run(tmp_path)
+    tmp_path = ran.parent
     capsys.readouterr()
 
     main(
@@ -501,7 +499,8 @@ def test_a_network_failure_ends_with_a_message_not_a_traceback(
         )
 
 
-def test_export_can_pick_a_universe_by_name(tmp_path: Path) -> None:
+def test_export_can_pick_a_universe_by_name(ran: Path) -> None:
+    tmp_path = ran.parent
     database = tmp_path / "db.sqlite"
     small = tmp_path / "small.txt"
     small.write_text(
@@ -521,7 +520,6 @@ def test_export_can_pick_a_universe_by_name(tmp_path: Path) -> None:
             ]
         )
     )
-    _run(tmp_path)
     main(
         [
             *["run", "--universe", str(small), *OFFLINE, *WINDOW],
@@ -560,25 +558,72 @@ def test_a_reversed_date_range_fails_with_a_message(tmp_path: Path) -> None:
 
 
 def test_backtest_prints_the_out_of_sample_table_with_the_base_rate(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    long_backtest: Path,
 ) -> None:
-    database = tmp_path / "db.sqlite"
-    main(
-        [
-            *["run", "--universe", str(DEMO), *OFFLINE],
-            *["--start", "2016-01-01", "--end", "2026-09-30"],
-            *["--db", str(database), "--out", str(tmp_path / "scores.json")],
-        ]
-    )
-    capsys.readouterr()
+    output = (long_backtest / "backtest.txt").read_text()
 
-    main(["backtest", "--universe", str(DEMO), "--db", str(database)])
-
-    output = capsys.readouterr().out
     assert output.startswith("Walk-forward backtest, demo30 universe, synthetic prices")
     assert "Base rate, share of stocks beating SPY:" in output
     assert "Effective sample: about" in output
     assert "Newey-West t-statistic" in output
+
+
+def test_a_run_writes_no_evidence_for_a_universe_with_no_backtest(
+    long_run: Path,
+) -> None:
+    assert not (long_run / "evidence.json").exists()
+
+
+def test_export_publishes_the_stored_backtest_beside_the_scores(
+    long_backtest: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database = long_backtest / "db.sqlite"
+    out = tmp_path / "published" / "scores.json"
+
+    main(["export", "--db", str(database), "--out", str(out)])
+
+    evidence = json.loads((out.parent / "evidence.json").read_text())
+    assert evidence["run"]["universe"] == "demo30"
+    assert evidence["run"]["period"] == "development"
+    assert evidence["verdict"]["decided"] is False
+    assert {m["model"] for m in evidence["models"]} == {
+        "lightgbm",
+        "ridge",
+        "composite",
+    }
+    assert "demo30 to " in capsys.readouterr().out
+
+
+def test_export_removes_evidence_it_has_no_backtest_for(
+    long_run: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database, out = long_run / "db.sqlite", tmp_path / "published" / "scores.json"
+    out.parent.mkdir()
+    stale = out.parent / "evidence.json"
+    stale.write_text("{}")
+    capsys.readouterr()
+
+    main(["export", "--db", str(database), "--out", str(out)])
+
+    assert not stale.exists()
+    assert "no backtest stored" in capsys.readouterr().out
+
+
+def test_export_can_put_the_evidence_elsewhere(
+    long_backtest: Path, tmp_path: Path
+) -> None:
+    database, out = long_backtest / "db.sqlite", tmp_path / "scores.json"
+    elsewhere = tmp_path / "elsewhere" / "proof.json"
+
+    main(
+        [
+            *["export", "--db", str(database), "--out", str(out)],
+            *["--evidence", str(elsewhere)],
+        ]
+    )
+
+    assert elsewhere.exists()
+    assert not (out.parent / "evidence.json").exists()
 
 
 def test_backtest_without_a_database_fails_with_a_message(tmp_path: Path) -> None:
@@ -586,14 +631,8 @@ def test_backtest_without_a_database_fails_with_a_message(tmp_path: Path) -> Non
         main(["backtest", "--universe", str(DEMO), "--db", str(tmp_path / "none.db")])
 
 
-def test_backtest_with_too_little_history_fails_with_a_message(tmp_path: Path) -> None:
-    database = tmp_path / "db.sqlite"
-    main(
-        [
-            *["run", "--universe", str(DEMO), *OFFLINE, *WINDOW],
-            *["--db", str(database), "--out", str(tmp_path / "scores.json")],
-        ]
-    )
+def test_backtest_with_too_little_history_fails_with_a_message(ran: Path) -> None:
+    database = ran.parent / "db.sqlite"
 
     with pytest.raises(SystemExit, match=r"eq: .*needs at least \d+.*--start 20"):
         main(["backtest", "--universe", str(DEMO), "--db", str(database)])

@@ -2,11 +2,14 @@ import sqlite3
 
 from datetime import date
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 import pytest
 
 from index_core.report import (
+    Check,
+    EvidenceRun,
     Filing,
     LeftOut,
     ModelInfo,
@@ -16,6 +19,7 @@ from index_core.report import (
     ScoresReport,
     Series,
     TickerReport,
+    Verdict,
 )
 from index_core.sources.base import PRICE_COLUMNS, Security
 from index_core.sources.synthetic import (
@@ -23,7 +27,14 @@ from index_core.sources.synthetic import (
     SyntheticFilings,
     SyntheticSource,
 )
-from index_core.store import SCHEMA_VERSION, Store, StoreError, default_db_path
+from index_core.store import (
+    SCHEMA_VERSION,
+    EvalRow,
+    Store,
+    StoreError,
+    default_db_path,
+)
+from index_core.walkforward import MODELS
 
 
 def _bars() -> pd.DataFrame:
@@ -409,3 +420,129 @@ def test_the_latest_report_of_a_ticker_is_returned_whatever_the_universe(
 
         assert store.ticker_reports("demo") == []
         assert store.ticker_report("AAA") == newer
+
+
+def _evidence_run(
+    period: Literal["development", "holdout"], dates: int = 10
+) -> EvidenceRun:
+    return EvidenceRun(
+        universe="demo",
+        period=period,
+        holdout_start=date(2024, 1, 1),
+        first_date=date(2024, 1, 1),
+        last_date=date(2024, 6, 30),
+        dates=dates,
+        months=6,
+        rows=100,
+        independent_windows=4,
+        base_rate=0.45,
+        horizon_days=63,
+        cost_bps=10.0,
+        members=30,
+        unpriced=0,
+        price_source="synthetic",
+        facts_source=None,
+        factors_source=None,
+    )
+
+
+def _oos(day: str) -> pd.DataFrame:
+    index = pd.MultiIndex.from_product(
+        [[pd.Timestamp(day)], ["AAA", "BBB"]], names=["date", "ticker"]
+    )
+    frame = pd.DataFrame({model: [0.1, 0.9] for model in MODELS}, index=index)
+    frame["label"] = [0, 1]
+    frame["excess"] = [-0.02, 0.03]
+    return frame
+
+
+def test_a_backtest_comes_back_with_its_checks_figures_and_rows(
+    tmp_path: Path,
+) -> None:
+    verdict = Verdict(
+        candidate="lightgbm",
+        lightgbm_stays=True,
+        decided=True,
+        checks=[Check(name="ic", value="0.04", passed=True)],
+    )
+    rows = [
+        EvalRow("lightgbm", "mean_ic", "", 0.04, 0.01, 0.07),
+        EvalRow("lightgbm", "ic_t_stat", "", None),
+        EvalRow("lightgbm", "spread_net_at", "20", -0.01, net_of_cost_bps=20.0),
+    ]
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.save_backtest(_evidence_run("holdout"), verdict, rows, _oos("2024-02-29"))
+        stored = store.latest_backtest("demo")
+
+    assert stored is not None
+    assert stored.run == _evidence_run("holdout")
+    assert stored.verdict == verdict
+    assert stored.rows == rows
+    assert list(stored.oos.index.get_level_values("ticker")) == ["AAA", "BBB"]
+    assert stored.oos["excess"].tolist() == [-0.02, 0.03]
+
+
+def test_a_failed_check_keeps_the_score_hidden_in_a_decided_verdict(
+    tmp_path: Path,
+) -> None:
+    verdict = Verdict(
+        candidate="lightgbm",
+        lightgbm_stays=True,
+        decided=True,
+        checks=[
+            Check(name="ic", value="0.04", passed=True),
+            Check(name="cost", value="-0.01", passed=False),
+        ],
+    )
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.save_backtest(_evidence_run("holdout"), verdict, [], _oos("2024-02-29"))
+        stored = store.latest_backtest("demo")
+
+    assert stored is not None
+    assert stored.verdict.decided
+    assert not stored.verdict.shown
+
+
+def test_a_baseline_that_passes_does_not_show_the_score_of_lightgbm(
+    tmp_path: Path,
+) -> None:
+    verdict = Verdict(
+        candidate="ridge",
+        lightgbm_stays=False,
+        decided=True,
+        checks=[Check(name="ic", value="0.04", passed=True)],
+    )
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.save_backtest(_evidence_run("holdout"), verdict, [], _oos("2024-02-29"))
+        stored = store.latest_backtest("demo")
+
+    assert stored is not None
+    assert all(check.passed for check in stored.verdict.checks)
+    assert not stored.verdict.shown
+
+
+def test_a_new_backtest_replaces_the_one_of_its_period_and_the_holdout_wins(
+    tmp_path: Path,
+) -> None:
+    verdict = Verdict(candidate="ridge", lightgbm_stays=False, decided=False, checks=[])
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        assert store.latest_backtest("demo") is None
+        store.save_backtest(
+            _evidence_run("development", 10), verdict, [], _oos("2024-02-29")
+        )
+        store.save_backtest(
+            _evidence_run("development", 12), verdict, [], _oos("2024-03-31")
+        )
+        development = store.latest_backtest("demo")
+        store.save_backtest(_evidence_run("holdout"), verdict, [], _oos("2024-04-30"))
+        holdout = store.latest_backtest("demo")
+
+    assert development is not None
+    assert development.run.dates == 12
+    assert [d.month for d in development.oos.index.get_level_values("date")] == [3, 3]
+    assert holdout is not None
+    assert holdout.run.period == "holdout"
