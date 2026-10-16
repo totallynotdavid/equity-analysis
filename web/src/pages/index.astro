@@ -2,8 +2,10 @@
 import Layout from "@/layouts/Layout.astro";
 import { renderScores } from "@/lib/render";
 import { loadScores } from "@/lib/scores";
+import { loadTickers } from "@/lib/tickers";
 
-const scores = renderScores(loadScores());
+const pages = loadTickers().map((report) => report.ticker);
+const scores = renderScores(loadScores(), new Set(pages));
 ---
 
 <Layout>
@@ -23,7 +25,11 @@ const scores = renderScores(loadScores());
       recommendation to buy or sell a security. You can lose money.
     </p>
 
-    <div id="scores-root" set:html={scores} />
+    <div
+      id="scores-root"
+      data-pages={JSON.stringify(pages)}
+      set:html={scores}
+    />
   </main>
 </Layout>
 
@@ -33,10 +39,11 @@ const scores = renderScores(loadScores());
   // The build-time scores stay when the API is absent, as in `mise run web`.
   const base = import.meta.env.PUBLIC_API_URL ?? "/api";
   const root = document.getElementById("scores-root");
+  const pages = new Set<string>(JSON.parse(root?.dataset.pages ?? "[]"));
   fetch(`${base}/scores`)
     .then((response) => (response.ok ? response.json() : null))
     .then((scores) => {
-      if (scores && root) root.innerHTML = renderScores(scores);
+      if (scores && root) root.innerHTML = renderScores(scores, pages);
     })
     .catch(() => {});
 </script>

@@ -1,6 +1,12 @@
 ---
 import "@/styles/global.css";
 import "@/styles/starwind.css";
+
+interface Props {
+  title?: string;
+}
+
+const { title = "index" } = Astro.props;
 ---
 
 <!doctype html>
@@ -10,7 +16,7 @@ import "@/styles/starwind.css";
     <meta name="description" content="index: a daily score for US stocks" />
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
-    <title>index</title>
+    <title>{title}</title>
   </head>
   <body class="bg-background text-foreground min-h-screen font-sans antialiased">
     <slot />

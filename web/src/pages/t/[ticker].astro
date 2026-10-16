@@ -1,0 +1,34 @@
+---
+import type { GetStaticPaths } from "astro";
+import Layout from "@/layouts/Layout.astro";
+import { renderTicker } from "@/lib/render-ticker";
+import { loadTickers } from "@/lib/tickers";
+
+export const getStaticPaths = (() =>
+  loadTickers().map((report) => ({
+    params: { ticker: report.ticker },
+    props: { report },
+  }))) satisfies GetStaticPaths;
+
+const { report } = Astro.props;
+---
+
+<Layout title={`${report.ticker} · index`}>
+  <main class="container mx-auto max-w-5xl px-4 py-12 sm:py-16">
+    <p class="text-sm">
+      <a class="underline" href="/">
+        index
+      </a>
+    </p>
+
+    <p
+      class="border-warning bg-warning/10 text-foreground mt-6 rounded-md border px-4 py-3 text-sm font-medium"
+      role="note"
+    >
+      Experimental, not validated. Nothing here is investment advice or a
+      recommendation to buy or sell a security.
+    </p>
+
+    <div id="ticker-root" set:html={renderTicker(report)} />
+  </main>
+</Layout>
