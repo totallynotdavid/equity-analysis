@@ -32,7 +32,15 @@ from index_core.portfolio import (
     monthly_holdings,
     strategy,
 )
-from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport, Valuation
+from index_core.report import (
+    LeftOut,
+    ModelInfo,
+    Risk,
+    ScoreRow,
+    ScoresReport,
+    Valuation,
+)
+from index_core.risk import assess, daily_returns
 from index_core.scoring import decile_scores
 from index_core.significance import Alpha, Deflated, deflated_sharpe, factor_alpha
 from index_core.sources.base import NotFoundError, empty_facts
@@ -235,8 +243,9 @@ def compute_metrics(store: Store, universe: Universe) -> pd.Timestamp:
     are as of: the latest stored `SPY` date.
 
     A report holds the reverse DCF of its ticker, which reads the prices of the
-    members and the stored factor file's risk-free rate. A member the filings
-    source has no company for has no report.
+    members and the stored factor file's risk-free rate, and its risk, which
+    reads the prices and the factor file. A member the filings source has no
+    company for has no report.
     """
     prices = store.read_prices([BENCHMARK, *universe.tickers])
     days = prices.loc[prices["ticker"] == BENCHMARK, "date"]
@@ -265,9 +274,10 @@ def compute_metrics(store: Store, universe: Universe) -> pd.Timestamp:
             optional_float(pct_universe),
             optional_float(pct_sector),
         )
-    valuations = _valuations(
-        today, inputs, prices, security["sic"], store.read_factors(), as_of
-    )
+    factors = store.read_factors()
+    valuations = _valuations(today, inputs, prices, security["sic"], factors, as_of)
+    risks = _risks(prices, factors, universe.members_on(as_of), as_of)
+    store.replace_risk(universe.name, as_of.date(), risks)
 
     reports = []
     source = store.facts_source()
@@ -283,6 +293,7 @@ def compute_metrics(store: Store, universe: Universe) -> pd.Timestamp:
             facts[facts["ticker"] == ticker],
             percentiles.get(ticker, {}),
             valuations.get(ticker),
+            risks.get(ticker),
         )
         if report is not None:
             reports.append(report)
@@ -293,6 +304,25 @@ def compute_metrics(store: Store, universe: Universe) -> pd.Timestamp:
 # A ticker whose last bar is older than this many days before the date has no
 # price to value.
 MAX_PRICE_AGE = pd.Timedelta(days=7)
+
+
+def _risks(
+    prices: pd.DataFrame,
+    factors: pd.DataFrame,
+    tickers: list[str],
+    as_of: pd.Timestamp,
+) -> dict[str, Risk]:
+    """Assess each ticker with a recent price bar over the available window."""
+    returns = daily_returns(
+        prices.pivot(index="date", columns="ticker", values="adj_close")
+    )
+    last_bar = prices.groupby("ticker")["date"].max().to_dict()
+    market = returns[BENCHMARK]
+    return {
+        ticker: assess(returns[ticker], market, factors)
+        for ticker in tickers
+        if ticker in returns and last_bar[ticker] >= as_of - MAX_PRICE_AGE
+    }
 
 
 def _valuations(

@@ -23,6 +23,7 @@ from index_core.report import (
     Filing,
     Part,
     Point,
+    Risk,
     Series,
     TickerReport,
     Valuation,
@@ -102,13 +103,14 @@ def ticker_report(
     facts: pd.DataFrame,
     percentiles: Mapping[str, tuple[float | None, float | None]],
     valuation: Valuation | None = None,
+    risk: Risk | None = None,
 ) -> TickerReport | None:
     """The report of one ticker, or None where no metric can be computed.
 
     `security` is its row of `Store.read_security` and `facts` its facts, which
     came from `facts_source`. `percentiles` gives, per metric, the percentile in
     the universe and in the sector as of the date. `valuation` is what its
-    price implies, where that was worked out.
+    price implies and `risk` what it behaves like, where those were worked out.
     """
     found = statements(facts, as_of)
     if not found:
@@ -136,6 +138,7 @@ def ticker_report(
             for name, points in found.items()
         ],
         valuation=valuation,
+        risk=risk,
     )
 
 

@@ -13,6 +13,7 @@ from index_core.metrics import optional_float
 from index_core.report import (
     LeftOut,
     ModelInfo,
+    Risk,
     ScoreRow,
     ScoresReport,
     TickerReport,
@@ -21,7 +22,7 @@ from index_core.sources.base import FACT_COLUMNS, FACTOR_COLUMNS, PRICE_COLUMNS
 
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from types import TracebackType
 
     from index_core.sources.base import Security
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
 DB_VARIABLE = "INDEX_DB"
 
 # Raise it when `_SCHEMA` changes. A database is rebuilt, never migrated.
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS meta (
@@ -85,6 +86,29 @@ CREATE TABLE IF NOT EXISTS ticker_reports (
 CREATE TABLE IF NOT EXISTS factor_returns (
     date TEXT PRIMARY KEY,
     {", ".join(f"{column} REAL NOT NULL" for column in FACTOR_COLUMNS)}
+);
+CREATE TABLE IF NOT EXISTS risk (
+    universe TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    window INTEGER NOT NULL,
+    start TEXT NOT NULL,
+    end TEXT NOT NULL,
+    beta REAL NOT NULL,
+    beta_se REAL NOT NULL,
+    volatility REAL NOT NULL,
+    max_drawdown REAL NOT NULL,
+    r2 REAL NOT NULL,
+    PRIMARY KEY (universe, ticker)
+);
+CREATE TABLE IF NOT EXISTS exposures (
+    universe TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    factor TEXT NOT NULL,
+    beta REAL NOT NULL,
+    se REAL NOT NULL,
+    PRIMARY KEY (universe, ticker, factor),
+    FOREIGN KEY (universe, ticker) REFERENCES risk (universe, ticker)
 );
 CREATE TABLE IF NOT EXISTS trials (
     spec_hash TEXT PRIMARY KEY,
@@ -390,6 +414,67 @@ class Store:
         )
         frame["as_of"] = pd.to_datetime(frame["as_of"])
         return frame
+
+    def replace_risk(
+        self, universe: str, as_of: date, risks: Mapping[str, Risk]
+    ) -> None:
+        """Store the estimates of a universe, dropping those stored before.
+
+        Only a ticker with a fit is stored. `exposures` holds its loadings and
+        its annualised alpha, which is the factor `alpha`.
+        """
+        with self._db:
+            self._db.execute("DELETE FROM exposures WHERE universe = ?", (universe,))
+            self._db.execute("DELETE FROM risk WHERE universe = ?", (universe,))
+            for ticker, risk in risks.items():
+                fit = risk.fit
+                if fit is None:
+                    continue
+                self._db.execute(
+                    "INSERT INTO risk VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        universe,
+                        ticker,
+                        as_of.isoformat(),
+                        risk.window,
+                        fit.start.isoformat(),
+                        fit.end.isoformat(),
+                        fit.beta.value,
+                        fit.beta.se,
+                        fit.volatility,
+                        fit.max_drawdown,
+                        fit.r2,
+                    ),
+                )
+                self._db.executemany(
+                    "INSERT INTO exposures VALUES (?, ?, ?, ?, ?)",
+                    (
+                        (universe, ticker, name, row.value, row.se)
+                        for name, row in [
+                            ("alpha", fit.alpha),
+                            *((loading.factor, loading) for loading in fit.loadings),
+                        ]
+                    ),
+                )
+
+    def read_risk(self, universe: str) -> pd.DataFrame:
+        """The stored `risk` rows of a universe, by ticker."""
+        return pd.read_sql_query(
+            "SELECT ticker, as_of, window, start, end, beta, beta_se, volatility, "
+            "max_drawdown, r2 FROM risk WHERE universe = ? ORDER BY ticker",
+            self._db,
+            params=[universe],
+        )
+
+    def read_exposures(self, universe: str) -> pd.DataFrame:
+        """The stored `exposures` of a universe: `ticker`, `factor`, `beta` and
+        `se`, by ticker and in the order the factors are stored."""
+        return pd.read_sql_query(
+            "SELECT ticker, factor, beta, se FROM exposures WHERE universe = ? "
+            "ORDER BY ticker, rowid",
+            self._db,
+            params=[universe],
+        )
 
     def replace_ticker_reports(
         self, universe: str, reports: Sequence[TickerReport]

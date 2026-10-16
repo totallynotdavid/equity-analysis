@@ -160,6 +160,67 @@ class Valuation(BaseModel):
         return self
 
 
+class Estimate(BaseModel):
+    """A regression coefficient, its robust standard error `se` and the 95%
+    interval `lo` to `hi` that follows from it."""
+
+    value: float
+    se: float
+    lo: float
+    hi: float
+
+
+class Loading(Estimate):
+    """The coefficient on one Fama-French factor: `mkt_rf`, `smb`, `hml`, `rmw`
+    or `cma`."""
+
+    factor: str
+
+
+class RiskFit(BaseModel):
+    """How a stock behaved over the `Risk.window` trading days from `start` to
+    `end`, which are the last days with both a return and factor returns.
+
+    `beta` is the slope of its daily return on SPY's. `volatility` is the
+    annualised standard deviation of its daily return and `max_drawdown` the
+    largest fall from a peak, as a negative fraction. `loadings` are the
+    coefficients of its daily return above the risk-free rate on the five
+    factors, `alpha` is the annualised intercept of that regression, and `r2` is
+    the share of the variance of the return that it explains.
+    """
+
+    start: date
+    end: date
+    beta: Estimate
+    volatility: float
+    max_drawdown: float
+    r2: float
+    alpha: Estimate
+    loadings: list[Loading]
+
+
+class Risk(BaseModel):
+    """What a stock behaves like, or why that cannot be said.
+
+    The status is `ok` with a `fit`, or `insufficient_history` or
+    `not_estimable` with a `reason`. `window` is the number of trading days an
+    estimate needs.
+    """
+
+    status: Literal["ok", "insufficient_history", "not_estimable"]
+    reason: str | None = None
+    window: int
+    fit: RiskFit | None = None
+
+    @model_validator(mode="after")
+    def _one_outcome(self) -> Risk:
+        ok = self.status == "ok" and self.reason is None and self.fit is not None
+        refused = self.status != "ok" and self.reason is not None and self.fit is None
+        if not (ok or refused):
+            raise ValueError("an ok risk has a fit and no reason, else a reason")
+        return self
+
+
 class TickerReport(BaseModel):
     """The fundamentals of a ticker as of a date. `facts_source` says where the
     filings came from: `synthetic` ones have no real filing behind them."""
@@ -175,3 +236,4 @@ class TickerReport(BaseModel):
     sector: str | None
     series: list[Series]
     valuation: Valuation | None = None
+    risk: Risk | None = None
