@@ -337,8 +337,8 @@ export function parseState(
   const known = columnKeys(data);
   const state: State = {
     sort: null,
-    min: {},
-    max: {},
+    min: Object.create(null),
+    max: Object.create(null),
     sectors: [],
     cols: [],
     q: (params.get("q") ?? "").trim(),
