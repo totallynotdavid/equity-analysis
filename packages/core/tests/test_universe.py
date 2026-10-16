@@ -34,6 +34,44 @@ def test_reads_memberships_skipping_comments_and_blank_lines(tmp_path: Path) -> 
     assert universe.tickers == ["AAPL", "MSFT", "NVDA"]
 
 
+def test_a_companies_file_beside_the_universe_gives_each_ticker_its_cik_and_sector(
+    tmp_path: Path,
+) -> None:
+    path = _file(tmp_path, "AAPL,2010-01-04\nMSFT,2010-01-04\nXOM,2010-01-04\n")
+    (tmp_path / "universe.companies.csv").write_text(
+        "# GICS\naapl, 320193, Information Technology\n"
+        "XOM,2115436+34088,Energy  # new registrant first\n"
+    )
+
+    universe = read_universe(path)
+
+    assert universe.sectors == {"AAPL": "Information Technology", "XOM": "Energy"}
+    assert universe.ciks == {"AAPL": (320193,), "XOM": (2115436, 34088)}
+    assert universe.excluding({"XOM"}).ciks == universe.ciks
+
+
+def test_a_universe_without_a_companies_file_has_no_sectors_or_ciks(
+    tmp_path: Path,
+) -> None:
+    universe = read_universe(_file(tmp_path, "AAPL,2010-01-04\n"))
+
+    assert (universe.sectors, universe.ciks) == ({}, {})
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["MSFT", "MSFT,Tech", "MSFT,notanumber,Tech", "MSFT,789019,", "MSFT,789019+,Tech"],
+)
+def test_a_malformed_companies_file_is_an_error_that_names_the_line(
+    tmp_path: Path, line: str
+) -> None:
+    path = _file(tmp_path, "AAPL,2010-01-04\n")
+    (tmp_path / "universe.companies.csv").write_text(f"AAPL,320193,Tech\n{line}\n")
+
+    with pytest.raises(ValueError, match=r"universe\.companies\.csv:2: expected"):
+        read_universe(path)
+
+
 def test_a_name_is_a_member_from_its_start_through_the_day_before_its_end(
     tmp_path: Path,
 ) -> None:

@@ -76,3 +76,35 @@ def test_a_database_with_an_older_layout_is_unavailable_with_the_reason(
 
     assert response.status_code == 503
     assert "older layout; delete it" in response.json()["detail"]
+
+
+def test_a_ticker_returns_the_report_that_eq_run_wrote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = _run_cli(tmp_path, monkeypatch)
+    written = json.loads((out.parent / "tickers" / "MSFT.json").read_text())
+
+    response = TestClient(app).get("/tickers/msft")
+
+    assert response.status_code == 200
+    assert response.json() == written
+    assert response.json()["series"][0]["points"][0]["parts"][0]["filing"]["url"]
+
+
+def test_a_ticker_with_no_report_is_not_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_cli(tmp_path, monkeypatch)
+
+    response = TestClient(app).get("/tickers/NOPE")
+
+    assert response.status_code == 404
+    assert "NOPE" in response.json()["detail"]
+
+
+def test_tickers_are_not_found_before_any_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("INDEX_DB", str(tmp_path / "none.sqlite"))
+
+    assert TestClient(app).get("/tickers/AAPL").status_code == 404

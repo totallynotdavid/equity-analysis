@@ -35,9 +35,9 @@ CURRENT_PAGE = """
 <table class="wikitable sortable" id="constituents">
 <tr><th>Symbol</th><th>Security</th><th>Sector</th><th>Sub</th><th>HQ</th>
 <th>Date added</th><th>CIK</th><th>Founded</th></tr>
-<tr><td><a href="x">AAA</a></td><td>Aaa Inc</td><td>s</td><td>s</td><td>h</td>
-<td>1957-03-04</td><td>1</td><td>1902</td></tr>
-<tr><td>BRK.B</td><td>Berkshire</td><td>s</td><td>s</td><td>h</td>
+<tr><td><a href="x">AAA</a></td><td>Aaa Inc</td><td>Industrials</td><td>s</td>
+<td>h</td><td>1957-03-04</td><td>1</td><td>1902</td></tr>
+<tr><td>BRK.B</td><td>Berkshire</td><td>Financials</td><td>s</td><td>h</td>
 <td>2010-02-16</td><td>2</td><td>1839</td></tr>
 <tr><td>NEWT</td><td>Newtick</td><td>s</td><td>s</td><td>h</td>
 <td>2015-03-01</td><td>3</td><td>1990</td></tr>
@@ -99,6 +99,26 @@ def test_current_members_carry_their_date_added_and_dots_become_dashes() -> None
         "BACK": None,
         "ADDED": date(2020, 5, 1),
     }
+
+
+def test_current_companies_have_the_cik_and_sector_of_each_ticker() -> None:
+    rows = build.read_tables(CURRENT_PAGE, {"constituents"})["constituents"]
+
+    companies = build.current_companies(rows)
+
+    assert companies["AAA"] == (1, "Industrials")
+    assert companies["BRK-B"] == (2, "Financials")
+    assert len(companies) == 5
+
+
+def test_a_row_without_a_cik_is_not_a_company() -> None:
+    rows = [
+        ["GOOD", "Good", "Energy", "s", "h", "2020-01-01", "0000000042", "1990"],
+        ["NOCIK", "No Cik", "Energy", "s", "h", "2020-01-01", "", "1990"],
+        ["NOSEC", "No Sector", "", "s", "h", "2020-01-01", "7", "1990"],
+    ]
+
+    assert build.current_companies(rows) == {"GOOD": (42, "Energy")}
 
 
 def test_changes_are_read_and_an_unreadable_row_is_reported() -> None:
@@ -214,6 +234,13 @@ def test_the_generated_file_loads_and_names_its_source_and_licence(
     assert f"fetched {date.today()}." in text
     assert "CC BY-SA 4.0" in text
     universe = read_universe(out)
+    assert universe.sectors["AAA"] == "Industrials"
+    assert universe.sectors["BRK-B"] == "Financials"
+    assert universe.ciks["AAA"] == (1,)
+    assert universe.ciks["BRK-B"] == (2,)
+    assert "GONE" not in universe.sectors
+    assert "GONE" not in universe.ciks
+    assert build.CURRENT_URL in (tmp_path / "sp500.companies.csv").read_text()
     assert universe.members_on(date(2019, 1, 1)) == [
         "AAA",
         "BACK",

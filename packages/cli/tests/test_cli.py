@@ -12,6 +12,7 @@ from index_cli import main as cli
 from index_cli.main import main
 from index_core.pipeline import ingest
 from index_core.sources.base import NotFoundError
+from index_core.sources.edgar import CONCEPTS
 from index_core.sources.synthetic import SyntheticSource
 from index_core.store import Store
 
@@ -167,7 +168,7 @@ def test_a_run_on_a_database_of_other_sources_fails_before_fetching(
 ) -> None:
     _run(tmp_path)
     monkeypatch.setenv("TIINGO_API_KEY", "key")
-    monkeypatch.setenv("SEC_USER_AGENT", "Jane Doe jane@example.com")
+    monkeypatch.setenv("SEC_USER_AGENT", "Mozilla/5.0 Chrome/155.0.0.0 Safari/537.36")
     monkeypatch.setattr(
         "index_core.sources.tiingo.BASE_URL", "http://127.0.0.1:1", raising=True
     )
@@ -299,6 +300,126 @@ def test_export_and_coverage_work_without_the_openmp_runtime(
     assert "Fundamentals coverage" in capsys.readouterr().out
 
 
+def test_run_writes_a_report_per_ticker_beside_the_scores(tmp_path: Path) -> None:
+    _run(tmp_path)
+
+    files = sorted((tmp_path / "tickers").glob("*.json"))
+    assert len(files) == 30
+    report = json.loads((tmp_path / "tickers" / "AAPL.json").read_text())
+    assert (report["ticker"], report["universe"], report["as_of"]) == (
+        "AAPL",
+        "demo30",
+        "2026-09-30",
+    )
+    assert report["name"] == "AAPL Holdings Inc."
+    revenue = next(s for s in report["series"] if s["metric"] == "revenue")
+    point = revenue["points"][-1]
+    assert point["parts"][0]["filing"]["url"].startswith(
+        f"https://www.sec.gov/Archives/edgar/data/{report['cik']}/"
+    )
+
+
+def test_a_run_replaces_the_reports_of_an_earlier_run(tmp_path: Path) -> None:
+    stale = tmp_path / "tickers" / "GONE.json"
+    stale.parent.mkdir()
+    stale.write_text("{}")
+
+    _run(tmp_path)
+
+    assert not stale.exists()
+
+
+def test_export_and_import_carry_the_ticker_reports(tmp_path: Path) -> None:
+    _run(tmp_path)
+    database = str(tmp_path / "published.sqlite")
+
+    main(
+        [
+            *["import", "--scores", str(tmp_path / "scores.json")],
+            *["--tickers", str(tmp_path / "tickers"), "--db", database],
+        ]
+    )
+    main(
+        [
+            *["export", "--db", database, "--out", str(tmp_path / "again" / "s.json")],
+        ]
+    )
+
+    again = sorted((tmp_path / "again" / "tickers").glob("*.json"))
+    assert [p.name for p in again] == [
+        p.name for p in sorted((tmp_path / "tickers").glob("*.json"))
+    ]
+    assert all(
+        a.read_text() == (tmp_path / "tickers" / a.name).read_text() for a in again
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "other"), [("universe", "other"), ("as_of", "2020-01-02")]
+)
+def test_import_refuses_ticker_reports_that_differ_from_the_scores_file(
+    tmp_path: Path, field: str, other: str
+) -> None:
+    _run(tmp_path)
+    stray = tmp_path / "tickers" / "AAA.json"
+    report = json.loads(next((tmp_path / "tickers").glob("*.json")).read_text())
+    report["ticker"], report[field] = "AAA", other
+    stray.write_text(json.dumps(report))
+    database = tmp_path / "published.sqlite"
+
+    with pytest.raises(SystemExit, match=r"^eq: .*AAA\.json is for "):
+        main(
+            [
+                *["import", "--scores", str(tmp_path / "scores.json")],
+                *["--tickers", str(tmp_path / "tickers"), "--db", str(database)],
+            ]
+        )
+
+    assert not database.exists()
+
+
+def test_filings_store_the_facts_and_names_without_any_prices(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database = tmp_path / "db.sqlite"
+
+    main(
+        [
+            *["filings", "--universe", str(DEMO), "--filings", "synthetic"],
+            *["--end", END.isoformat(), "--db", str(database)],
+        ]
+    )
+    capsys.readouterr()
+    main(
+        [
+            *["coverage", "--universe", str(DEMO), "--db", str(database)],
+            *["--as-of", END.isoformat()],
+        ]
+    )
+
+    out = capsys.readouterr().out
+    assert "30 of 30 names have at least 10 of" in out
+    with Store.open(database, read_only=True) as store:
+        assert len(store.read_security(["AAPL", "MSFT"])) == 2
+        assert store.read_prices(["SPY"]).empty
+
+
+def test_metrics_recompute_the_reports_of_stored_facts(tmp_path: Path) -> None:
+    _run(tmp_path)
+    kept = (tmp_path / "tickers" / "AAPL.json").read_text()
+    again = tmp_path / "again"
+
+    main(
+        [
+            *["metrics", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")],
+            *["--tickers", str(again)],
+        ]
+    )
+
+    assert (again / "AAPL.json").read_text() == kept
+    assert len(list(again.glob("*.json"))) == 30
+
+
 def test_coverage_counts_a_name_with_no_stored_filings_as_zero(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -310,13 +431,17 @@ def test_coverage_counts_a_name_with_no_stored_filings_as_zero(
 
     main(["coverage", "--universe", str(universe), "--db", str(database)])
 
-    assert capsys.readouterr().out == (
-        "Fundamentals coverage, pair universe, no filings, as of 2026-09-30\n"
-        "0 of 2 names have at least 10 of 13 concepts with a fresh filed value.\n"
-        "2 with fewer (a missing value stays missing):\n"
-        "  AAPL: 0\n"
-        "  MSFT: 0\n"
-    )
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[:5] == [
+        "Fundamentals coverage, pair universe, no filings, as of 2026-09-30",
+        f"0 of 2 names have at least 10 of {len(CONCEPTS)} concepts with a fresh "
+        "filed value.",
+        "2 with fewer (a missing value stays missing):",
+        "  AAPL: 0 (no company at the filings source)",
+        "  MSFT: 0 (no company at the filings source)",
+    ]
+    assert "  revenue: 0" in lines
+    assert "    Revenues: 0 fresh, 0 ever  DEAD" in lines
 
 
 def test_coverage_lists_names_with_few_concepts(
@@ -352,7 +477,7 @@ def test_a_network_failure_ends_with_a_message_not_a_traceback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("TIINGO_API_KEY", "key")
-    monkeypatch.setenv("SEC_USER_AGENT", "Jane Doe jane@example.com")
+    monkeypatch.setenv("SEC_USER_AGENT", "Mozilla/5.0 Chrome/155.0.0.0 Safari/537.36")
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         unused_port = probe.getsockname()[1]

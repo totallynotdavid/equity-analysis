@@ -15,6 +15,7 @@ from index_core.features.fundamental import (
     concept_coverage,
     fundamental_features,
     fundamental_inputs,
+    tag_usage,
 )
 from index_core.sources.edgar import CONCEPTS, parse_companyfacts
 from index_core.sources.synthetic import SyntheticFilings
@@ -407,3 +408,32 @@ def test_coverage_counts_the_fresh_concepts_of_each_ticker() -> None:
     # On the filing day the two debt tags, equity and cash are not yet usable.
     earlier = concept_coverage(both, ["ACME"], pd.Timestamp("2023-11-03"))
     assert earlier["ACME"] == len(CONCEPTS) - 4
+
+
+def test_tag_usage_counts_the_tickers_per_tag_and_lists_dead_tags() -> None:
+    facts = _facts()
+    sparse = facts[
+        facts["concept"].isin(["revenue"]) & (facts["priority"] == 0)
+    ].assign(ticker="SPARSE")
+    both = pd.concat([facts, sparse])
+
+    usage = tag_usage(both, ["ACME", "SPARSE", "NOFILINGS"], pd.Timestamp("2023-11-06"))
+
+    assert list(usage["concept"].unique()) == list(CONCEPTS)
+    assert len(usage) == sum(len(spec.tags) for spec in CONCEPTS.values())
+    by_tag = usage.set_index("tag")
+    assert (by_tag.loc["Revenues", "fresh"], by_tag.loc["Revenues", "ever"]) == (2, 2)
+    revenue_from_contract = by_tag.loc[
+        "RevenueFromContractWithCustomerExcludingAssessedTax"
+    ]
+    assert (revenue_from_contract["fresh"], revenue_from_contract["ever"]) == (1, 1)
+    dead = usage[usage["fresh"] == 0]["tag"]
+    assert "SalesRevenueNet" in set(dead)
+    assert "Revenues" not in set(dead)
+
+
+def test_a_tag_filed_long_ago_is_ever_reported_but_not_fresh() -> None:
+    usage = tag_usage(_facts(), ["ACME"], pd.Timestamp("2026-01-01"))
+
+    revenues = usage.set_index("tag").loc["Revenues"]
+    assert (revenues["fresh"], revenues["ever"]) == (0, 1)

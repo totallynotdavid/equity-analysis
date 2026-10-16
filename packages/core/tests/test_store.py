@@ -6,8 +6,18 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from index_core.report import LeftOut, ModelInfo, ScoreRow, ScoresReport
-from index_core.sources.base import PRICE_COLUMNS
+from index_core.report import (
+    Filing,
+    LeftOut,
+    ModelInfo,
+    Part,
+    Point,
+    ScoreRow,
+    ScoresReport,
+    Series,
+    TickerReport,
+)
+from index_core.sources.base import PRICE_COLUMNS, Security
 from index_core.sources.synthetic import (
     SyntheticFactors,
     SyntheticFilings,
@@ -289,3 +299,113 @@ def test_a_database_of_the_previous_layout_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(StoreError, match="older layout; delete it"):
         Store.open(path)
+
+
+def _ticker_report(ticker: str, as_of: date, universe: str = "demo") -> TickerReport:
+    filing = Filing(
+        accn="0000000001-24-000001",
+        form="10-K",
+        fy=2023,
+        fp="FY",
+        filed=date(2024, 2, 1),
+        url="https://www.sec.gov/Archives/edgar/data/1/000000000124000001/"
+        "0000000001-24-000001-index.htm",
+    )
+    part = Part(
+        metric="revenue",
+        sign=1,
+        tag="Revenues",
+        start=date(2023, 1, 1),
+        end=date(2023, 12, 31),
+        value=100.0,
+        filing=filing,
+    )
+    return TickerReport(
+        ticker=ticker,
+        universe=universe,
+        as_of=as_of,
+        facts_source="synthetic",
+        name=f"{ticker} Inc.",
+        cik=1,
+        sic="7372",
+        sic_description="Services-Prepackaged Software",
+        sector=None,
+        series=[
+            Series(
+                metric="revenue",
+                group="Income statement",
+                label="Revenue",
+                unit="USD",
+                pct_universe=None,
+                pct_sector=None,
+                points=[Point(end=date(2023, 12, 31), value=100.0, parts=[part])],
+            )
+        ],
+    )
+
+
+def test_a_security_round_trips_and_is_replaced_by_the_next(tmp_path: Path) -> None:
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.replace_security(
+            "AAA", Security(1, "Aaa Inc.", "3490", "Metal"), "Energy"
+        )
+        store.replace_security("BBB", Security(2, "Bbb Inc.", "7372", "Software"), None)
+        store.replace_security("AAA", Security(1, "Aaa Corp.", "3490", "Metal"), None)
+        store.replace_security("CCC", None, None)
+        stored = store.read_security(["AAA", "BBB", "CCC"])
+
+    assert stored["ticker"].tolist() == ["AAA", "BBB"]
+    assert stored["name"].tolist() == ["Aaa Corp.", "Bbb Inc."]
+    assert stored["sector"].isna().all()
+
+
+def test_metrics_round_trip_by_ticker_and_replace_those_of_the_universe(
+    tmp_path: Path,
+) -> None:
+    def frame(value: float) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "ticker": ["AAA", "AAA", "BBB"],
+                "as_of": pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-03"]),
+                "metric": ["revenue", "revenue", "revenue"],
+                "value": [value, value + 1, value + 2],
+                "pct_universe": [None, 50.0, 100.0],
+                "pct_sector": [None, None, None],
+            }
+        )
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.replace_metrics("demo", frame(1.0))
+        store.replace_metrics("other", frame(10.0))
+        store.replace_metrics("demo", frame(5.0))
+        stored = store.read_metrics("demo", "AAA")
+        other = store.read_metrics("other", "BBB")
+
+    assert stored["value"].tolist() == [5.0, 6.0]
+    assert stored["as_of"].tolist() == list(
+        pd.to_datetime(["2024-01-02", "2024-01-03"])
+    )
+    assert stored["pct_universe"].isna().tolist() == [True, False]
+    assert other["value"].tolist() == [12.0]
+
+
+def test_the_latest_report_of_a_ticker_is_returned_whatever_the_universe(
+    tmp_path: Path,
+) -> None:
+    older = _ticker_report("AAA", date(2024, 1, 2))
+    newer = _ticker_report("AAA", date(2024, 1, 3), universe="other")
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.replace_ticker_reports(
+            "demo", [older, _ticker_report("BBB", date(2024, 1, 2))]
+        )
+        store.add_ticker_reports([newer])
+
+        assert store.ticker_report("AAA") == newer
+        assert store.ticker_report("NONE") is None
+        assert [r.ticker for r in store.ticker_reports("demo")] == ["AAA", "BBB"]
+
+        store.replace_ticker_reports("demo", [])
+
+        assert store.ticker_reports("demo") == []
+        assert store.ticker_report("AAA") == newer

@@ -13,7 +13,7 @@ from index_core.pipeline import (
     run,
 )
 from index_core.report import LeftOut
-from index_core.sources.base import NotFoundError, SourceError
+from index_core.sources.base import NotFoundError, Security, SourceError
 from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
 from index_core.store import Store
 from index_core.universe import Membership, Universe, read_universe
@@ -258,3 +258,91 @@ def test_a_source_failure_surfaces_and_stores_no_scores(tmp_path: Path) -> None:
         with pytest.raises(SourceError, match="boom"):
             run(Failing(), SyntheticFilings(), store, always(["AAPL"]), START, END)
         assert store.latest_report() is None
+
+
+def test_ingesting_filings_stores_who_each_company_is_and_its_sector(
+    tmp_path: Path,
+) -> None:
+    class Delisted(SyntheticFilings):
+        def security(self, ticker: str) -> Security:
+            if ticker == "MSFT":
+                raise NotFoundError("no company for ticker MSFT")
+            return super().security(ticker)
+
+    tickers = ["AAPL", "MSFT"]
+    with Store.open(tmp_path / "db.sqlite") as store:
+        ingest_filings(SyntheticFilings(), store, tickers, END, {"AAPL": "Tech"})
+        both = store.read_security(tickers)
+        ingest_filings(Delisted(), store, tickers, END)
+        left = store.read_security(tickers)
+
+    assert both["name"].tolist() == ["AAPL Holdings Inc.", "MSFT Holdings Inc."]
+    assert both["sector"].iloc[0] == "Tech"
+    assert pd.isna(both["sector"].iloc[1])
+    assert left["ticker"].tolist() == ["AAPL"]
+    assert left["sector"].isna().all()
+
+
+def test_a_run_reports_each_scored_ticker_with_its_percentiles(
+    tmp_path: Path,
+) -> None:
+    tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM"]
+    sectors = dict.fromkeys(tickers[:6], "Tech") | {"TSLA": "Auto", "JPM": "Banks"}
+    universe = Universe("demo", always(tickers).memberships, sectors)
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        run(SyntheticSource(), SyntheticFilings(), store, universe, START, END)
+        reports = store.ticker_reports("demo")
+        daily = store.read_metrics("demo", "AAPL")
+
+    assert [r.ticker for r in reports] == sorted(tickers)
+    aapl = next(r for r in reports if r.ticker == "AAPL")
+    assert (aapl.as_of, aapl.sector, aapl.name) == (END, "Tech", "AAPL Holdings Inc.")
+    assert aapl.facts_source == "synthetic"
+    series = {s.metric: s for s in aapl.series}
+    assert series["revenue"].pct_universe is not None
+    assert series["revenue"].pct_sector is not None
+    jpm = next(r for r in reports if r.ticker == "JPM")
+    assert {s.metric: s for s in jpm.series}["revenue"].pct_sector is None
+    # The page shows the figure that was ranked.
+    last = daily[daily["as_of"] == pd.Timestamp(END)].set_index("metric")
+    for name, shown in series.items():
+        assert shown.points[-1].end <= END
+        if name in ("revenue", "net_income", "total_assets"):
+            assert shown.points[-1].value == pytest.approx(last.loc[name, "value"])
+
+
+def test_a_company_with_no_facts_has_no_report(tmp_path: Path) -> None:
+    class Unlisted(SyntheticFilings):
+        def facts(self, ticker: str, end: date) -> pd.DataFrame:
+            if ticker == "MSFT":
+                raise NotFoundError("no company for ticker MSFT")
+            return super().facts(ticker, end)
+
+    tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM"]
+    with Store.open(tmp_path / "db.sqlite") as store:
+        run(SyntheticSource(), Unlisted(), store, always(tickers, "demo"), START, END)
+        reports = store.ticker_reports("demo")
+
+    assert "MSFT" not in {r.ticker for r in reports}
+    assert len(reports) == 7
+
+
+def test_the_coverage_of_a_universe_names_what_a_failing_name_lacks(
+    tmp_path: Path,
+) -> None:
+    class NoTax(SyntheticFilings):
+        def facts(self, ticker: str, end: date) -> pd.DataFrame:
+            facts = super().facts(ticker, end)
+            return facts[facts["concept"] != "income_tax"]
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        ingest_filings(NoTax(), store, ["AAPL"], END)
+        result = coverage(store, always(["AAPL"]), END)
+
+    assert result.as_of == END
+    assert not result.present.loc["AAPL", "income_tax"]
+    assert result.present.loc["AAPL", "revenue"]
+    assert result.no_company == []
+    dead = result.tags[result.tags["fresh"] == 0]
+    assert "IncomeTaxExpenseBenefit" in set(dead["tag"])

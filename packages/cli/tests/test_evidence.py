@@ -264,7 +264,7 @@ def test_the_break_even_cost_is_the_same_on_every_run_and_at_every_cost(
 
     def break_evens(output: str) -> list[str]:
         rows = _section(output, "Portfolios, rebalanced monthly")[1:]
-        return [row[row.index("bps") - 6 :] for row in rows]
+        return [re.split(r"\s{2,}", row.strip())[-1] for row in rows]
 
     assert break_evens(first) == break_evens(again)
     assert break_evens(first) == break_evens(other_cost)

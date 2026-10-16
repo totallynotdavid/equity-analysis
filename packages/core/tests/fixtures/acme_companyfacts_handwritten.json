@@ -144,11 +144,63 @@
           ]
         }
       },
+      "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest": {
+        "label": "Income (Loss) from Continuing Operations before Income Taxes",
+        "units": {
+          "USD": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 36, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 54, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 48, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "IncomeTaxExpenseBenefit": {
+        "label": "Income Tax Expense (Benefit)",
+        "units": {
+          "USD": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 8, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 14, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 12, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "InterestExpenseNonoperating": {
+        "label": "Interest Expense, Nonoperating",
+        "units": {
+          "USD": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": -6, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": -8, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": -7, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "ShareBasedCompensation": {
+        "label": "Share-based Compensation",
+        "units": {
+          "USD": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 3, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 4, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 5, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
       "EarningsPerShareDiluted": {
         "label": "Earnings Per Share, Diluted",
         "units": {
           "USD/shares": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 0.28, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 0.40, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
             {"start": "2023-01-01", "end": "2023-09-30", "val": 0.36, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
+          ]
+        }
+      },
+      "WeightedAverageNumberOfDilutedSharesOutstanding": {
+        "label": "Weighted Average Number of Diluted Shares Outstanding",
+        "units": {
+          "shares": [
+            {"start": "2022-01-01", "end": "2022-09-30", "val": 98, "accn": "0001234567-22-000030", "fy": 2022, "fp": "Q3", "form": "10-Q", "filed": "2022-11-04"},
+            {"start": "2022-01-01", "end": "2022-12-31", "val": 100, "accn": "0001234567-23-000006", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-15", "frame": "CY2022"},
+            {"start": "2023-01-01", "end": "2023-09-30", "val": 105, "accn": "0001234567-23-000040", "fy": 2023, "fp": "Q3", "form": "10-Q", "filed": "2023-11-03"}
           ]
         }
       }
