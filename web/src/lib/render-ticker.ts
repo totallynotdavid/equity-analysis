@@ -1,5 +1,3 @@
-import { renderRisk } from "./render-risk";
-import { renderValuation } from "./render-valuation";
 import type { Part, Point, Series, TickerReport } from "./tickers";
 
 const ESCAPES: Record<string, string> = {
@@ -180,5 +178,5 @@ export function renderTicker(report: TickerReport): string {
     .join("");
   const sector = report.sector === null ? "No sector" : report.sector;
   const company = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${report.cik}`;
-  return `<h1 class="text-primary text-4xl font-bold tracking-tight">${escape(report.ticker)}</h1><p class="mt-1 text-lg">${escape(report.name)}</p>${warning}<p class="text-muted-foreground mt-3 text-sm" id="identity">${escape(sector)}. SIC ${escape(report.sic)}, ${escape(report.sic_description)}. <a class="underline" href="${escape(company)}" rel="noreferrer">All filings on EDGAR</a>.</p><p class="text-muted-foreground mt-2 text-sm">As of ${escape(report.as_of)}, from the filings made before it. Income statement and cash flow figures are for the twelve months to the date, balance sheet figures are at the date, and diluted shares are the weighted average of the longest period reported to it. A figure links to the filing that first reported it. Universe and sector give the percent of the ${escape(report.universe)} universe, and of its stocks in the same sector today, at or below the latest value.</p>${sections}${renderValuation(report.valuation)}${renderRisk(report.risk)}`;
+  return `<h1 class="text-primary text-4xl font-bold tracking-tight">${escape(report.ticker)}</h1><p class="mt-1 text-lg">${escape(report.name)}</p>${warning}<p class="text-muted-foreground mt-3 text-sm" id="identity">${escape(sector)}. SIC ${escape(report.sic)}, ${escape(report.sic_description)}. <a class="underline" href="${escape(company)}" rel="noreferrer">All filings on EDGAR</a>.</p><p class="text-muted-foreground mt-2 text-sm">As of ${escape(report.as_of)}, from the filings made before it. Income statement and cash flow figures are for the twelve months to the date, balance sheet figures are at the date, and diluted shares are the weighted average of the longest period reported to it. A figure links to the filing that first reported it. Universe and sector give the percent of the ${escape(report.universe)} universe, and of its stocks in the same sector today, at or below the latest value.</p>${sections}`;
 }

@@ -37,71 +37,11 @@ export interface Series {
   points: Point[];
 }
 
-export interface GridRow {
-  wacc: number;
-  implied_growth: number | null;
-  values: number[];
-}
-
-export interface DcfModel {
-  price: number;
-  shares: number;
-  market_value: number;
-  net_debt: number;
-  enterprise_value: number;
-  fcf: number;
-  fcf0: number;
-  beta_raw: number;
-  beta: number;
-  risk_free: number;
-  equity_risk_premium: number;
-  cost_of_equity: number;
-  cost_of_debt: number;
-  tax_rate: number;
-  wacc: number;
-  terminal_growth: number;
-  years: number;
-  implied_growth: number;
-  tv_share: number;
-  growths: number[];
-  rows: GridRow[];
-}
-
-export type Valuation =
-  | { status: "ok"; reason: null; model: DcfModel }
-  | { status: "not_meaningful"; reason: string; model: null };
-
-export interface Estimate {
-  value: number;
-  se: number;
-  lo: number;
-  hi: number;
-}
-
-export interface Loading extends Estimate {
-  factor: string;
-}
-
-export interface RiskFit {
-  start: string;
-  end: string;
-  beta: Estimate;
-  volatility: number;
-  max_drawdown: number;
-  r2: number;
-  alpha: Estimate;
-  loadings: Loading[];
-}
-
-export type Risk =
-  | { status: "ok"; reason: null; window: number; fit: RiskFit }
-  | {
-      status: "insufficient_history" | "not_estimable";
-      reason: string;
-      window: number;
-      fit: null;
-    };
-
+/**
+ * A ticker report as the page reads it: the filed figures only. The reports
+ * that `eq run` writes also carry a valuation and a risk worked out from
+ * prices. They are not typed here, so nothing in the web code can show them.
+ */
 export interface TickerReport {
   ticker: string;
   universe: string;
@@ -113,8 +53,6 @@ export interface TickerReport {
   sic_description: string;
   sector: string | null;
   series: Series[];
-  valuation?: Valuation | null;
-  risk?: Risk | null;
 }
 
 /**
