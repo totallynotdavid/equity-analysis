@@ -25,7 +25,7 @@ def decile_scores(probabilities: pd.Series) -> pd.DataFrame:
     )
     count = len(table)
     table["rank"] = np.arange(1, count + 1)
-    table["score"] = _score(table["rank"], count)
+    table["score"] = rank_scores(table["rank"].to_numpy(), count)
     return table
 
 
@@ -44,9 +44,12 @@ def scores_by_date(probabilities: pd.Series) -> pd.Series:
     )
     by_date = table.groupby("date")
     rank = by_date.cumcount() + 1
-    table["score"] = _score(rank, by_date["prob"].transform("size"))
+    table["score"] = rank_scores(
+        rank.to_numpy(), by_date["prob"].transform("size").to_numpy()
+    )
     return table.set_index(["date", "ticker"])["score"]
 
 
-def _score(rank: pd.Series, count: int | pd.Series) -> pd.Series:
+def rank_scores(rank: np.ndarray, count: int | np.ndarray) -> np.ndarray:
+    """The score of 1-based ranks among `count` stocks, rank 1 being the best."""
     return SCORE_LEVELS - (rank - 1) * SCORE_LEVELS // count
