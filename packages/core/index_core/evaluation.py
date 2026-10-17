@@ -8,13 +8,13 @@ Newey-West errors. `Evaluation.independent_windows` counts the non-overlapping
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from index_core.labels import HORIZON
-from index_core.model import SNAPSHOT_STEP, auc
+from index_core.model import SNAPSHOT_STEP, auc_from_ranks
 from index_core.scoring import SCORE_LEVELS, scores_by_date
 
 
@@ -205,13 +205,45 @@ def _ratio(numerator: list[int], denominator: list[int]) -> Statistic:
 
 def _per_date(scored: pd.DataFrame) -> pd.DataFrame:
     """Spearman rank correlation of prob and excess return, and AUC, per date."""
-    rows = {}
-    for date, group in scored.groupby(level="date"):
-        rows[date] = {
-            "ic": group["prob"].rank().corr(group["excess"].rank()),
-            "auc": auc(group["label"], group["prob"]),
-        }
-    table = pd.DataFrame.from_dict(rows, orient="index", dtype=float)
+    by_date = scored.groupby(level="date")
+    prob_rank = by_date["prob"].rank()
+    excess_rank = by_date["excess"].rank()
+
+    # Exclude rows missing either input from the rank-correlation sums.
+    paired = prob_rank.notna() & excess_rank.notna()
+    x = prob_rank.where(paired, 0.0)
+    y = excess_rank.where(paired, 0.0)
+    sums = (
+        pd.DataFrame(
+            {
+                "n": paired.astype(float),
+                "x": x,
+                "y": y,
+                "xx": x * x,
+                "xy": x * y,
+                "yy": y * y,
+            }
+        )
+        .groupby(level="date")
+        .sum()
+    )
+    covariance = sums["n"] * sums["xy"] - sums["x"] * sums["y"]
+    spread = (sums["n"] * sums["xx"] - sums["x"] ** 2) * (
+        sums["n"] * sums["yy"] - sums["y"] ** 2
+    )
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ic = (covariance / np.sqrt(spread)).where(spread > 0)
+
+    label = scored["label"]
+    winners = label == 1
+    positives = winners.groupby(level="date").sum().astype(float)
+    losers = by_date.size() - label.groupby(level="date").sum()
+    rank_sum = prob_rank.where(winners, 0.0).groupby(level="date").sum()
+    with np.errstate(invalid="ignore", divide="ignore"):
+        area = auc_from_ranks(rank_sum, positives, losers.astype(float))
+    area = area.where((positives > 0) & (losers > 0))
+
+    table = pd.DataFrame({"ic": ic, "auc": area}).rename_axis(None)
     return table.dropna(subset=["ic"]).sort_index()
 
 
@@ -220,19 +252,34 @@ def _month_sums(
 ) -> np.ndarray:
     """One row per month: the quantities the statistics are ratios of."""
     dates = pd.DatetimeIndex(scored.index.get_level_values("date"))
-    scored_months = dates.to_period("M")
-    labels = sorted(months.unique())
-    sums = np.zeros((len(labels), _AUC_N + 1))
-    for row, month in enumerate(labels):
-        group = scored[scored_months == month]
-        for score, bucket in group.groupby("score"):
-            level = cast("int", score) - 1
-            sums[row, _COUNT + level] = len(bucket)
-            sums[row, _HITS + level] = bucket["label"].sum()
-            sums[row, _EXCESS + level] = bucket["excess"].sum()
-        in_month = per_date[months == month]
-        sums[row, _IC] = in_month["ic"].sum()
-        sums[row, _IC_N] = len(in_month)
-        sums[row, _AUC] = in_month["auc"].sum()
-        sums[row, _AUC_N] = in_month["auc"].count()
+    labels = months.unique().sort_values()
+    count = len(labels)
+    cell = labels.get_indexer(dates.to_period("M")) * SCORE_LEVELS + (
+        scored["score"].to_numpy(dtype=int) - 1
+    )
+    sums = np.zeros((count, _AUC_N + 1))
+    shape = (count, SCORE_LEVELS)
+    sums[:, _COUNT:_HITS] = np.bincount(cell, minlength=count * SCORE_LEVELS).reshape(
+        shape
+    )
+    sums[:, _HITS:_EXCESS] = _binned(
+        scored["label"], cell, count * SCORE_LEVELS
+    ).reshape(shape)
+    sums[:, _EXCESS:_IC] = _binned(
+        scored["excess"], cell, count * SCORE_LEVELS
+    ).reshape(shape)
+    month = labels.get_indexer(months)
+    sums[:, _IC] = _binned(per_date["ic"], month, count)
+    sums[:, _IC_N] = np.bincount(month, minlength=count)
+    sums[:, _AUC] = _binned(per_date["auc"], month, count)
+    sums[:, _AUC_N] = np.bincount(
+        month[per_date["auc"].notna().to_numpy()], minlength=count
+    )
     return sums
+
+
+def _binned(values: pd.Series, bins: np.ndarray, size: int) -> np.ndarray:
+    """Sum `values` in each bin, skipping missing values."""
+    data = values.to_numpy(dtype=float)
+    present = ~np.isnan(data)
+    return np.bincount(bins[present], weights=data[present], minlength=size)
