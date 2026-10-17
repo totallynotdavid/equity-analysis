@@ -156,5 +156,11 @@ def auc(truth: pd.Series, score: pd.Series) -> float | None:
     if positives == 0 or negatives == 0:
         return None
     ranks = score.rank()
-    rank_sum = float(ranks[truth == 1].sum())
+    return auc_from_ranks(float(ranks[truth == 1].sum()), positives, negatives)
+
+
+def auc_from_ranks[T: (float, pd.Series)](rank_sum: T, positives: T, negatives: T) -> T:
+    """The AUC from the sum of the ranks of the positives among all scores, and
+    the counts of positives and negatives. Takes numbers or aligned columns of
+    them; a column with no positive or no negative gives NaN."""
     return (rank_sum - positives * (positives + 1) / 2) / (positives * negatives)
