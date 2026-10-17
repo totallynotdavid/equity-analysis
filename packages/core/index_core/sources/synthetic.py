@@ -13,6 +13,7 @@ a bar. Filings are the same: a company's quarterly reports run from
 import zlib
 
 from datetime import date
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -66,7 +67,7 @@ class SyntheticSource:
         check_range(start, end)
         if start < EPOCH:
             raise SourceError(f"synthetic prices start at {EPOCH}, not {start}")
-        dates = pd.bdate_range(EPOCH, end, name="date")
+        dates = _business_days(end)
         n = len(dates)
         market = self._normal([_MARKET], n)
         noise = self._normal([_RETURNS, _crc(ticker)], n, columns=4)
@@ -131,6 +132,12 @@ class SyntheticFactors:
         )
         frame["rf"] = 0.00008
         return frame
+
+
+@cache
+def _business_days(end: date) -> pd.DatetimeIndex:
+    """Return the cached business-day range from `EPOCH` through `end`."""
+    return pd.bdate_range(EPOCH, end, name="date")
 
 
 def _crc(ticker: str) -> int:
