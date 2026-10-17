@@ -98,7 +98,7 @@ def _ticker_features(bars: pd.DataFrame, market: pd.Series) -> pd.DataFrame:
         "log_dollar_volume": np.log(
             (bars["close"] * bars["volume"]).rolling(21).mean()
         ),
-        "max_drawdown_126": close.rolling(126).apply(_max_drawdown, raw=True),
+        "max_drawdown_126": _rolling_max_drawdown(close, 126),
     }
     return pd.DataFrame(features)[list(FEATURES)]
 
@@ -136,5 +136,14 @@ def _adx(high: pd.Series, low: pd.Series, atr: pd.Series) -> pd.Series:
     return _wilder(100 * (plus_di - minus_di).abs() / (plus_di + minus_di))
 
 
-def _max_drawdown(window: np.ndarray) -> float:
-    return float((window / np.maximum.accumulate(window) - 1).min())
+def _rolling_max_drawdown(close: pd.Series, window: int) -> pd.Series:
+    """The deepest fall from a running peak in each trailing window.
+
+    Return NaN until a window is full or when the window contains a NaN.
+    """
+    result = np.full(len(close), np.nan)
+    if len(close) >= window:
+        windows = np.lib.stride_tricks.sliding_window_view(close.to_numpy(), window)
+        drawdown = windows / np.maximum.accumulate(windows, axis=1) - 1
+        result[window - 1 :] = drawdown.min(axis=1)
+    return pd.Series(result, index=close.index)
