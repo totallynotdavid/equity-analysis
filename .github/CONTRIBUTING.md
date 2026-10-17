@@ -25,23 +25,30 @@ Without mise, install uv and Bun yourself and run the commands in each task.
 | `mise run deploy:data` | Refresh `deploy/scores.json` from real prices ([Deploy](../docs/DEPLOY.md)) |
 | `mise run fix`         | Format and lint the Python code with ruff                                   |
 | `mise run mypy`        | Type-check with mypy                                                        |
-| `mise run check`       | Every check below, as CI runs them                                          |
+| `mise run check`       | Every check below except the end-to-end backtests                           |
+| `mise run check:e2e`   | The tests marked `e2e`: backtests on a long history                         |
 
 ## Checks
 
-CI ([`ci.yml`](workflows/ci.yml)) runs `mise run install` and `mise run check`.
-Run `mise run check` before you submit a change. It runs the `check:python` and
-`check:web` tasks, which are these commands from the repository root:
+CI ([`ci.yml`](workflows/ci.yml)) runs `mise run install`, then `mise run check`
+in one job and `mise run check:e2e` in another. Run `mise run check` before you
+submit a change, and `mise run check:e2e` when you touch the backtest, its
+options, the ledger or the universe membership. `check` runs the `check:python`
+and `check:web` tasks, which are these commands from the repository root:
 
 ```bash
 uv run ruff check . --no-fix
 uv run ruff format --check .
 uv run mypy .
-uv run pytest -q               # a few minutes, no network
+uv run pytest -q -m 'not e2e'  # minutes, no network
 (cd web && bunx prettier --check src tests astro.config.mjs vitest.config.ts)
 (cd web && bun run test)
 (cd web && bun run build)
 ```
+
+An `e2e` test runs one or several backtests on a long history, or, for the
+membership tests, one `eq run` and one backtest. `check:e2e` is
+`uv run pytest -q -m e2e`, and a plain `uv run pytest` runs both.
 
 ## Tests
 

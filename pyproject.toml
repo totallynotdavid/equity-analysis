@@ -76,7 +76,10 @@ enable_error_code = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-p eq_runs -n auto"
+addopts = "-p eq_runs -n auto --dist loadfile"
+markers = [
+  "e2e: one or several backtests on a long history, or one eq run and one backtest (the membership tests); `mise run check:e2e` runs them and `mise run check` does not"
+]
 pythonpath = [
   "packages/core",
   "packages/core/tests",

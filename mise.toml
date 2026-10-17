@@ -33,8 +33,12 @@ run = [
     "uv run ruff check . --no-fix",
     "uv run ruff format --check .",
     "uv run mypy .",
-    "uv run pytest -q",
+    "uv run pytest -q -m 'not e2e'",
 ]
+
+[tasks."check:e2e"]
+description = "Run the end-to-end backtests that check leaves out"
+run = "uv run pytest -q -m e2e"
 
 [tasks."check:web"]
 description = "Format check, test and build the web page"
@@ -46,7 +50,7 @@ run = [
 ]
 
 [tasks.check]
-description = "Every check CI runs"
+description = "Every check CI runs, except the end-to-end backtests of check:e2e"
 alias = "c"
 depends = ["check:python", "check:web"]
 
