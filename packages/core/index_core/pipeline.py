@@ -183,7 +183,7 @@ def missing_prices(store: Store, tickers: list[str]) -> list[str]:
 
 
 def missing_filings(store: Store, tickers: list[str]) -> list[str]:
-    stored = set(store.read_facts(tickers)["ticker"])
+    stored = store.filed_tickers()
     return [ticker for ticker in tickers if ticker not in stored]
 
 
