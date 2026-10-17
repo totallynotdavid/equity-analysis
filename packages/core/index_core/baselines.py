@@ -80,5 +80,7 @@ def fit_ridge(train: pd.DataFrame, columns: list[str]) -> Ridge:
     target = train["label"].to_numpy(dtype=float)
     target = target - target.mean()
     penalty = RIDGE_PENALTY * len(train)
-    gram = design.T @ design + penalty * np.eye(len(columns))
+    # Use a single-threaded reduction. Thread startup costs more than this
+    # matrix product and can spin-wait for cores on a busy host.
+    gram = np.einsum("ij,ik->jk", design, design) + penalty * np.eye(len(columns))
     return Ridge(columns, mean, scale, np.linalg.solve(gram, design.T @ target))
