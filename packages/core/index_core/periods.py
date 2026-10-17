@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
+    import pandas as pd
+
 YEAR = 365
 # Fiscal quarters of 52 and 53 week years differ by a few days. Cumulative
 # periods of a fiscal year end after about 3, 6, 9 and 12 months.
@@ -48,10 +50,20 @@ def is_annual(fact: Fact) -> bool:
     return ANNUAL[0] <= span(fact) <= ANNUAL[1]
 
 
+def days_since_epoch(dates: pd.Series) -> list[int]:
+    """Convert a date column to integer days since 1970."""
+    days: list[int] = (
+        dates.astype("datetime64[ns]").astype("int64").floordiv(86_400 * 10**9).tolist()
+    )
+    return days
+
+
 def near(facts: Iterable[Fact], target: int, days: int) -> list[Fact]:
     """Facts ending within `days` of `target`, the closest first."""
-    close = [fact for fact in facts if abs(fact.end - target) <= days]
-    return sorted(close, key=lambda fact: abs(fact.end - target))
+    low, high = target - days, target + days
+    close = [fact for fact in facts if low <= fact.end <= high]
+    close.sort(key=lambda fact: abs(fact.end - target))
+    return close
 
 
 def ttm_pieces(facts: Sequence[Fact], end: int) -> list[tuple[int, Fact]] | None:

@@ -20,6 +20,7 @@ from index_core.periods import (
     YEAR_AGO_DAYS,
     Fact,
     cumulative_ends,
+    days_since_epoch,
     latest_average,
     near,
     ttm,
@@ -108,33 +109,31 @@ def fundamental_inputs(facts: pd.DataFrame, calendar: pd.DatetimeIndex) -> pd.Da
     return inputs.rename_axis(["date", "ticker"])
 
 
-def _days(dates: pd.Series) -> list[int]:
-    """Days since 1970."""
-    days: list[int] = (
-        dates.astype("datetime64[ns]").astype("int64").floordiv(86_400 * 10**9).tolist()
-    )
-    return days
-
-
 def _ticker_inputs(facts: pd.DataFrame, calendar: pd.DatetimeIndex) -> pd.DataFrame:
     # Among filings of one period on one day, the highest-ranked tag comes last.
     ordered = facts.sort_values(["filed", "priority"], ascending=[True, False])
     first_usable = calendar.searchsorted(ordered["filed"], side="right").tolist()
-    starts = _days(ordered["start"].fillna(ordered["end"]))
-    ends = _days(ordered["end"])
+    starts = days_since_epoch(ordered["start"].fillna(ordered["end"]))
+    ends = days_since_epoch(ordered["end"])
     concepts = ordered["concept"].tolist()
     values = ordered["value"].tolist()
 
     # The latest known value of each (concept, period). Later filings overwrite.
-    latest: dict[str, dict[tuple[int, int], float]] = {}
+    latest: dict[str, dict[tuple[int, int], Fact]] = {}
     snapshots: dict[pd.Timestamp, dict[str, float]] = {}
     expiries: dict[pd.Timestamp, dict[str, float]] = {}
     newest_end = 0
     for index, position in enumerate(first_usable):
-        latest.setdefault(concepts[index], {})[starts[index], ends[index]] = values[
-            index
-        ]
-        newest_end = max(newest_end, ends[index])
+        latest.setdefault(concepts[index], {})[starts[index], ends[index]] = Fact(
+            starts[index], ends[index], values[index]
+        )
+        if ends[index] > newest_end:
+            newest_end = ends[index]
+            # The newest period only moves forward, so a version that has left
+            # the window never comes back into it.
+            for versions in latest.values():
+                for key in [k for k in versions if k[1] < newest_end - _WINDOW]:
+                    del versions[key]
         last_of_day = (
             index + 1 == len(first_usable) or first_usable[index + 1] != position
         )
@@ -150,7 +149,7 @@ def _ticker_inputs(facts: pd.DataFrame, calendar: pd.DatetimeIndex) -> pd.DataFr
     frame = frame.reindex(calendar, method="ffill")
     expiry = pd.DataFrame.from_dict(expiries, orient="index", columns=columns)
     expiry = expiry.reindex(calendar, method="ffill")
-    today = pd.Series(_days(pd.Series(calendar)), index=calendar)
+    today = pd.Series(days_since_epoch(pd.Series(calendar)), index=calendar)
     frame = frame.where(expiry.ge(today, axis=0))
     for column in _DATE_INPUTS:
         frame[column] = pd.to_datetime(frame[column], unit="D")
@@ -158,16 +157,13 @@ def _ticker_inputs(facts: pd.DataFrame, calendar: pd.DatetimeIndex) -> pd.DataFr
 
 
 def _snapshot(
-    latest: dict[str, dict[tuple[int, int], float]], newest_end: int, as_of: int
+    latest: dict[str, dict[tuple[int, int], Fact]], newest_end: int, as_of: int
 ) -> tuple[dict[str, float], dict[str, float]]:
     """The inputs from the latest known version of every fact, and the last day
     each one is current."""
+    oldest = newest_end - _WINDOW
     rows = {
-        concept: [
-            Fact(start, end, value)
-            for (start, end), value in versions.items()
-            if end >= newest_end - _WINDOW
-        ]
+        concept: [fact for fact in versions.values() if fact.end >= oldest]
         for concept, versions in latest.items()
     }
 

@@ -6,6 +6,8 @@ use. Each point lists the figures it is made of, and each figure names the
 filing it first appeared in.
 """
 
+from datetime import date
+from functools import cache
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
@@ -14,7 +16,7 @@ import pandas as pd
 from index_core.metrics import METRICS, evaluate
 from index_core.periods import (
     Fact,
-    cumulative_ends,
+    days_since_epoch,
     is_cumulative,
     span,
     ttm_pieces,
@@ -32,21 +34,23 @@ from index_core.sources.edgar import CONCEPTS, filing_url
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-    from datetime import date
+    from collections.abc import Callable, Mapping
 
 # Keep three years of quarterly points for each metric.
 POINTS = 12
 
-_EPOCH = pd.Timestamp(0)
+_UNIX_EPOCH = date(1970, 1, 1).toordinal()
+
+# Signed facts that make up a quantity at one period end.
+type _Pieces = list[tuple[int, Fact]]
 
 
-class _Row(NamedTuple):
-    tag: str
-    start: pd.Timestamp | None
-    end: pd.Timestamp
-    value: float
-    filing: Filing
+class _Quantity(NamedTuple):
+    """Readable period ends and the pieces available at each end."""
+
+    name: str
+    ends: set[int]
+    at: Callable[[int], _Pieces | None]
 
 
 def statements(
@@ -60,9 +64,9 @@ def statements(
     the first filing that reported that value.
     """
     book = _Book(facts, pd.Timestamp(as_of))
-    quantities: dict[str, dict[int, list[Part]]] = {}
+    quantities: dict[str, _Quantity] = {}
 
-    def quantity(name: str) -> dict[int, list[Part]]:
+    def quantity(name: str) -> _Quantity:
         if name not in quantities:
             quantities[name] = book.quantity(name)
         return quantities[name]
@@ -70,14 +74,17 @@ def statements(
     result: dict[str, list[Point]] = {}
     for name, metric in METRICS.items():
         inputs = [quantity(i) for i in metric.inputs]
-        ends = sorted(set.intersection(*(set(i) for i in inputs)))
         found: list[Point] = []
-        for end in ends:
-            parts = [part for i in inputs for part in i[end]]
+        for end in sorted(set.intersection(*(i.ends for i in inputs)), reverse=True):
+            pieces = [i.at(end) for i in inputs]
+            if any(piece is None for piece in pieces):
+                continue
             # Filings print at most four decimals; rounding drops the float
             # noise of adding and subtracting them.
             values = [
-                round(sum(part.sign * part.value for part in i[end]), 6) for i in inputs
+                round(sum(sign * fact.value for sign, fact in piece), 6)
+                for piece in pieces
+                if piece is not None
             ]
             value = float(evaluate(metric, values))
             if np.isfinite(value):
@@ -86,11 +93,17 @@ def statements(
                         end=_day(end),
                         value=value,
                         formula=metric.formula,
-                        parts=parts,
+                        parts=[
+                            book.part(i.name, sign, fact)
+                            for i, piece in zip(inputs, pieces, strict=True)
+                            for sign, fact in piece or []
+                        ],
                     )
                 )
+                if len(found) == points:
+                    break
         if found:
-            result[name] = found[-points:]
+            result[name] = found[::-1]
     return result
 
 
@@ -143,11 +156,7 @@ def ticker_report(
 
 
 def _day(days: int) -> date:
-    return (_EPOCH + pd.Timedelta(days=days)).date()
-
-
-def _days(timestamp: pd.Timestamp) -> int:
-    return (timestamp - _EPOCH).days
+    return date.fromordinal(_UNIX_EPOCH + days)
 
 
 class _Book:
@@ -160,9 +169,28 @@ class _Book:
         first = known.sort_values(
             ["concept", "start", "end", "value", "filed", "priority"]
         ).drop_duplicates(["concept", "start", "end", "value"])
-        firsts: list[Any] = list(first.itertuples())
-        self._first = {
-            (row.concept, row.start, row.end, row.value): row for row in firsts
+        self._concepts: list[str] = first["concept"].tolist()
+        self._starts = days_since_epoch(first["start"])
+        self._ends = days_since_epoch(first["end"])
+        self._filed = days_since_epoch(first["filed"])
+        self._priorities: list[int] = first["priority"].tolist()
+        self._filing: list[tuple[Any, ...]] = list(
+            zip(
+                *(first[c].tolist() for c in ("accn", "form", "fy", "fp", "cik")),
+                strict=True,
+            )
+        )
+        first_row = {
+            key: row
+            for row, key in enumerate(
+                zip(
+                    self._concepts,
+                    self._starts,
+                    self._ends,
+                    first["value"].tolist(),
+                    strict=True,
+                )
+            )
         }
         # The value of a period is the latest filed, the highest-ranked tag on
         # a tie, as the model's features read it.
@@ -170,70 +198,62 @@ class _Book:
             ["concept", "start", "end", "filed", "priority"],
             ascending=[True, True, True, True, False],
         ).drop_duplicates(["concept", "start", "end"], keep="last")
-        self._rows: list[_Row] = []
+        self._source: list[int] = []
         self._facts: dict[str, list[Fact]] = {}
-        periods: list[Any] = list(latest.itertuples())
-        for row in periods:
-            source = self._first[row.concept, row.start, row.end, row.value]
-            self._rows.append(self._row(source))
-            self._facts.setdefault(row.concept, []).append(
-                Fact(
-                    _days(row.start),
-                    _days(row.end),
-                    float(row.value),
-                    len(self._rows) - 1,
-                )
+        periods = zip(
+            latest["concept"].tolist(),
+            days_since_epoch(latest["start"]),
+            days_since_epoch(latest["end"]),
+            latest["value"].tolist(),
+            strict=True,
+        )
+        for concept, start, end, value in periods:
+            self._source.append(first_row[concept, start, end, value])
+            self._facts.setdefault(concept, []).append(
+                Fact(start, end, float(value), len(self._source) - 1)
             )
 
-    def _row(self, source: Any) -> _Row:
-        return _Row(
-            tag=CONCEPTS[source.concept].tags[source.priority],
-            start=None if source.start == source.end else source.start,
-            end=source.end,
-            value=float(source.value),
-            filing=Filing(
-                accn=source.accn,
-                form=source.form,
-                fy=int(source.fy),
-                fp=source.fp,
-                filed=source.filed.date(),
-                url=filing_url(int(source.cik), source.accn),
-            ),
-        )
-
-    def _part(self, name: str, sign: int, fact: Fact) -> Part:
-        row = self._rows[fact.ref]
+    def part(self, name: str, sign: int, fact: Fact) -> Part:
+        row = self._source[fact.ref]
+        accn, form, fy, fp, cik = self._filing[row]
+        start, end = self._starts[row], self._ends[row]
         return Part(
             metric=name,
             sign=1 if sign > 0 else -1,
-            tag=row.tag,
-            start=None if row.start is None else row.start.date(),
-            end=row.end.date(),
-            value=row.value,
-            filing=row.filing,
+            tag=CONCEPTS[self._concepts[row]].tags[self._priorities[row]],
+            start=None if start == end else _day(start),
+            end=_day(end),
+            value=fact.value,
+            filing=Filing(
+                accn=accn,
+                form=form,
+                fy=int(fy),
+                fp=fp,
+                filed=_day(self._filed[row]),
+                url=filing_url(int(cik), accn),
+            ),
         )
 
-    def quantity(self, name: str) -> dict[int, list[Part]]:
-        """The parts of a quantity at each period end it can be read for."""
+    def quantity(self, name: str) -> _Quantity:
+        """Return a quantity's readable ends and pieces."""
         if name == "debt":
             return self._debt()
         facts = self._facts.get(name, [])
         kind = CONCEPTS[name].kind
         if kind == "flow":
-            return self._flow(name, facts)
+            cumulative = {fact.end for fact in facts if is_cumulative(fact)}
+            return _Quantity(
+                name, cumulative, cache(lambda end: ttm_pieces(facts, end))
+            )
         if kind == "average":
             return self._average(name, facts)
-        return {fact.end: [self._part(name, 1, fact)] for fact in facts}
+        return self._by_end(name, {fact.end: [(1, fact)] for fact in facts})
 
-    def _flow(self, name: str, facts: list[Fact]) -> dict[int, list[Part]]:
-        found: dict[int, list[Part]] = {}
-        for end in cumulative_ends(facts):
-            pieces = ttm_pieces(facts, end)
-            if pieces is not None:
-                found[end] = [self._part(name, sign, fact) for sign, fact in pieces]
-        return found
+    @staticmethod
+    def _by_end(name: str, found: dict[int, _Pieces]) -> _Quantity:
+        return _Quantity(name, set(found), found.get)
 
-    def _average(self, name: str, facts: list[Fact]) -> dict[int, list[Part]]:
+    def _average(self, name: str, facts: list[Fact]) -> _Quantity:
         """The longest period that ends on each date: a weighted average does
         not add up across periods."""
         longest: dict[int, Fact] = {}
@@ -242,16 +262,16 @@ class _Book:
                 fact.end not in longest or span(fact) > span(longest[fact.end])
             ):
                 longest[fact.end] = fact
-        return {end: [self._part(name, 1, fact)] for end, fact in longest.items()}
+        return self._by_end(name, {end: [(1, fact)] for end, fact in longest.items()})
 
-    def _debt(self) -> dict[int, list[Part]]:
+    def _debt(self) -> _Quantity:
         """Long-term debt plus the current portion reported for the same date. A
         company that reports no current debt then is taken to have none."""
         current = {fact.end: fact for fact in self._facts.get("current_debt", [])}
-        found: dict[int, list[Part]] = {}
+        found: dict[int, _Pieces] = {}
         for fact in self._facts.get("long_term_debt", []):
-            parts = [self._part("debt", 1, fact)]
+            pieces = [(1, fact)]
             if fact.end in current:
-                parts.append(self._part("debt", 1, current[fact.end]))
-            found[fact.end] = parts
-        return found
+                pieces.append((1, current[fact.end]))
+            found[fact.end] = pieces
+        return self._by_end("debt", found)
