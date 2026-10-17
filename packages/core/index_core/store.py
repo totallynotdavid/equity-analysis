@@ -7,9 +7,9 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, Self
 
+import numpy as np
 import pandas as pd
 
-from index_core.metrics import optional_float
 from index_core.report import (
     Check,
     EvidenceRun,
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 DB_VARIABLE = "INDEX_DB"
 
 # Raise it when `_SCHEMA` changes. A database is rebuilt, never migrated.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS meta (
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS prices (
     date TEXT NOT NULL,
     {", ".join(f"{column} REAL NOT NULL" for column in PRICE_COLUMNS)},
     PRIMARY KEY (ticker, date)
-);
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS facts (
     ticker TEXT NOT NULL,
     concept TEXT NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS facts (
     fp TEXT NOT NULL,
     cik INTEGER NOT NULL,
     PRIMARY KEY (ticker, concept, start, end, filed, priority)
-);
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS security (
     ticker TEXT PRIMARY KEY,
     cik INTEGER NOT NULL,
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS metrics (
     pct_universe REAL,
     pct_sector REAL,
     PRIMARY KEY (universe, ticker, metric, as_of)
-);
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS ticker_reports (
     universe TEXT NOT NULL,
     ticker TEXT NOT NULL,
@@ -238,6 +238,13 @@ def default_db_path() -> Path:
     return Path(os.environ.get(DB_VARIABLE, "data/index.sqlite"))
 
 
+def _iso_days(dates: pd.Series | pd.Index) -> list[str]:
+    """`YYYY-MM-DD` of each date, and an empty string where there is none."""
+    days = dates.to_numpy().astype("datetime64[D]")
+    text: list[str] = np.where(np.isnat(days), "", days.astype(str)).tolist()
+    return text
+
+
 def _require_current_layout(connection: sqlite3.Connection, path: Path) -> None:
     """Close `connection` and raise `StoreError` if it holds tables made by a
     layout other than `_SCHEMA`."""
@@ -263,6 +270,9 @@ class Store:
             path.parent.mkdir(parents=True, exist_ok=True)
             connection = sqlite3.connect(path)
             connection.execute("PRAGMA journal_mode=WAL")
+            # A power cut can lose the last commits but never corrupts the
+            # file, and a run can be repeated.
+            connection.execute("PRAGMA synchronous=NORMAL")
             _require_current_layout(connection, path)
             connection.executescript(_SCHEMA)
             connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -320,13 +330,11 @@ class Store:
             self._db.executemany(
                 f"INSERT OR REPLACE INTO prices (ticker, date, {columns}) "
                 f"VALUES ({marks})",
-                (
-                    (ticker, day.date().isoformat(), *row)
-                    for day, row in zip(
-                        bars.index,
-                        bars[list(PRICE_COLUMNS)].itertuples(index=False),
-                        strict=True,
-                    )
+                zip(
+                    [ticker] * len(bars),
+                    _iso_days(bars.index),
+                    *(bars[column].tolist() for column in PRICE_COLUMNS),
+                    strict=True,
                 ),
             )
 
@@ -342,6 +350,12 @@ class Store:
         return {
             str(row[0])
             for row in self._db.execute("SELECT DISTINCT ticker FROM prices")
+        }
+
+    def filed_tickers(self) -> set[str]:
+        """Every ticker with at least one stored fact."""
+        return {
+            str(row[0]) for row in self._db.execute("SELECT DISTINCT ticker FROM facts")
         }
 
     def read_prices(self, tickers: list[str]) -> pd.DataFrame:
@@ -362,6 +376,9 @@ class Store:
 
         A company's facts are fetched whole each time.
         """
+        facts = facts.sort_values(
+            ["concept", "start", "end", "filed", "priority"], ignore_index=True
+        )
         with self._db:
             self._require("facts_source", "facts", source)
             if not facts.empty:
@@ -371,28 +388,22 @@ class Store:
                     (source,),
                 )
             self._db.execute("DELETE FROM facts WHERE ticker = ?", (ticker,))
-            days = {
-                column: facts[column].dt.strftime("%Y-%m-%d")
-                for column in ("start", "end", "filed")
-            }
             self._db.executemany(
                 "INSERT INTO facts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    (ticker, concept, start, end, filed, value, priority, *filing)
-                    for concept, start, end, filed, value, priority, *filing in zip(
-                        facts["concept"],
-                        days["start"].fillna(""),
-                        days["end"],
-                        days["filed"],
-                        facts["value"],
-                        facts["priority"],
-                        facts["accn"],
-                        facts["form"],
-                        facts["fy"],
-                        facts["fp"],
-                        facts["cik"],
-                        strict=True,
-                    )
+                zip(
+                    [ticker] * len(facts),
+                    facts["concept"].tolist(),
+                    _iso_days(facts["start"]),
+                    _iso_days(facts["end"]),
+                    _iso_days(facts["filed"]),
+                    facts["value"].tolist(),
+                    facts["priority"].tolist(),
+                    facts["accn"].tolist(),
+                    facts["form"].tolist(),
+                    facts["fy"].tolist(),
+                    facts["fp"].tolist(),
+                    facts["cik"].tolist(),
+                    strict=True,
                 ),
             )
 
@@ -456,30 +467,23 @@ class Store:
         `metrics` has `ticker`, `as_of`, `metric`, `value`, `pct_universe` and
         `pct_sector`.
         """
-        days = metrics["as_of"].dt.strftime("%Y-%m-%d")
+        # Rows in key order are appended to the table's tree, not inserted.
+        metrics = metrics.sort_values(["ticker", "metric", "as_of"], ignore_index=True)
+        percentiles = metrics[["pct_universe", "pct_sector"]].astype(object)
+        percentiles = percentiles.where(percentiles.notna(), None)
         with self._db:
             self._db.execute("DELETE FROM metrics WHERE universe = ?", (universe,))
             self._db.executemany(
                 "INSERT INTO metrics VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    (
-                        universe,
-                        ticker,
-                        metric,
-                        day,
-                        value,
-                        optional_float(pu),
-                        optional_float(ps),
-                    )
-                    for ticker, metric, day, value, pu, ps in zip(
-                        metrics["ticker"],
-                        metrics["metric"],
-                        days,
-                        metrics["value"],
-                        metrics["pct_universe"],
-                        metrics["pct_sector"],
-                        strict=True,
-                    )
+                zip(
+                    [universe] * len(metrics),
+                    metrics["ticker"].tolist(),
+                    metrics["metric"].tolist(),
+                    _iso_days(metrics["as_of"]),
+                    metrics["value"].tolist(),
+                    percentiles["pct_universe"].tolist(),
+                    percentiles["pct_sector"].tolist(),
+                    strict=True,
                 ),
             )
 
