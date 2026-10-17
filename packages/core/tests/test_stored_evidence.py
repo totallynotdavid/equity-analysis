@@ -169,6 +169,7 @@ def test_development_months_are_not_a_verdict(developed: Path) -> None:
     assert not verdict.shown
 
 
+@pytest.mark.e2e
 def test_a_later_backtest_replaces_the_earlier_one_of_its_period(
     developed: Path, tmp_path: Path
 ) -> None:
@@ -183,6 +184,7 @@ def test_a_later_backtest_replaces_the_earlier_one_of_its_period(
     assert after.run.holdout_start != before.run.holdout_start
 
 
+@pytest.mark.e2e
 def test_the_held_out_run_is_the_evidence_when_both_exist(
     held_out: tuple[Path, Backtest], developed: Path, tmp_path: Path
 ) -> None:

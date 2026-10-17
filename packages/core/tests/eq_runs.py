@@ -18,14 +18,15 @@ from index_cli.main import main
 
 DEMO = Path(__file__).parents[3] / "universes" / "demo30.txt"
 OFFLINE = ["--prices", "synthetic", "--filings", "synthetic"]
-# Leaves MIN_TRAIN_DATES training dates before the first out-of-sample day.
-FIRST_OOS = "2022-07-01"
+# Just over the days that a backtest with the default holdout needs.
+LONG_START = "2020-06-01"
+LONG_MEMBERS = 12
 
 
-def _run(directory: Path, start: str) -> Path:
+def _run(directory: Path, start: str, universe: Path = DEMO) -> Path:
     main(
         [
-            *["run", "--universe", str(DEMO), *OFFLINE],
+            *["run", "--universe", str(universe), *OFFLINE],
             *["--start", start, "--end", "2026-09-30"],
             *["--db", str(directory / "db.sqlite")],
             *["--out", str(directory / "scores.json")],
@@ -54,9 +55,14 @@ def ran(demo_run: Path, tmp_path: Path) -> Path:
 
 @pytest.fixture(scope="session")
 def long_run(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """`eq run` from 2019, long enough to backtest from `FIRST_OOS`, with no
-    backtest stored."""
-    return _run(tmp_path_factory.mktemp("long"), "2019-01-01")
+    """`eq run` from `LONG_START`, long enough to backtest, with no backtest
+    stored. The universe `members.txt` beside the database has `LONG_MEMBERS`
+    names: more than the `MIN_NAMES` a month of the backtest needs, at under half
+    the cost of the demo universe."""
+    directory = tmp_path_factory.mktemp("long")
+    universe = directory / "members.txt"
+    universe.write_text("".join(f"M{i:02d},2000-01-03\n" for i in range(LONG_MEMBERS)))
+    return _run(directory, LONG_START, universe)
 
 
 @pytest.fixture(scope="session")
@@ -67,9 +73,8 @@ def long_backtest(long_run: Path, tmp_path_factory: pytest.TempPathFactory) -> P
     with contextlib.redirect_stdout(printed):
         main(
             [
-                *["backtest", "--universe", str(DEMO)],
+                *["backtest", "--universe", str(directory / "members.txt")],
                 *["--db", str(directory / "db.sqlite")],
-                *["--first-oos", FIRST_OOS],
             ]
         )
     (directory / "backtest.txt").write_text(printed.getvalue())

@@ -158,6 +158,7 @@ def _ledger(output: str) -> int:
     return int(match.group(1))
 
 
+@pytest.mark.e2e
 def test_a_planted_signal_shows_up_in_every_part_of_the_table(
     backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -177,6 +178,7 @@ def test_a_planted_signal_shows_up_in_every_part_of_the_table(
     assert abs(float(features[1].split()[-2])) > 3
 
 
+@pytest.mark.e2e
 def test_prices_with_no_signal_give_no_rank_ic_and_the_rule_refuses_the_score(
     backtest: Callable[..., str], noise_db: Path
 ) -> None:
@@ -202,6 +204,7 @@ def test_the_development_period_prints_no_verdict(
     assert "run with --final" in output
 
 
+@pytest.mark.e2e
 def test_the_final_period_ends_in_a_verdict(
     backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -227,6 +230,7 @@ def test_raising_the_cost_lowers_the_net_return_at_every_step(
     assert len(set(ladder)) == len(ladder)
 
 
+@pytest.mark.e2e
 def test_the_net_return_of_a_run_at_a_cost_matches_the_ladder_of_another(
     backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -239,6 +243,7 @@ def test_the_net_return_of_a_run_at_a_cost_matches_the_ladder_of_another(
     assert float(_portfolio(direct, "top - bottom")[5].rstrip("%")) / 100 == at_fifty
 
 
+@pytest.mark.e2e
 def test_a_higher_cost_option_lowers_the_net_column_of_the_portfolio_table(
     backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -255,6 +260,7 @@ def test_a_higher_cost_option_lowers_the_net_column_of_the_portfolio_table(
     assert len(set(nets)) == 4
 
 
+@pytest.mark.e2e
 def test_the_break_even_cost_is_the_same_on_every_run_and_at_every_cost(
     backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -271,6 +277,7 @@ def test_the_break_even_cost_is_the_same_on_every_run_and_at_every_cost(
     assert all("bps" in row or "none" in row for row in break_evens(first))
 
 
+@pytest.mark.e2e
 def test_a_cost_at_the_break_even_leaves_nothing_of_the_edge(
     backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -284,6 +291,7 @@ def test_a_cost_at_the_break_even_leaves_nothing_of_the_edge(
     assert abs(net) < 0.2
 
 
+@pytest.mark.e2e
 def test_every_new_specification_adds_to_the_ledger_and_a_repeat_does_not(
     tmp_path: Path, backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -302,6 +310,7 @@ def test_every_new_specification_adds_to_the_ledger_and_a_repeat_does_not(
     assert count("--first-oos", "2019-07-01") == 15
 
 
+@pytest.mark.e2e
 def test_more_trials_lower_the_probability_that_the_edge_is_not_luck(
     tmp_path: Path, backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -319,6 +328,7 @@ def test_more_trials_lower_the_probability_that_the_edge_is_not_luck(
     assert crowded < alone
 
 
+@pytest.mark.e2e
 def test_the_ledger_lives_in_the_database_it_ran_on(
     tmp_path: Path, backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -339,6 +349,7 @@ def test_a_negative_cost_is_refused(
         backtest(signal_db, "--cost-bps", "-1")
 
 
+@pytest.mark.e2e
 def test_the_alpha_table_asks_for_the_factors_until_they_are_stored(
     tmp_path: Path, backtest: Callable[..., str], signal_db: Path
 ) -> None:
@@ -370,6 +381,7 @@ def _french_archive() -> bytes:
     return buffer.getvalue()
 
 
+@pytest.mark.e2e
 def test_factors_that_cover_too_few_months_say_so_without_asking_for_more(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

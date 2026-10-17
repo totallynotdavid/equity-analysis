@@ -35,6 +35,7 @@ def store(tmp_path: Path, planted: pd.DataFrame) -> Iterator[Store]:
         yield opened
 
 
+@pytest.mark.e2e
 def test_the_holdout_months_are_left_out_until_asked_for(store: Store) -> None:
     development = backtest(store, UNIVERSE, FIRST_OOS, holdout_months=12)
     holdout = backtest(store, UNIVERSE, FIRST_OOS, holdout_months=12, final=True)
@@ -49,6 +50,7 @@ def test_the_holdout_months_are_left_out_until_asked_for(store: Store) -> None:
     assert development.price_source == "synthetic"
 
 
+@pytest.mark.e2e
 def test_the_final_run_tests_the_candidate_the_development_months_chose(
     store: Store,
 ) -> None:
@@ -63,6 +65,7 @@ def test_the_final_run_tests_the_candidate_the_development_months_chose(
     }
 
 
+@pytest.mark.e2e
 def test_a_final_run_alone_counts_the_development_look_in_the_ledger(
     store: Store,
 ) -> None:
@@ -71,6 +74,7 @@ def test_a_final_run_alone_counts_the_development_look_in_the_ledger(
     assert len(store.trial_sharpes()) == 6
 
 
+@pytest.mark.e2e
 def test_a_ticker_without_stored_prices_is_left_out_and_named(store: Store) -> None:
     with_gap = always([*TICKERS, "NOPE"], "planted")
 
@@ -92,6 +96,7 @@ def test_a_holdout_longer_than_the_history_stops_the_backtest(store: Store) -> N
         backtest(store, UNIVERSE, FIRST_OOS, holdout_months=1000)
 
 
+@pytest.mark.e2e
 def test_the_text_shows_the_base_rate_the_effective_sample_and_ten_score_rows(
     store: Store,
 ) -> None:
@@ -136,6 +141,7 @@ def test_a_history_below_the_stated_need_is_refused_with_the_start_to_fetch(
     assert "Run `eq run --start 20" in str(error.value)
 
 
+@pytest.mark.e2e
 @pytest.mark.parametrize("final", [False, True])
 def test_a_history_a_quarter_above_the_stated_need_backtests(
     tmp_path: Path, planted: pd.DataFrame, final: bool

@@ -31,13 +31,21 @@ DEMO = Path(__file__).parents[3] / "universes" / "demo30.txt"
 END = date(2026, 9, 30)
 WINDOW = ["--start", "2024-01-01", "--end", END.isoformat()]
 OFFLINE = ["--prices", "synthetic", "--filings", "synthetic"]
+MEMBERS = [f"M{i:02d}" for i in range(12)]
+
+
+def _members(directory: Path) -> Path:
+    """Write the small universe used by tests that do not need `DEMO`."""
+    path = directory / "members.txt"
+    path.write_text("".join(f"{ticker},2000-01-03\n" for ticker in MEMBERS))
+    return path
 
 
 def _run(tmp_path: Path) -> Path:
     out = tmp_path / "scores.json"
     main(
         [
-            *["run", "--universe", str(DEMO), *OFFLINE, *WINDOW],
+            *["run", "--universe", str(_members(tmp_path)), *OFFLINE, *WINDOW],
             *["--db", str(tmp_path / "db.sqlite"), "--out", str(out)],
         ]
     )
@@ -195,11 +203,13 @@ def test_run_and_export_share_the_default_database(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("INDEX_DB", raising=False)
 
-    main(["run", "--universe", str(DEMO), *OFFLINE, *WINDOW])
+    universe = _members(tmp_path)
+
+    main(["run", "--universe", str(universe), *OFFLINE, *WINDOW])
     main(["export", "--out", str(tmp_path / "exported.json")])
-    main(["coverage", "--universe", str(DEMO)])
+    main(["coverage", "--universe", str(universe)])
     with pytest.raises(SystemExit, match=r"days of SPY prices are stored"):
-        main(["backtest", "--universe", str(DEMO)])
+        main(["backtest", "--universe", str(universe)])
 
     assert sorted(path.name for path in (tmp_path / "data").glob("*.sqlite")) == [
         "index.sqlite"
@@ -218,7 +228,7 @@ def test_mixed_sources_are_recorded_in_the_cli_output(
 
     main(
         [
-            *["run", "--universe", str(DEMO), "--prices", "tiingo"],
+            *["run", "--universe", str(_members(tmp_path)), "--prices", "tiingo"],
             *["--filings", "synthetic", *WINDOW],
             *["--db", str(tmp_path / "db.sqlite"), "--out", str(out)],
         ]
@@ -562,7 +572,9 @@ def test_backtest_prints_the_out_of_sample_table_with_the_base_rate(
 ) -> None:
     output = (long_backtest / "backtest.txt").read_text()
 
-    assert output.startswith("Walk-forward backtest, demo30 universe, synthetic prices")
+    assert output.startswith(
+        "Walk-forward backtest, members universe, synthetic prices"
+    )
     assert "Base rate, share of stocks beating SPY:" in output
     assert "Effective sample: about" in output
     assert "Newey-West t-statistic" in output
@@ -583,7 +595,7 @@ def test_export_publishes_the_stored_backtest_beside_the_scores(
     main(["export", "--db", str(database), "--out", str(out)])
 
     evidence = json.loads((out.parent / "evidence.json").read_text())
-    assert evidence["run"]["universe"] == "demo30"
+    assert evidence["run"]["universe"] == "members"
     assert evidence["run"]["period"] == "development"
     assert evidence["verdict"]["decided"] is False
     assert {m["model"] for m in evidence["models"]} == {
@@ -591,7 +603,7 @@ def test_export_publishes_the_stored_backtest_beside_the_scores(
         "ridge",
         "composite",
     }
-    assert "demo30 to " in capsys.readouterr().out
+    assert "members to " in capsys.readouterr().out
 
 
 def test_export_removes_evidence_it_has_no_backtest_for(
@@ -640,7 +652,6 @@ def test_backtest_with_too_little_history_fails_with_a_message(ran: Path) -> Non
 
 DROPPED_ON = date(2019, 7, 1)
 ADDED_ON = date(2019, 1, 2)
-MEMBERS = [f"M{i:02d}" for i in range(12)]
 
 
 class _DropStopsTrading(SyntheticSource):
@@ -652,6 +663,7 @@ class _DropStopsTrading(SyntheticSource):
         return super().fetch(ticker, start, end)
 
 
+@pytest.mark.e2e
 @pytest.mark.parametrize("keeps_trading", [True, False], ids=["demoted", "delisted"])
 def test_backtest_uses_a_name_only_while_it_is_a_member(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, keeps_trading: bool
@@ -697,6 +709,7 @@ def test_backtest_uses_a_name_only_while_it_is_a_member(
     assert (stored >= pd.Timestamp(DROPPED_ON)) == keeps_trading
 
 
+@pytest.mark.e2e
 def test_backtest_does_not_need_prices_of_a_name_that_left_before_them(
     tmp_path: Path,
 ) -> None:
