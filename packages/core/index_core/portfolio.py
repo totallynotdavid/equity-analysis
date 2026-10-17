@@ -24,7 +24,7 @@ from index_core.evaluation import (
     Estimate,
 )
 from index_core.labels import ENTRY_LAG
-from index_core.scoring import SCORE_LEVELS, decile_scores
+from index_core.scoring import SCORE_LEVELS, rank_scores
 
 
 MONTHS_PER_YEAR = 12
@@ -93,12 +93,15 @@ def monthly_holdings(scores: pd.Series, adj_close: pd.DataFrame) -> Holdings:
     to buy is skipped, and the next month starts from cash.
     """
     calendar = adj_close.index
-    closes = adj_close.ffill()
+    closes = adj_close.ffill().to_numpy(dtype=float)
     dates = pd.DatetimeIndex(
         scores.index.get_level_values("date").unique()
     ).sort_values()
     signals = dates.to_series().groupby(dates.to_period("M")).first()
     entries = calendar.get_indexer(pd.DatetimeIndex(signals)) + ENTRY_LAG
+    rows = scores.groupby(level="date").indices
+    names = scores.index.get_level_values("ticker").to_numpy()
+    probabilities = scores.to_numpy(dtype=float)
 
     entry: list[pd.Timestamp] = []
     exit_: list[pd.Timestamp] = []
@@ -113,23 +116,32 @@ def monthly_holdings(scores: pd.Series, adj_close: pd.DataFrame) -> Holdings:
     ):
         if end >= len(calendar):
             break
-        day_scores = scores.xs(signal, level="date")
-        entry_close = closes.iloc[start].reindex(day_scores.index)
-        exit_close = closes.iloc[end].reindex(day_scores.index)
-        returns = (exit_close / entry_close - 1).dropna()
-        if len(returns) < MIN_NAMES:
+        day = rows[signal]
+        column = adj_close.columns.get_indexer(pd.Index(names[day]))
+        # A missing price column has the same effect as a missing close.
+        with np.errstate(invalid="ignore", divide="ignore"):
+            returns = np.where(
+                column >= 0, closes[end, column] / closes[start, column] - 1, np.nan
+            )
+        bought = ~np.isnan(returns)
+        if bought.sum() < MIN_NAMES:
             previous = None
             continue
-        table = decile_scores(day_scores.reindex(returns.index))
+        tickers, returns = names[day][bought], returns[bought]
+        # Ticker order makes equal probabilities deterministic.
+        ranked = np.lexsort((tickers, -probabilities[day][bought]))
+        score = rank_scores(np.arange(1, len(ranked) + 1), len(ranked))
         held = _Held(
-            _equal_weights(table, SCORE_LEVELS), _equal_weights(table, 1), returns
+            top=_equal_weights(tickers[ranked][score == SCORE_LEVELS]),
+            bottom=_equal_weights(tickers[ranked][score == 1]),
+            returns=dict(zip(tickers.tolist(), returns.tolist(), strict=True)),
         )
         top_traded, bottom_traded = held.traded_from(previous)
         entry.append(calendar[start])
         exit_.append(calendar[end])
         days.append(int(end - start))
-        columns["top"].append(float(returns[held.top.index].mean()))
-        columns["bottom"].append(float(returns[held.bottom.index].mean()))
+        columns["top"].append(float(np.mean([held.returns[n] for n in held.top])))
+        columns["bottom"].append(float(np.mean([held.returns[n] for n in held.bottom])))
         columns["universe"].append(float(returns.mean()))
         columns["top_traded"].append(top_traded)
         columns["bottom_traded"].append(bottom_traded)
@@ -148,18 +160,17 @@ def monthly_holdings(scores: pd.Series, adj_close: pd.DataFrame) -> Holdings:
     )
 
 
-def _equal_weights(table: pd.DataFrame, score: int) -> pd.Series:
-    names = table.loc[table["score"] == score, "ticker"]
-    return pd.Series(1 / len(names), index=pd.Index(names))
+def _equal_weights(names: np.ndarray) -> dict[str, float]:
+    return dict.fromkeys(names.tolist(), 1 / len(names))
 
 
 @dataclass(frozen=True)
 class _Held:
-    """The legs bought at a rebalance and what every scored stock returned."""
+    """The legs bought at a rebalance and each scored stock's return."""
 
-    top: pd.Series
-    bottom: pd.Series
-    returns: pd.Series
+    top: dict[str, float]
+    bottom: dict[str, float]
+    returns: dict[str, float]
 
     def traded_from(self, previous: _Held | None) -> tuple[float, float]:
         """Buys plus sells of the top and bottom leg, after `previous` drifted."""
@@ -170,14 +181,17 @@ class _Held:
             _traded(self.bottom, previous.drifted(previous.bottom)),
         )
 
-    def drifted(self, weights: pd.Series) -> pd.Series:
+    def drifted(self, weights: dict[str, float]) -> dict[str, float]:
         """Weights after the period's returns, before the next rebalance."""
-        grown = weights * (1 + self.returns[weights.index])
-        return grown / grown.sum()
+        grown = {name: w * (1 + self.returns[name]) for name, w in weights.items()}
+        total = sum(grown.values())
+        return {name: value / total for name, value in grown.items()}
 
 
-def _traded(new: pd.Series, drifted: pd.Series) -> float:
-    return float(new.sub(drifted, fill_value=0.0).abs().sum())
+def _traded(new: dict[str, float], drifted: dict[str, float]) -> float:
+    return sum(
+        abs(new.get(n, 0.0) - drifted.get(n, 0.0)) for n in sorted(new | drifted)
+    )
 
 
 def strategy(gross_returns: np.ndarray, traded: np.ndarray, cost: float) -> Strategy:
