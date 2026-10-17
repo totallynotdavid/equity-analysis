@@ -34,6 +34,7 @@ function reachable(host: string, port: number): Promise<boolean> {
   });
 }
 
+const startupMs = 120_000;
 let server: ChildProcess;
 let output = "";
 let port: number;
@@ -52,12 +53,14 @@ beforeAll(async () => {
   );
   server.stdout?.on("data", (chunk) => (output += chunk));
   server.stderr?.on("data", (chunk) => (output += chunk));
-  for (let attempt = 0; attempt < 100; attempt++) {
+  // Allow Astro extra startup time while the Python tests use the host's cores.
+  const deadline = Date.now() + startupMs;
+  while (Date.now() < deadline) {
     if (await reachable("localhost", port)) return;
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   throw new Error(`the dev server did not start:\n${output}`);
-}, 30_000);
+}, startupMs + 10_000);
 
 afterAll(() => {
   if (server.pid) process.kill(-server.pid);
