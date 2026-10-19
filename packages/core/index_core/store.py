@@ -50,10 +50,9 @@ CREATE TABLE IF NOT EXISTS prices (
     {", ".join(f"{column} REAL NOT NULL" for column in PRICE_COLUMNS)},
     PRIMARY KEY (ticker, date)
 ) WITHOUT ROWID;
--- The dates a source was asked for, so that `ingest` asks for what is missing.
--- A ticker the source had nothing for has a row and no prices. other_company is
--- 1 for a ticker whose listings do not overlap its membership: the source lists
--- another company under it, so it was not asked for.
+-- The dates a source was asked for, so `ingest` asks only for what is missing.
+-- A ticker with no prices still has a row. `other_company` is 1 when the
+-- source lists another company under the ticker, so the source was not asked.
 CREATE TABLE IF NOT EXISTS price_asked (
     ticker TEXT PRIMARY KEY,
     since TEXT NOT NULL,
