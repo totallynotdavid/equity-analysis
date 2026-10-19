@@ -4,7 +4,7 @@
 # stored backtest of the universe to deploy/evidence.json if there is one.
 # The reports lose their valuation and risk, which are worked out from prices
 # and may not be published.
-# TIINGO_API_KEY and SEC_USER_AGENT are required.
+# TIINGO_API_KEY is required. SEC_USER_AGENT comes from mise.toml.
 # Extra arguments go to `eq run`, for example `--end 2026-10-10`.
 set -euo pipefail
 

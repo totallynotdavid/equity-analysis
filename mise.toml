@@ -6,6 +6,9 @@ python = "3.14.7"
 uv = "0.12.19"
 bun = "1.4.2"
 
+[env]
+SEC_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+
 [tasks.install]
 description = "Install all workspace packages and dependencies from the lockfiles"
 alias = "i"
@@ -62,7 +65,7 @@ run = [
 ]
 
 [tasks."deploy:data"]
-description = "Score the demo universe on real data into deploy/scores.json. Needs TIINGO_API_KEY and SEC_USER_AGENT"
+description = "Score the demo universe on real data into deploy/scores.json. Needs TIINGO_API_KEY"
 run = "scripts/deploy-data.sh"
 
 [tasks.cli]

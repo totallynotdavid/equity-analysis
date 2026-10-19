@@ -1,7 +1,6 @@
 """Record real EDGAR `companyfacts` payloads as test fixtures.
 
-    SEC_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36' \\
-      uv run python packages/core/tests/record_companyfacts.py AAPL:320193 MSFT:789019
+    uv run python packages/core/tests/record_companyfacts.py AAPL:320193 MSFT:789019
 
 Each argument is `TICKER:CIK` and writes `recorded_TICKER_companyfacts.json`.
 A payload is cut down to the tags, units and forms that `parse_companyfacts`
