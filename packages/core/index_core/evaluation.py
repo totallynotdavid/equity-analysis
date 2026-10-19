@@ -32,7 +32,6 @@ BOOTSTRAP_DRAWS = 2000
 BOOTSTRAP_SEED = 0
 TOP_SCORE_FLOOR = 8
 
-# Columns of the per-month table that the bootstrap sums.
 _COUNT = 0
 _HITS = _COUNT + SCORE_LEVELS
 _EXCESS = _HITS + SCORE_LEVELS

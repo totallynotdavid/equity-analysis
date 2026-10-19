@@ -56,7 +56,7 @@ USER_AGENT = (
 )
 # A company that moved to a new registrant keeps the history of its filings under
 # the old one, and neither EDGAR nor the table links the two. The old CIK follows
-# the new one in the companies file. XOM moved to ExxonMobil Holdings Corp in 2026.
+# the new one in the companies file.
 PREDECESSORS: dict[str, tuple[int, ...]] = {"XOM": (34088,)}
 DEFAULT_OUT = Path(__file__).with_name("sp500.txt")
 DEFAULT_FORMER = Path(__file__).with_name("sp500.former.csv")

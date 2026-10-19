@@ -383,11 +383,6 @@ function trials(evidence: Evidence): string {
   );
 }
 
-/**
- * The proof page: the stored out-of-sample result of the backtest and the
- * ledger of every specification tried. The build renders it from
- * `evidence.json`.
- */
 export function renderEvidence(
   evidence: Evidence | null,
   status: LedgerStatus | null = null,

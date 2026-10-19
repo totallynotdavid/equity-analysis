@@ -19,7 +19,6 @@ import pandas as pd
 from index_core.report import DcfModel, GridRow, Valuation
 
 
-# Years of growth before the terminal value.
 YEARS = 10
 # The growth after the explicit years, held below the risk-free rate.
 TERMINAL_GROWTH = 0.025
@@ -32,13 +31,10 @@ MAX_TAX_RATE = 0.35
 # The implied growth is searched for within these annual rates. A price outside
 # the model's value at both ends is not meaningful.
 GROWTH_BOUNDS = (-0.5, 1.0)
-# The grid: the discount rates around the company's, and the growth rates.
 WACC_STEPS = (-0.02, -0.01, 0.0, 0.01, 0.02)
 GROWTHS = (-0.05, 0.0, 0.05, 0.10, 0.15, 0.20, 0.25)
-# Daily returns used for the beta, and the fewest that give one.
 BETA_RETURNS = 504
 MIN_BETA_RETURNS = 252
-# Weeks of the risk-free rate the annual rate is taken from.
 RISK_FREE_DAYS = 21
 TRADING_DAYS = 252
 # SIC divisions H (finance, insurance and real estate) have no free cash flow

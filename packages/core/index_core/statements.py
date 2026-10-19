@@ -41,7 +41,6 @@ POINTS = 12
 
 _UNIX_EPOCH = date(1970, 1, 1).toordinal()
 
-# Signed facts that make up a quantity at one period end.
 type _Pieces = list[tuple[int, Fact]]
 
 

@@ -7,11 +7,6 @@ import {
   type State,
 } from "./screener";
 
-/**
- * Makes the screener interactive. The URL holds the state: typing in the form
- * rewrites it in place and following a sort link adds a history entry, so the
- * back button and a copied link both return to the same table.
- */
 export function mount(
   controls: HTMLElement,
   results: HTMLElement,

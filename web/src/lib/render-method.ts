@@ -8,10 +8,6 @@ interface Licence {
   terms: string;
 }
 
-/**
- * The data the site rests on and the terms it holds each under. Each entry is
- * the provider's own wording, shortened, with the page it comes from.
- */
 export const LICENCES: Licence[] = [
   {
     source: "Tiingo",
@@ -104,11 +100,6 @@ function prose(text: string): string {
   return `<p class="mt-3 text-sm">${text}</p>`;
 }
 
-/**
- * The method page: how the numbers are made, the definition of every metric
- * the ticker reports, and the licence of each data source. The metrics are read
- * from the reports, so the page lists what the site shows.
- */
 export function renderMethod(reports: TickerReport[]): string {
   return `<h1 class="text-primary text-4xl font-bold tracking-tight">Method</h1>${section(
     "score",

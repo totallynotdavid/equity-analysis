@@ -24,10 +24,6 @@ export interface Scores {
   left_out?: LeftOut[];
 }
 
-/**
- * The scores that `eq run` or `eq export` wrote, or null before the first run.
- * Set SCORES_JSON to read another file. The build runs from `web/`.
- */
 export function loadScores(): Scores | null {
   const path = resolve(process.env.SCORES_JSON ?? "../outputs/scores.json");
   if (!existsSync(path)) return null;

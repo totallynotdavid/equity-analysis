@@ -227,11 +227,6 @@ export function unpaged(
     .filter((ticker) => !paged.has(ticker));
 }
 
-/**
- * The screener's rows and columns, made from the ticker reports and the scores
- * the build reads. A row is a report, so every row has a page. The score
- * column exists only when the evidence allows the score to be shown.
- */
 export function buildScreener(
   scores: Scores | null,
   reports: TickerReport[],
@@ -366,7 +361,6 @@ export function parseState(
   return state;
 }
 
-/** The query string of a state, with the keys in a fixed order. */
 export function serializeState(state: State): string {
   const params = new URLSearchParams();
   if (state.q !== "") params.set("q", state.q);
@@ -379,7 +373,6 @@ export function serializeState(state: State): string {
   return params.toString();
 }
 
-/** The rows that pass the state's filters, in the state's order. */
 export function applyScreen(data: ScreenerData, state: State): Row[] {
   const index = new Map(data.columns.map((c, i) => [c.key, i]));
   const needle = state.q.toLowerCase();
@@ -426,7 +419,6 @@ export function applyScreen(data: ScreenerData, state: State): Row[] {
   });
 }
 
-/** The columns the state shows, in catalogue order. */
 export function visibleColumns(data: ScreenerData, state: State): Column[] {
   const shown = new Set(state.cols.length > 0 ? state.cols : data.defaults);
   return data.columns.filter((c) => shown.has(c.key));
@@ -448,7 +440,6 @@ function nextSort(current: string, key: string): string {
   return text ? key : `-${key}`;
 }
 
-/** The query that sorts by `key`, or reverses the sort if it already does. */
 export function sortQuery(
   data: ScreenerData,
   state: State,
@@ -479,10 +470,6 @@ function header(
   return `<th class="py-2 ${right ? "pl-4 text-right" : "pr-4"} font-medium whitespace-nowrap" aria-sort="${order}"><a class="hover:underline" data-sort="${escape(key)}" href="?${escape(sortQuery(data, state, key))}">${escape(label)}${arrow}</a></th>`;
 }
 
-/**
- * The count and the table of the stocks that pass the state's filters. Each
- * header links to the query that sorts by it.
- */
 export function renderResults(data: ScreenerData, state: State): string {
   const rows = applyScreen(data, state);
   const columns = visibleColumns(data, state);

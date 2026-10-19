@@ -55,11 +55,6 @@ export interface TickerReport {
   series: Series[];
 }
 
-/**
- * Loads the ticker reports that `eq run` or `eq export` wrote. It returns no
- * reports before the first run. Set TICKERS_DIR to read another directory.
- * The build runs from `web/`.
- */
 export function loadTickers(): TickerReport[] {
   const directory = resolve(process.env.TICKERS_DIR ?? "../outputs/tickers");
   if (!existsSync(directory)) return [];

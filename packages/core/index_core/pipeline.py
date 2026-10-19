@@ -78,8 +78,8 @@ OVERLAP_BARS = 5
 LABEL_DAYS = 100
 # Backtests reserve these months until `final`.
 HOLDOUT_MONTHS = 24
-# DEFAULT_COST is an assumed large-cap trading cost.
-# No source supplies the bid-ask spreads, so the break-even cost is the measured value.
+# No source supplies bid-ask spreads.
+# DEFAULT_COST is an assumed large-cap cost. The break-even cost is measured.
 DEFAULT_COST = 0.001
 TRADING_DAYS_PER_MONTH = 21
 CALENDAR_PER_TRADING_DAY = 1.5

@@ -161,10 +161,6 @@ function section(
   return `<section class="mt-10" id="${escape(id)}"><h2 class="text-xl font-semibold">${escape(group)}</h2><div class="overflow-x-auto"><table class="mt-3 w-full text-sm"><thead class="text-muted-foreground border-b"><tr><th class="py-2 pr-4 text-left font-medium">Metric</th><th class="py-2 pl-4 text-right font-medium" title="Percent of the ${escape(report.universe)} universe at or below the latest value">Universe</th><th class="py-2 pl-4 text-right font-medium" title="Percent of the sector at or below the latest value">Sector</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>${notes}</section>`;
 }
 
-/**
- * The page of one ticker: its fundamentals, each figure linked to the filing
- * it was reported in. The build renders it from the report file.
- */
 export function renderTicker(report: TickerReport): string {
   const warning =
     report.facts_source === "edgar"
