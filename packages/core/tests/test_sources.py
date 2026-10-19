@@ -1,7 +1,9 @@
+import io
 import json
 import os
 import threading
 import time
+import zipfile
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -12,7 +14,7 @@ import httpx2
 import pandas as pd
 import pytest
 
-from index_core.sources.base import PRICE_COLUMNS, NotFoundError, SourceError
+from index_core.sources.base import PRICE_COLUMNS, Listing, NotFoundError, SourceError
 from index_core.sources.synthetic import SyntheticSource
 from index_core.sources.tiingo import KEY_VARIABLE, TiingoSource
 from index_core.sources.transport import CachingTransport
@@ -257,80 +259,59 @@ def test_tiingo_rate_limit_is_a_source_error_that_says_to_run_again() -> None:
     assert not isinstance(raised.value, NotFoundError)
 
 
-def test_a_cached_response_is_not_requested_again(tmp_path: Path) -> None:
+def _listing_zip(rows: list[str]) -> bytes:
+    header = "ticker,exchange,assetType,priceCurrency,startDate,endDate"
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        archive.writestr("supported_tickers.csv", "\n".join([header, *rows]) + "\n")
+    return out.getvalue()
+
+
+def test_tiingo_lists_what_traded_under_each_ticker_without_a_key() -> None:
     requests: list[httpx2.Request] = []
-
-    def respond(request: httpx2.Request) -> httpx2.Response:
-        requests.append(request)
-        return httpx2.Response(200, content=json.dumps(TIINGO_BARS))
-
-    def new_source() -> TiingoSource:
-        return TiingoSource(
-            "secret-key",
-            transport=httpx2.MockTransport(respond),
-            min_interval=0,
-            cache=tmp_path,
-        )
-
-    first = new_source().fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
-    again = new_source().fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
-    new_source().fetch("AAPL", date(2024, 3, 1), date(2024, 3, 7))
-
-    pd.testing.assert_frame_equal(first, again)
-    assert [request.url.params["endDate"] for request in requests] == [
-        "2024-03-08",
-        "2024-03-07",
-    ]
-
-
-def test_the_cache_never_holds_the_key_or_a_refusal(tmp_path: Path) -> None:
-    refuse = {"on": True}
-
-    def respond(_: httpx2.Request) -> httpx2.Response:
-        if refuse["on"]:
-            return httpx2.Response(429, text="over the limit")
-        return httpx2.Response(200, content=json.dumps(TIINGO_BARS))
-
-    source = TiingoSource(
-        "secret-key",
-        transport=httpx2.MockTransport(respond),
-        min_interval=0,
-        cache=tmp_path,
+    archive = _listing_zip(
+        [
+            "AAPL,NASDAQ,Stock,USD,1980-12-12,",
+            "BRK.B,NYSE,Stock,USD,1996-05-09,",
+            "GR,NYSE,Stock,USD,1990-01-02,2012-07-26",
+            "GR,NYSE,Stock,USD,2020-03-02,",
+            "SPY,NYSE ARCA,ETF,USD,1993-01-29,",
+            "NODATE,NYSE,Stock,USD,,",
+        ]
     )
-    with pytest.raises(SourceError):
-        source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
-    assert list(tmp_path.iterdir()) == []
-
-    refuse["on"] = False
-    source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
-
-    (cached,) = tmp_path.iterdir()
-    assert b"secret-key" not in cached.read_bytes()
-    assert "secret-key" not in cached.name
-
-
-def test_a_ticker_tiingo_does_not_list_is_cached_too(tmp_path: Path) -> None:
-    requests: list[httpx2.Request] = []
 
     def respond(request: httpx2.Request) -> httpx2.Response:
         requests.append(request)
-        return httpx2.Response(404, text="Not found")
+        return httpx2.Response(200, content=archive)
 
-    def new_source() -> TiingoSource:
+    listings = TiingoSource(
+        "secret-key", transport=httpx2.MockTransport(respond), min_interval=0
+    ).listings()
+
+    assert listings["AAPL"] == [Listing(date(1980, 12, 12), None)]
+    assert listings["BRK-B"] == [Listing(date(1996, 5, 9), None)]
+    assert listings["GR"] == [
+        Listing(date(1990, 1, 2), date(2012, 7, 26)),
+        Listing(date(2020, 3, 2), None),
+    ]
+    assert listings["NODATE"] == [Listing(None, None)]
+    assert "SPY" not in listings
+    (request,) = requests
+    assert "authorization" not in request.headers
+
+
+def test_a_broken_ticker_list_is_a_source_error() -> None:
+    def source(response: httpx2.Response) -> TiingoSource:
         return TiingoSource(
             "secret-key",
-            transport=httpx2.MockTransport(respond),
+            transport=httpx2.MockTransport(lambda _: response),
             min_interval=0,
-            cache=tmp_path,
         )
 
-    for _ in range(2):
-        with pytest.raises(NotFoundError, match="no ticker AKS"):
-            new_source().fetch("AKS", date(2024, 3, 1), date(2024, 3, 8))
-
-    assert len(requests) == 1
-    (cached,) = tmp_path.iterdir()
-    assert b"secret-key" not in cached.read_bytes()
+    with pytest.raises(SourceError, match="malformed ticker list"):
+        source(httpx2.Response(200, content=b"not a zip")).listings()
+    with pytest.raises(SourceError, match="HTTP 503"):
+        source(httpx2.Response(503)).listings()
 
 
 def test_runs_that_share_a_cache_directory_leave_whole_entries(tmp_path: Path) -> None:
@@ -369,6 +350,28 @@ def test_runs_that_share_a_cache_directory_leave_whole_entries(tmp_path: Path) -
     assert cached.read_bytes() == body
 
 
+def test_a_cached_response_older_than_a_day_is_fetched_again(tmp_path: Path) -> None:
+    requests: list[httpx2.Request] = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return httpx2.Response(200, content=b"{}")
+
+    with httpx2.Client(
+        transport=CachingTransport(httpx2.MockTransport(respond), tmp_path)
+    ) as client:
+        client.get("https://api.example.com/facts")
+        client.get("https://api.example.com/facts")
+        assert len(requests) == 1
+
+        (cached,) = tmp_path.iterdir()
+        stale = cached.stat().st_mtime - 2 * 24 * 3600
+        os.utime(cached, (stale, stale))
+        client.get("https://api.example.com/facts")
+
+    assert len(requests) == 2
+
+
 class _Clock:
     """Stands in for `time`: sleeping moves the clock and nothing waits."""
 
@@ -387,7 +390,7 @@ class _Clock:
 
 
 def test_tiingo_requests_are_spaced_to_fifty_an_hour(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = _Clock()
     monkeypatch.setattr("index_core.sources.transport.time", clock)
@@ -397,38 +400,12 @@ def test_tiingo_requests_are_spaced_to_fifty_an_hour(
         requests.append(clock.now)
         return httpx2.Response(200, content=json.dumps(TIINGO_BARS))
 
-    source = TiingoSource(
-        "secret-key", transport=httpx2.MockTransport(respond), cache=tmp_path
-    )
+    source = TiingoSource("secret-key", transport=httpx2.MockTransport(respond))
     for ticker in ("AAPL", "MSFT", "SPY"):
         source.fetch(ticker, date(2024, 3, 1), date(2024, 3, 8))
-    source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
 
     assert clock.slept == [72, 72]
     assert [later - earlier for earlier, later in pairwise(requests)] == [72, 72]
-
-
-def test_a_cached_response_older_than_a_day_is_fetched_again(tmp_path: Path) -> None:
-    requests: list[httpx2.Request] = []
-
-    def respond(request: httpx2.Request) -> httpx2.Response:
-        requests.append(request)
-        return httpx2.Response(200, content=json.dumps(TIINGO_BARS))
-
-    source = TiingoSource(
-        "secret-key",
-        transport=httpx2.MockTransport(respond),
-        min_interval=0,
-        cache=tmp_path,
-    )
-    source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
-    (cached,) = tmp_path.iterdir()
-    stale = cached.stat().st_mtime - 2 * 24 * 3600
-    os.utime(cached, (stale, stale))
-
-    source.fetch("AAPL", date(2024, 3, 1), date(2024, 3, 8))
-
-    assert len(requests) == 2
 
 
 def test_tiingo_key_is_read_from_the_environment(

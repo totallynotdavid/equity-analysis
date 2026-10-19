@@ -445,7 +445,7 @@ def _valued(
     with Store.open(path) as store:
         if factors:
             ingest_factors(SyntheticFactors(), store)
-        ingest(SyntheticSource(), store, TICKERS, START, END)
+        ingest(SyntheticSource(), store, always(TICKERS), START, END)
         ingest_filings(filings, store, TICKERS, END)
         compute_metrics(store, always(TICKERS, "demo"))
         return {r.ticker: r for r in store.ticker_reports("demo")}
@@ -523,7 +523,7 @@ def test_a_ticker_without_prices_is_not_valued(tmp_path: Path) -> None:
     path = tmp_path / "db.sqlite"
     with Store.open(path) as store:
         ingest_factors(SyntheticFactors(), store)
-        ingest(SyntheticSource(), store, TICKERS[:-1], START, END)
+        ingest(SyntheticSource(), store, always(TICKERS[:-1]), START, END)
         ingest_filings(SyntheticFilings(), store, TICKERS, END)
         compute_metrics(store, always(TICKERS, "demo"))
         report = store.ticker_report("V")

@@ -189,7 +189,7 @@ def test_a_company_that_loses_its_filings_does_not_keep_stale_facts(
 
     tickers = ["AAPL", "MSFT"]
     with Store.open(tmp_path / "db.sqlite") as store:
-        ingest(SyntheticSource(), store, tickers, START, END)
+        ingest(SyntheticSource(), store, always(tickers), START, END)
         ingest_filings(SyntheticFilings(), store, tickers, END)
         assert missing_filings(store, tickers) == []
 
@@ -346,3 +346,39 @@ def test_the_coverage_of_a_universe_names_what_a_failing_name_lacks(
     assert result.no_company == []
     dead = result.tags[result.tags["fresh"] == 0]
     assert "IncomeTaxExpenseBenefit" in set(dead["tag"])
+    assert result.years is None
+
+
+def test_coverage_counts_the_member_years_that_are_priced_and_filed(
+    tmp_path: Path,
+) -> None:
+    class NoGhost(SyntheticSource):
+        def fetch(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+            if ticker == "GHOST":
+                raise NotFoundError("no ticker GHOST")
+            return super().fetch(ticker, start, end)
+
+    always_members = [Membership(t, date(1990, 1, 1), None) for t in ("AAPL", "MSFT")]
+    universe = Universe(
+        "test",
+        (
+            *always_members,
+            Membership("GHOST", date(1990, 1, 1), None),
+            # Gone from 2024-06-01, so a member only in 2024 of the window.
+            Membership("LEFT", date(2020, 1, 1), date(2024, 6, 1)),
+        ),
+    )
+
+    with Store.open(tmp_path / "db.sqlite") as store:
+        ingest(NoGhost(), store, universe, START, END)
+        ingest_filings(SyntheticFilings(), store, ["AAPL", "LEFT"], END)
+        result = coverage(store, universe)
+
+    years = result.years
+    assert years is not None
+    assert (years.first, years.last) == (START, END)
+    # 2024 to 2026 for three names and 2024 for LEFT.
+    assert years.member_years == 10
+    assert years.priced == 7
+    assert years.filed == 4
+    assert f"{years.priced_share:.1%} {years.filed_share:.1%}" == "70.0% 40.0%"

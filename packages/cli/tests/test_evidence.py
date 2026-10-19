@@ -22,6 +22,7 @@ from index_core.pipeline import ingest, ingest_filings
 from index_core.sources.french import FamaFrenchSource
 from index_core.sources.synthetic import SyntheticFilings, SyntheticSource
 from index_core.store import Store
+from membership import always
 from planted import planted_prices
 
 
@@ -55,7 +56,7 @@ class _Planted(SyntheticSource):
 def _database(path: Path, signal: float) -> Path:
     source = _Planted(planted_prices(tickers=len(TICKERS), signal=signal))
     with Store.open(path) as store:
-        ingest(source, store, TICKERS, date(2012, 1, 2), END)
+        ingest(source, store, always(TICKERS), date(2012, 1, 2), END)
         ingest_filings(SyntheticFilings(), store, TICKERS, END)
     return path
 

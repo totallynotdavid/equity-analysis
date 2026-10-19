@@ -357,7 +357,7 @@ def _run(
         if stored_factors:
             ingest_factors(_FakeFactors(factors.iloc[:-LAG]), store)
         end = factors.index[-1].date()
-        ingest(_Bars(returns), store, TICKERS, factors.index[0].date(), end)
+        ingest(_Bars(returns), store, always(TICKERS), factors.index[0].date(), end)
         ingest_filings(SyntheticFilings(), store, TICKERS, end)
         compute_metrics(store, always(TICKERS, "demo"))
         return (

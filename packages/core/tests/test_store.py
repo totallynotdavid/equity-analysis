@@ -546,3 +546,48 @@ def test_a_new_backtest_replaces_the_one_of_its_period_and_the_holdout_wins(
     assert [d.month for d in development.oos.index.get_level_values("date")] == [3, 3]
     assert holdout is not None
     assert holdout.run.period == "holdout"
+
+
+def test_what_a_ticker_was_asked_for_is_remembered_with_the_other_company_mark(
+    tmp_path: Path,
+) -> None:
+    with Store.open(tmp_path / "db.sqlite") as store:
+        assert store.asked("AAA") is None
+        store.record_asked("tiingo", "AAA", date(2024, 1, 1), date(2024, 6, 30))
+        store.record_asked("tiingo", "AAA", date(2023, 1, 1), date(2024, 9, 30))
+        store.record_asked(
+            "tiingo", "BBB", date(2024, 1, 1), date(2024, 9, 30), other_company=True
+        )
+
+        assert store.asked("AAA") == (date(2023, 1, 1), date(2024, 9, 30))
+        assert store.asked("BBB") == (date(2024, 1, 1), date(2024, 9, 30))
+        assert store.other_company_tickers() == {"BBB"}
+        with pytest.raises(StoreError, match="synthetic"):
+            store.record_asked("synthetic", "CCC", date(2024, 1, 1), date(2024, 1, 31))
+
+
+def test_the_last_stored_closes_come_back_oldest_first(tmp_path: Path) -> None:
+    bars = _bars()
+    with Store.open(tmp_path / "db.sqlite") as store:
+        store.upsert_prices("tiingo", "AAA", bars)
+
+        recent = store.recent_adj_close("AAA", 3)
+        none = store.recent_adj_close("ZZZ", 3)
+
+    assert list(recent.index) == list(bars.index[-3:])
+    assert recent.to_numpy() == pytest.approx(bars["adj_close"].to_numpy()[-3:])
+    assert none.empty
+
+
+def test_the_years_with_a_bar_and_the_first_filing_of_each_ticker_are_listed(
+    tmp_path: Path,
+) -> None:
+    with Store.open(tmp_path / "db.sqlite") as store:
+        _record_sources(store)
+        facts = store.read_facts(["AAA"])
+
+        years = store.priced_years()
+        filed = store.first_filed()
+
+    assert years == {("AAA", 2024)}
+    assert filed == {"AAA": facts["filed"].min().date()}

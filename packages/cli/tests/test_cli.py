@@ -1,4 +1,5 @@
 import json
+import re
 import socket
 
 from datetime import date, timedelta
@@ -15,6 +16,7 @@ from index_core.sources.base import NotFoundError
 from index_core.sources.edgar import CONCEPTS
 from index_core.sources.synthetic import SyntheticSource
 from index_core.store import Store
+from membership import always
 
 
 def _without_openmp(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -223,7 +225,7 @@ def test_mixed_sources_are_recorded_in_the_cli_output(
     class TiingoForTest(SyntheticSource):
         name = "tiingo"
 
-    monkeypatch.setitem(cli.PRICES, "tiingo", lambda _: TiingoForTest())
+    monkeypatch.setitem(cli.PRICES, "tiingo", TiingoForTest)
     out = tmp_path / "scores.json"
 
     main(
@@ -248,31 +250,23 @@ class _NoMicrosoft(SyntheticSource):
         return super().fetch(ticker, start, end)
 
 
-def test_a_run_names_the_tickers_the_price_source_lacks_and_hands_over_the_cache(
+def test_a_run_names_the_tickers_the_price_source_lacks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    caches: list[Path] = []
-
-    def source(cache: Path) -> SyntheticSource:
-        caches.append(cache)
-        return _NoMicrosoft()
-
-    monkeypatch.setitem(cli.PRICES, "synthetic", source)
+    monkeypatch.setitem(cli.PRICES, "synthetic", _NoMicrosoft)
     universe = tmp_path / "members.txt"
     universe.write_text("".join(f"{t},2000-01-03\n" for t in [*MEMBERS, "MSFT"]))
-    cache = tmp_path / "responses"
 
     main(
         [
             *["run", "--universe", str(universe), *OFFLINE, *WINDOW],
-            *["--db", str(tmp_path / "db.sqlite"), "--cache", str(cache)],
+            *["--db", str(tmp_path / "db.sqlite")],
             *["--out", str(tmp_path / "scores.json")],
         ]
     )
 
-    assert caches == [cache]
     assert "eq: no prices for 1 tickers (MSFT); they are left out" in (
         capsys.readouterr().err
     )
@@ -407,6 +401,8 @@ def test_filings_store_the_facts_and_names_without_any_prices(
 
     out = capsys.readouterr().out
     assert "30 of 30 names have at least 10 of" in out
+    # Without prices there is no window to count member-years over.
+    assert "Member-years" not in out
     with Store.open(database, read_only=True) as store:
         assert len(store.read_security(["AAPL", "MSFT"])) == 2
         assert store.read_prices(["SPY"]).empty
@@ -435,13 +431,16 @@ def test_coverage_counts_a_name_with_no_stored_filings_as_zero(
     universe = tmp_path / "pair.txt"
     universe.write_text("AAPL,2000-01-03\nMSFT,2000-01-03\n")
     with Store.open(database) as store:
-        ingest(SyntheticSource(), store, ["AAPL", "MSFT"], date(2024, 1, 1), END)
+        ingest(
+            SyntheticSource(), store, always(["AAPL", "MSFT"]), date(2024, 1, 1), END
+        )
 
     main(["coverage", "--universe", str(universe), "--db", str(database)])
 
     lines = capsys.readouterr().out.splitlines()
-    assert lines[:5] == [
+    assert lines[:6] == [
         "Fundamentals coverage, pair universe, no filings, as of 2026-09-30",
+        "Member-years 2024-01-01 to 2026-09-30: 6, 100.0% priced, 0.0% with filings.",
         f"0 of 2 names have at least 10 of {len(CONCEPTS)} concepts with a fresh "
         "filed value.",
         "2 with fewer (a missing value stays missing):",
@@ -577,6 +576,11 @@ def test_backtest_prints_the_out_of_sample_table_with_the_base_rate(
     )
     assert "Base rate, share of stocks beating SPY:" in output
     assert "Effective sample: about" in output
+    assert re.search(
+        r"Member-years 20\d\d-\d\d-\d\d to 20\d\d-\d\d-\d\d: \d+, 100\.0% priced, "
+        r"100\.0% with filings\.",
+        output,
+    )
     assert "Newey-West t-statistic" in output
 
 
@@ -669,7 +673,7 @@ def test_backtest_uses_a_name_only_while_it_is_a_member(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, keeps_trading: bool
 ) -> None:
     if not keeps_trading:
-        monkeypatch.setitem(cli.PRICES, "synthetic", lambda _: _DropStopsTrading())
+        monkeypatch.setitem(cli.PRICES, "synthetic", _DropStopsTrading)
     universe = tmp_path / "churn.txt"
     universe.write_text(
         "".join(f"{ticker},2000-01-03\n" for ticker in MEMBERS)
