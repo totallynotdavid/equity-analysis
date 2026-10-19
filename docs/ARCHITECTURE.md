@@ -55,7 +55,9 @@ features, fits and predicts, and `Store.save_report` keeps the result.
   The pipeline sees only the protocols. Tiingo and EDGAR send their requests
   through
   [`sources/transport.py`](../packages/core/index_core/sources/transport.py),
-  which paces them and keeps responses on disk:
+  which paces them. EDGAR and the factor file also keep responses on disk.
+  Prices are not kept: the database is their cache, and `ingest` asks Tiingo
+  only for the bars it lacks. The disk cache follows these rules:
   - Entries are the 200 and 404 responses, keyed by method and URL without
     headers, so no key reaches the disk. Other statuses are not kept.
   - An entry expires one day after it is written. A cache hit costs no request

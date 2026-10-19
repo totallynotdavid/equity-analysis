@@ -28,7 +28,7 @@ otherwise ([CLI](CLI.md)). The deployed page and API serve a file of this shape
 | `rows[].score`       | Decile from 1 to 10. 10 is the top tenth                   |
 | `rows[].prob`        | The model's probability of beating SPY over `horizon_days` |
 | `left_out[].ticker`  | A member of the run that is not in `rows`                  |
-| `left_out[].reason`  | `no prices` or `no filings`                                |
+| `left_out[].reason`  | `no prices`, `no filings` or `other company`               |
 
 Rows are ordered by rank. How the score derives from `prob` is in
 [Model](MODEL.md#the-score).

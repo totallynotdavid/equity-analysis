@@ -89,6 +89,7 @@ Period: development, up to 2024-06-30
 Out of sample: 2011-04-05 to 2024-06-25, refit every quarter (61 fits, first trained on 106 snapshots up to 2010-12-28)
 Rows: 20730 stock-days on 691 snapshot dates (every 5th trading day) in 159 months
 Effective sample: about 54 independent 63-day windows. ...
+Member-years 2008-01-01 to 2026-10-16: 570, 100.0% priced, 100.0% with filings.
 
 Models, on the same rows (95% CI by month)
 model       mean rank IC   95% CI                t     AUC   spread
@@ -119,6 +120,11 @@ nothing. It ends with a caveat. A name that stopped trading has no label for its
 last 64 trading days, because its price ends before the window does, so exits by
 delisting are under-represented even in a point-in-time universe. With `demo30`
 the universe is also today's names, so survivors are over-represented.
+
+The `Member-years` line counts the tickers that were members in each calendar
+year of the stored period and gives the shares that have a stored bar in that
+year and a filing by its end ([`eq coverage`](FUNDAMENTALS.md#eq-coverage)). A
+share below 100% says how much of the universe the table leaves out.
 
 A name that was a member during the stored period but has no stored prices,
 because Tiingo does not list it, is left out. The output then has a `Missing:`

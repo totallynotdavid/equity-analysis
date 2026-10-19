@@ -64,15 +64,15 @@ It prints `wrote 30 scores as of <date> to outputs/scores.json`:
 The example cuts the rows to two. Synthetic prices are fake, so these scores
 mean nothing.
 
-With real data, set `TIINGO_API_KEY` and `SEC_USER_AGENT` and leave out
-`--prices` and `--filings`. The synthetic run filled `data/index.sqlite`, which
-rejects real data ([the database](docs/CLI.md#the-database)), so point
-`INDEX_DB` at a new file. Every later `eq` command then reads that file too:
+With real data, set `TIINGO_API_KEY` and leave out `--prices` and `--filings`.
+`mise.toml` already sets `SEC_USER_AGENT`. The synthetic run filled
+`data/index.sqlite`, which rejects real data
+([the database](docs/CLI.md#the-database)), so point `INDEX_DB` at a new file.
+Every later `eq` command then reads that file too:
 
 ```bash
 export INDEX_DB=data/real.sqlite
 TIINGO_API_KEY=... \
-SEC_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36' \
   uv run eq run --universe universes/demo30.txt
 ```
 

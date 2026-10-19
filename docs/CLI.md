@@ -51,18 +51,23 @@ Every command uses the dates:
 A file `<name>.companies.csv` beside the universe file gives the SEC identifier
 (CIK) and the current GICS sector of its tickers, one `ticker,cik,sector` per
 line, with `#` comments. The ticker pages group stocks by the sector. A ticker
-without a line has no sector and no sector percentile, and its CIK is looked up
-in the SEC's ticker list. A company that moved to a new registrant lists the new
-CIK first and the earlier ones after it, joined with `+`, as `XOM` does: its
-filings from every registrant make one history, and a figure links to the filing
-under the registrant that filed it.
+without a line has no CIK, so no filings, and the run leaves it out as
+`no filings`. A line with an empty sector, as a name that left the index has,
+gives the CIK and no sector percentile. A run does not consult the SEC's ticker
+list: it holds today's tickers, and one may name another company than the member
+it was. Only the [rebuild](#rebuilding-sp500txt) reads it, for the members of
+today. A company that moved to a new registrant lists the new CIK first and the
+earlier ones after it, joined with `+`, as `XOM` does: its filings from every
+registrant make one history, and a figure links to the filing under the
+registrant that filed it.
 
 | File                                                        | Contents                                                                                     |
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | [`demo30.txt`](../universes/demo30.txt)                     | Today's 30 large caps, all members from 2000. For offline runs. It has survivorship bias.    |
 | [`demo30.companies.csv`](../universes/demo30.companies.csv) | The CIK and sector of the 30                                                                 |
 | [`sp500.txt`](../universes/sp500.txt)                       | S&P 500 members from 2011-01-01, including the names that left. 810 tickers, from Wikipedia. |
-| [`sp500.companies.csv`](../universes/sp500.companies.csv)   | The CIK and sector of today's members. A name that left has none                             |
+| [`sp500.companies.csv`](../universes/sp500.companies.csv)   | The CIK of every ticker and the sector of today's members                                    |
+| [`sp500.former.csv`](../universes/sp500.former.csv)         | The reviewed CIK of each name that left, which the script reads                              |
 
 ### Rebuilding sp500.txt
 
@@ -75,9 +80,22 @@ a declared `User-Agent` (`--user-agent` changes it), reads their HTML tables and
 walks the changes table backwards from today's members. It writes the page URLs,
 the fetch date and the CC BY-SA 4.0 licence into the file header, and prints the
 rows it could not place on stderr. `--since` moves the first date, and `--out`
-the file. Beside it, it writes `sp500.companies.csv`, the CIK and GICS sector
-columns of today's members, and the earlier registrants it lists in
-`PREDECESSORS`.
+the file. Beside it, it writes `sp500.companies.csv`: the GICS sector of today's
+members, their CIK from the SEC's
+[`company_tickers.json`](https://www.sec.gov/files/company_tickers.json), the
+earlier registrants it lists in `PREDECESSORS`, and the CIK of each name that
+left. The SEC file is fetched with `SEC_USER_AGENT` (set in `mise.toml`), which
+the script requires. A current member that file does not list has
+no CIK and no line, and the script names it on stderr.
+
+A name that left is not in the SEC's ticker list, and its ticker may name
+another company now, so its CIK comes from
+[`sp500.former.csv`](../universes/sp500.former.csv). Each line is the `Security`
+name that the changes table gives for the removal, a CIK, and a ticker when two
+companies share a name. The table was filled by hand, checking each name against
+EDGAR's company search and submissions. `--former` selects another file. The
+script lists the names that left and have no line, and the lines that match no
+name; a name without a line has no filings.
 
 The changes table is dense from 2011: at least 16 rows a year. Before that it
 has at most 13 a year, so the script's default start is 2011-01-01 and an
@@ -101,7 +119,7 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
 | `--filings`  | `edgar` for real filings, `synthetic` for fake ones | `edgar`                    |
 | `--start`    | First price date, `YYYY-MM-DD`                      | `--end` minus 2190 days    |
 | `--end`      | Last price date, and the last filing date used      | today                      |
-| `--cache`    | Directory for the responses of Tiingo and the SEC   | `data/cache`               |
+| `--cache`    | Directory for the responses of the SEC              | `data/cache`               |
 | `--db`       | SQLite file                                         | [see below](#the-database) |
 | `--out`      | JSON file to write                                  | `outputs/scores.json`      |
 | `--tickers`  | Directory for the ticker reports, one file each     | `tickers` beside `--out`   |
@@ -109,14 +127,15 @@ uv run eq run --universe universes/demo30.txt --prices synthetic --filings synth
 `eq run` does this, in order:
 
 1. Fetches daily prices for SPY and every ticker that was a member in the range,
-   over the whole range. It asks for the range on every run, because adjusted
-   prices change after a dividend or split; a repeat run inside the
-   [cache](#the-cache) day reuses the cached responses. A ticker Tiingo does not
-   list, or lists with no bars in the range, has no prices. `eq run` names those
-   tickers on stderr and leaves them out. A missing SPY stops the run.
+   asking only for the bars the database lacks ([the cache](#the-cache)). A
+   ticker Tiingo does not list, or lists with no bars in the range, has no
+   prices, and one that Tiingo lists only as another company is dropped.
+   `eq run` names those tickers on stderr and leaves them out. A missing SPY
+   stops the run.
 2. Fetches every company's filed facts up to `--end`, and its name and SIC code
-   from the SEC's submissions API. A ticker the SEC does not list has no
-   filings. `eq run` names those tickers on stderr and leaves them out.
+   from the SEC's submissions API. A ticker with no CIK in the universe's
+   companies file, or whose CIK the SEC has no filings for, has no filings.
+   `eq run` names those tickers on stderr and leaves them out.
 3. Builds the features, fits the model and scores the latest date
    ([Model](MODEL.md)).
 4. Stores the run in the database and writes `--out` ([Outputs](OUTPUTS.md)).
@@ -169,20 +188,18 @@ directory (default `outputs/tickers`) and `--db` the database.
 `--prices tiingo` and `--filings edgar` each read one environment variable and
 fail without it.
 
-| Variable         | Meaning                                                | Default |
-| ---------------- | ------------------------------------------------------ | ------- |
-| `TIINGO_API_KEY` | [Tiingo](https://www.tiingo.com/) API token for prices | none    |
-| `SEC_USER_AGENT` | The `User-Agent` header sent to the SEC for filings    | none    |
+| Variable         | Meaning                                                | Default                            |
+| ---------------- | ------------------------------------------------------ | ---------------------------------- |
+| `TIINGO_API_KEY` | [Tiingo](https://www.tiingo.com/) API token for prices | none                               |
+| `SEC_USER_AGENT` | The `User-Agent` header sent to the SEC for filings    | set by [`mise.toml`](../mise.toml) |
 
 `INDEX_DB` selects the database ([below](#the-database)). `SCORES_JSON` is read
 by the web page ([Outputs](OUTPUTS.md#web-page)).
 
-The SEC refuses a request without a `User-Agent`, so `SEC_USER_AGENT` must be
-set. Use this browser string, and put no name or email address in it:
-
-```text
-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36
-```
+The SEC refuses a request without a `User-Agent`. [`mise.toml`](../mise.toml)
+sets `SEC_USER_AGENT` to a browser string with no name or email address, so
+every `mise run` task, and every shell where mise is active in this directory,
+has it. Outside mise, export the same value.
 
 The client waits 0.12 seconds between requests to stay under the SEC's limit of
 10 a second.
@@ -194,55 +211,77 @@ later command read that file too:
 ```bash
 export INDEX_DB=data/real.sqlite
 TIINGO_API_KEY=... \
-SEC_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36' \
   uv run eq run --universe universes/demo30.txt
 ```
 
-Tiingo costs one request per ticker plus one for SPY: 31 for `demo30`, which the
-72-second pause stretches to about 36 minutes when none is cached. The SEC costs
-two requests per ticker, its `companyfacts` and its submissions, and one more
-`companyfacts` for each earlier registrant. It adds one for its ticker list when
-a ticker has no CIK in the universe's companies file.
+Tiingo costs one request per ticker whose bars are not stored, plus one for SPY:
+31 for `demo30`, which the 72-second pause stretches to about 36 minutes on a
+first run. The SEC costs two requests per ticker, its `companyfacts` and its
+submissions, and one more `companyfacts` for each earlier registrant. A ticker
+with no CIK in the universe's companies file costs none and is left out as
+`no filings`.
 
 ### The cache
 
-`--cache` holds the Tiingo and SEC responses, so a run that stops can carry on
-and a repeat run costs no requests.
+`--cache` holds the SEC and Kenneth French responses for one day, so a repeat
+run costs no request to them. Pass a new directory to fetch them again. `data/`
+is ignored by git. What the cache keeps and how it is written are in the
+[cache rule](ARCHITECTURE.md#boundaries).
 
-A repeat run reuses the cached responses for one day and stores the prices of
-the first run. Tiingo's URL holds the dates, so `--start` and `--end` must match
-between runs: pin `--end` when you expect to run again. Pass a new directory to
-fetch everything again. `data/` is ignored by git. What the cache keeps and how
-it is written are in the [cache rule](ARCHITECTURE.md#boundaries).
+Tiingo's prices are not in that cache. The database is: `eq run` asks Tiingo
+only for what `--db` lacks, whatever the day.
+
+- A ticker already asked for from `--start` through `--end` is not asked for
+  again. Neither is a former member already asked for through 100 days past its
+  last day as a member, which holds the 64 trading days a label reads. A run
+  that finds nothing to ask for makes no request.
+- A ticker stored through an earlier date is asked for from the fifth bar before
+  its last stored bar. When those five adjusted closes differ from the stored
+  ones, a split or dividend has restated them, and `eq run` fetches that ticker
+  whole once.
+- Tickers never asked for come before the ones to bring up to date, so a monthly
+  cap on symbols is spent on the gaps first.
+- A ticker Tiingo does not know is recorded as asked, so a repeat run does not
+  ask again until `--end` moves past the date it was asked about.
+- Tiingo's public ticker list, one download without a key, gives the dates each
+  ticker traded. A ticker none of whose listings overlaps the days it was a
+  member is another company's, because Tiingo reuses tickers: it is not asked
+  for, and `eq run` names it on stderr and in `left_out` with the reason
+  `other company`. A ticker with no listing is not judged. The list is
+  downloaded only when some ticker needs a request.
 
 The SEC client leaves 0.12 seconds between requests it sends. The Tiingo client
-leaves 72 seconds (3600 / 50). A response from the cache costs neither a wait
-nor a request. When Tiingo answers HTTP 429, `eq run` stops with Tiingo's
-message. Everything fetched so far is cached, so run the same command again
-after the limit resets and it carries on from the first ticker that was not
-fetched.
+leaves 72 seconds (3600 / 50) between price requests. When Tiingo answers HTTP
+429, `eq run` stops with Tiingo's message. Each ticker is stored as it arrives,
+so run the same command again after the limit resets and it carries on from the
+first ticker that was not stored.
 
 #### Running all of `sp500.txt`
 
-One run asks Tiingo for `SPY` and every ticker that was a member in the range:
-`members_between(start, end)` plus one. The two ranges that matter:
+The first fill asks Tiingo for `SPY` and every ticker that was a member in the
+range: `members_between(start, end)` plus one, less the tickers that another
+company reused. The two ranges that matter:
 
 | Range                                         | Requests |    At 72 s each |
 | --------------------------------------------- | -------: | --------------: |
 | `--start 2012-01-01 --end 2026-10-09`         |      794 | 57168 s, 15.9 h |
 | default start (2190 days), `--end 2026-10-09` |      613 | 44136 s, 12.3 h |
 
-The time is the number of requests times 72 s. Only requests that miss the cache
-count, so a run after an interruption pays for the tickers still to fetch.
+The time is the number of requests times 72 s. The counts are upper bounds.
 
 Tiingo's free Starter plan allows 50 requests an hour, 1000 a day and 500 unique
-symbols a month. The 794 symbols of the first range are above the monthly cap,
-so one run of it needs two months of Starter, or one month of the $30 Power plan
-(10000 requests an hour), which makes the pause unnecessary. The plans are on
-[Tiingo's pricing page](https://www.tiingo.com/about/pricing).
+symbols a month. The 794 symbols of the first range are above the monthly cap.
+Run the same command until Tiingo answers 429, and again after the limit resets
+in the next month: the second run asks first for the tickers the first never
+reached, and only then updates the others. One month of the $30 Power plan
+(10000 requests an hour) needs one run and makes the pause unnecessary. The
+plans are on [Tiingo's pricing page](https://www.tiingo.com/about/pricing).
 
-An entry lasts one day, so a run that is resumed more than a day after its first
-tickers were fetched asks for those tickers again.
+A repeat run on the same range asks for nothing. A run with a later `--end` asks
+once for each ticker that is still a member, about 500 for today's index, and
+for no former member whose label window is stored. Pin `--start` when you expect
+to run again; the default start moves with `--end`, and a start that moves
+forward needs nothing refetched.
 
 Tiingo repeats a delisted company's last close, with zero volume, up to the end
 of the range. The Tiingo source drops those bars. A ticker with no trades in the

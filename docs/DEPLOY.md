@@ -44,22 +44,22 @@ held-out run of the deployed universe that passed
 `mise run deploy:data`, runs `eq run` on the demo universe and writes
 `deploy/scores.json`, `deploy/tickers` and, when the database holds a backtest
 of the universe, `deploy/evidence.json`. Make the backtest first with
-[`eq backtest`](BACKTEST.md) on `data/real.sqlite`. It needs the two variables
-of [Real data](CLI.md#real-data):
+[`eq backtest`](BACKTEST.md) on `data/real.sqlite`. It needs the Tiingo key of
+[Real data](CLI.md#real-data); `mise.toml` sets the SEC's `User-Agent`:
 
 ```bash
 TIINGO_API_KEY=... \
-SEC_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36' \
   mise run deploy:data
 ```
 
 Arguments after the task go to `eq run`, for example `-- --end 2026-10-10`. The
-script keeps its database in `data/real.sqlite` and the responses of Tiingo and
-the SEC in `data/cache`, both ignored by git, so a repeat run on the same day
-costs no requests. With an empty cache the Tiingo pause sets the run time
-([Real data](CLI.md#real-data)). A Tiingo rate limit or an SEC block stops the
-run with the source's message and leaves `deploy/scores.json` as it was. Run the
-task again to carry on from the cache.
+script keeps its database in `data/real.sqlite` and the responses of the SEC in
+`data/cache`, both ignored by git. The database holds the prices, so a repeat
+run asks Tiingo only for the bars after the last stored one, and a run that is
+already up to date asks for none. With an empty database the Tiingo pause sets
+the run time ([Real data](CLI.md#real-data)). A Tiingo rate limit or an SEC
+block stops the run with the source's message and leaves `deploy/scores.json` as
+it was. Run the task again to carry on from the database.
 
 Commit the new `deploy/scores.json`, `deploy/tickers` and `deploy/evidence.json`
 and push. A ticker without prices or filings is left out of the scores and named

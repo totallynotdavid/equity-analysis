@@ -10,12 +10,13 @@ code is in [`sources/edgar.py`](../packages/core/index_core/sources/edgar.py)
 
 [`EdgarSource`](../packages/core/index_core/sources/edgar.py) maps a ticker to
 its company with the CIK in the universe's companies file
-([CLI](CLI.md#universe-files)), else with the SEC's ticker list, then fetches
-that company's `companyfacts` document, and those of its earlier registrants. It
-keeps facts from forms 10-K and 10-Q, their amendments and their transition
-reports, for 19 concepts. Each fact keeps the accession number (`accn`), form,
-fiscal year (`fy`), fiscal period (`fp`) and registrant (`cik`) of the filing
-that reported it.
+([CLI](CLI.md#universe-files)). A ticker with no CIK there has no filings: the
+SEC's ticker list holds today's tickers, and one may name another company than
+the member it was. The source fetches that company's `companyfacts` document,
+and those of its earlier registrants. It keeps facts from forms 10-K and 10-Q,
+their amendments and their transition reports, for 19 concepts. Each fact keeps
+the accession number (`accn`), form, fiscal year (`fy`), fiscal period (`fp`)
+and registrant (`cik`) of the filing that reported it.
 
 | Kind          | Concepts                                                                                                                                                        |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -130,17 +131,24 @@ uv run eq coverage --universe universes/demo30.txt
 ```
 
 `eq coverage` reads the stored filings, so run [`eq run`](CLI.md#eq-run) or
-[`eq filings`](CLI.md#eq-filings) first. It counts, for each member at the
-latest stored SPY date (or `--as-of`), how many of the 19 concepts have a fresh
-value then. It lists the tickers with fewer than `--min-concepts` (default 10)
-and why: the concepts they lack, or that the filings source has no company for.
-It then counts the names with a fresh value for each concept, and for each tag
-of each concept the names that report it fresh and ever. A tag that no name
-reports freshly is marked `DEAD`: it is listed, not left out. `--db` selects the
-database ([CLI](CLI.md#the-database)).
+[`eq filings`](CLI.md#eq-filings) first. It starts with the share of
+member-years that are priced and that have filings. A member-year is a ticker
+that was a member on some day of a calendar year inside the stored SPY window.
+It is priced when the database holds a bar of the ticker in that year, and has
+filings when a fact of the ticker was filed by the end of that year. The line is
+left out when the database holds no SPY prices, as after `eq filings` alone.
+Then it counts, for each member at the latest stored SPY date (or `--as-of`),
+how many of the 19 concepts have a fresh value then. It lists the tickers with
+fewer than `--min-concepts` (default 10) and why: the concepts they lack, or
+that the filings source has no company for. It then counts the names with a
+fresh value for each concept, and for each tag of each concept the names that
+report it fresh and ever. A tag that no name reports freshly is marked `DEAD`:
+it is listed, not left out. `--db` selects the database
+([CLI](CLI.md#the-database)).
 
 ```text
 Fundamentals coverage, toy universe, synthetic filings, as of 2026-09-30
+Member-years 2024-01-01 to 2026-09-30: 24, 100.0% priced, 100.0% with filings.
 8 of 8 names have at least 10 of 19 concepts with a fresh filed value.
 No name has fewer.
 Names with a fresh value, by concept (of 8):
