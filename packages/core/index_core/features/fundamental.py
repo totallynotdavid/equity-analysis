@@ -401,18 +401,6 @@ def concept_matrix(
     )
 
 
-def concept_coverage(
-    facts: pd.DataFrame, tickers: Sequence[str], as_of: pd.Timestamp
-) -> pd.Series:
-    """How many concepts each ticker has fresh facts for at `as_of`.
-
-    A fact counts if it was filed before `as_of` and its period ended within
-    `MAX_LAG` days of `as_of`. A ticker with no facts has 0.
-    """
-    counts = concept_matrix(facts, tickers, as_of).sum(axis=1)
-    return counts.rename("concepts").astype(int)
-
-
 def tag_usage(
     facts: pd.DataFrame, tickers: Sequence[str], as_of: pd.Timestamp
 ) -> pd.DataFrame:
