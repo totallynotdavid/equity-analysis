@@ -1,4 +1,6 @@
 import argparse
+import json
+import os
 import sqlite3
 import sys
 
@@ -6,10 +8,12 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from index_core.audit import audit
 from index_core.backtest_text import render
 from index_core.coverage_text import render as render_coverage
 from index_core.evidence import build_evidence
-from index_core.model import MissingRuntimeError
+from index_core.ledger import LedgerError, publish, upgrade
+from index_core.model import NUM_ROUNDS, PARAMS, MissingRuntimeError
 from index_core.pipeline import (
     DEFAULT_COST,
     HOLDOUT_MONTHS,
@@ -245,6 +249,55 @@ def build_parser() -> argparse.ArgumentParser:
         help="directory of ticker report files to store as well",
     )
     import_command.add_argument("--db", type=Path, help=DB_HELP)
+
+    ledger_command = commands.add_parser(
+        "ledger", help="publish and verify the append-only forecast ledger"
+    )
+    ledger_commands = ledger_command.add_subparsers(
+        dest="ledger_command", required=True
+    )
+    publish_command = ledger_commands.add_parser(
+        "publish", help="append one published scores file and timestamp its manifest"
+    )
+    publish_command.add_argument("--scores", type=Path, required=True)
+    publish_command.add_argument("--ledger", type=Path, default=Path("ledger"))
+    publish_command.add_argument("--cache", type=Path)
+    publish_command.add_argument(
+        "--calendar",
+        help="OpenTimestamps calendar URL (also read from OTS_CALENDAR)",
+    )
+    publish_command.add_argument("--status", type=Path)
+    audit_command = ledger_commands.add_parser(
+        "audit", help="grade a ledger and print PASS or FAIL lines"
+    )
+    audit_command.add_argument("base")
+    audit_command.add_argument(
+        "--prices",
+        type=Path,
+        help="CSV or JSON realised prices used for matured forecasts",
+    )
+    audit_command.add_argument("--status", type=Path)
+    audit_command.add_argument(
+        "--block-times",
+        default="https://blockstream.info/api/block-height/{height}",
+        help="block-time JSON path or URL template (default: Blockstream)",
+    )
+    upgrade_command = ledger_commands.add_parser(
+        "upgrade", help="upgrade pending OTS proofs"
+    )
+    upgrade_command.add_argument("--ledger", type=Path, default=Path("ledger"))
+    upgrade_command.add_argument("--calendar")
+    direct_audit = commands.add_parser(
+        "audit", help="grade a published ledger (alias for `eq ledger audit`)"
+    )
+    direct_audit.add_argument("base")
+    direct_audit.add_argument("--prices", type=Path)
+    direct_audit.add_argument("--status", type=Path)
+    direct_audit.add_argument(
+        "--block-times",
+        default="https://blockstream.info/api/block-height/{height}",
+        help="block-time JSON path or URL template (default: Blockstream)",
+    )
     return parser
 
 
@@ -274,7 +327,7 @@ def _tickers_dir(args: argparse.Namespace) -> Path:
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    if args.db is None:
+    if hasattr(args, "db") and args.db is None:
         args.db = default_db_path()
     try:
         if args.command == "run":
@@ -291,12 +344,22 @@ def main(argv: Sequence[str] | None = None) -> None:
             _coverage(args)
         elif args.command == "import":
             _import(args)
+        elif args.command == "ledger":
+            if args.ledger_command == "publish":
+                _ledger_publish(args)
+            elif args.ledger_command == "upgrade":
+                _ledger_upgrade(args)
+            else:
+                _audit(args)
+        elif args.command == "audit":
+            _audit(args)
         else:
             _export(args)
     except (
         SourceError,
         StoreError,
         MissingRuntimeError,
+        LedgerError,
         ValueError,
         OSError,
         sqlite3.Error,
@@ -474,6 +537,41 @@ def _import(args: argparse.Namespace) -> None:
         f"stored {len(report.rows)} scores as of {report.as_of} and "
         f"{len(reports)} ticker reports in {args.db}\n"
     )
+
+
+def _ledger_publish(args: argparse.Namespace) -> None:
+    entry = publish(
+        args.scores,
+        args.ledger,
+        cache=args.cache,
+        calendar=args.calendar or os.environ.get("OTS_CALENDAR"),
+        model_settings={
+            "model": "lightgbm",
+            "num_rounds": NUM_ROUNDS,
+            "params": PARAMS,
+        },
+        status=args.status,
+    )
+    sys.stdout.write(f"published {entry.name} to {args.ledger}\n")
+
+
+def _audit(args: argparse.Namespace) -> None:
+    result = audit(args.base, args.prices, args.block_times)
+    sys.stdout.write("\n".join(result.lines) + "\n")
+    if not result.ok:
+        raise SystemExit("eq: audit failed")
+    if args.status is not None:
+        args.status.parent.mkdir(parents=True, exist_ok=True)
+        args.status.write_text(
+            json.dumps(result.status, indent=2, sort_keys=True) + "\n"
+        )
+
+
+def _ledger_upgrade(args: argparse.Namespace) -> None:
+    count = upgrade(
+        args.ledger, calendar=args.calendar or os.environ.get("OTS_CALENDAR")
+    )
+    sys.stdout.write(f"upgraded {count} OpenTimestamps proofs in {args.ledger}\n")
 
 
 def _write_tickers(reports: list[TickerReport], directory: Path) -> None:

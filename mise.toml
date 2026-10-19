@@ -48,6 +48,7 @@ description = "Format check, test and build the web page"
 dir = "web"
 run = [
     "bunx prettier --check src tests astro.config.mjs vitest.config.ts",
+    "bun run typecheck",
     "bun run test",
     "bun run build",
 ]
