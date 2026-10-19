@@ -6,6 +6,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "test": "vitest run",
+    "typecheck": "astro check",
     "preview": "astro preview",
     "astro": "astro"
   },
@@ -15,10 +16,12 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.11",
     "happy-dom": "^21.0.3",
     "prettier": "^3.9.10",
     "prettier-plugin-astro": "^1.1.1",
     "prettier-plugin-tailwindcss": "^0.8.1",
+    "typescript": "^6.0.0",
     "vitest": "^5.0.4"
   },
   "trustedDependencies": [

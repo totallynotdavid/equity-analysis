@@ -2,6 +2,7 @@ import type {
   Evidence,
   FactorAlpha,
   Interval,
+  LedgerStatus,
   ModelEvidence,
   Portfolio,
 } from "./evidence";
@@ -89,6 +90,30 @@ function section(id: string, heading: string, body: string): string {
 
 function prose(text: string): string {
   return `<p class="${MUTED} mt-2 text-sm">${text}</p>`;
+}
+
+function ledgerStatus(status: LedgerStatus): string {
+  const values: [string, string][] = [
+    [
+      "Forecasts committed",
+      status.forecasts_committed === 0
+        ? "no forecasts committed"
+        : String(status.forecasts_committed),
+    ],
+    ["Chain verified up to", status.chain_verified_up_to ?? "none"],
+    ["Earliest stamp", status.earliest_stamp ?? "none"],
+    ["Live record", status.live_record],
+  ];
+  return `<dl class="mt-6 grid gap-x-8 border-y py-3 text-sm sm:grid-cols-4" id="ledger-status">${values
+    .map(
+      ([label, value]) =>
+        `<div><dt class="${MUTED}">${label}</dt><dd class="font-medium tabular-nums">${escape(value)}</dd></div>`,
+    )
+    .join("")}</dl>`;
+}
+
+function evidenceHeading(status: LedgerStatus | null): string {
+  return `<h1 class="text-primary text-4xl font-bold tracking-tight">Evidence</h1>${status === null ? "" : ledgerStatus(status)}`;
 }
 
 function period(evidence: Evidence): string {
@@ -363,8 +388,11 @@ function trials(evidence: Evidence): string {
  * ledger of every specification tried. The build renders it from
  * `evidence.json`.
  */
-export function renderEvidence(evidence: Evidence | null): string {
+export function renderEvidence(
+  evidence: Evidence | null,
+  status: LedgerStatus | null = null,
+): string {
   if (evidence === null)
-    return `<h1 class="text-primary text-4xl font-bold tracking-tight">Evidence</h1><p class="border-warning bg-warning/10 mt-6 rounded-md border px-4 py-3 text-sm" id="no-evidence" role="note">No backtest has been stored, so there is no evidence and no score is shown. Run <code>eq backtest --final</code>, then <code>eq export</code>, and build again.</p>`;
-  return `<h1 class="text-primary text-4xl font-bold tracking-tight">Evidence</h1><p class="${MUTED} mt-2 text-sm">Out-of-sample results of a walk-forward backtest: each prediction was made by a model fitted only on earlier data. Every number below is read from the stored run.</p>${section("run-heading", "The run", run(evidence))}${section("verdict-heading", "Verdict", verdict(evidence))}${section("models-heading", "Models", models(evidence))}${section("portfolios-heading", "Portfolios", portfolios(evidence))}${section("ladder-heading", "Cost ladder", ladder(evidence))}${section("deflated-heading", "Multiple testing and factor alpha", multipleTesting(evidence))}${section("years-heading", "By year", years(evidence))}${section("buckets-heading", "By score", scores(evidence))}${section("features-heading", "Features", features(evidence))}${section("trials-heading", "Ledger of trials", trials(evidence))}`;
+    return `${evidenceHeading(status)}<p class="border-warning bg-warning/10 mt-6 rounded-md border px-4 py-3 text-sm" id="no-evidence" role="note">No backtest has been stored, so there is no evidence and no score is shown. Run <code>eq backtest --final</code>, then <code>eq export</code>, and build again.</p>`;
+  return `${evidenceHeading(status)}<p class="${MUTED} mt-2 text-sm">Out-of-sample results of a walk-forward backtest: each prediction was made by a model fitted only on earlier data. Every number below is read from the stored run.</p>${section("run-heading", "The run", run(evidence))}${section("verdict-heading", "Verdict", verdict(evidence))}${section("models-heading", "Models", models(evidence))}${section("portfolios-heading", "Portfolios", portfolios(evidence))}${section("ladder-heading", "Cost ladder", ladder(evidence))}${section("deflated-heading", "Multiple testing and factor alpha", multipleTesting(evidence))}${section("years-heading", "By year", years(evidence))}${section("buckets-heading", "By score", scores(evidence))}${section("features-heading", "Features", features(evidence))}${section("trials-heading", "Ledger of trials", trials(evidence))}`;
 }

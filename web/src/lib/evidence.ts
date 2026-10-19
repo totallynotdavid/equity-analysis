@@ -126,8 +126,32 @@ export interface Evidence {
   trials: Trial[];
 }
 
+export interface LedgerStatus {
+  forecasts_committed: number;
+  chain_verified_up_to: string | null;
+  earliest_stamp: string | null;
+  live_record: string;
+  track_record: unknown;
+}
+
 export function loadEvidence(): Evidence | null {
   const path = resolve(process.env.EVIDENCE_JSON ?? "../outputs/evidence.json");
   if (!existsSync(path)) return null;
   return JSON.parse(readFileSync(path, "utf-8")) as Evidence;
+}
+
+export function loadLedgerStatus(): LedgerStatus | null {
+  const path = resolve(
+    process.env.LEDGER_STATUS_JSON ?? "../deploy/ledger-status.json",
+  );
+  if (!existsSync(path)) {
+    return {
+      forecasts_committed: 0,
+      chain_verified_up_to: null,
+      earliest_stamp: null,
+      live_record: "no forecasts committed",
+      track_record: { matured: 0, deciles: [], rank_ic: null },
+    };
+  }
+  return JSON.parse(readFileSync(path, "utf-8")) as LedgerStatus;
 }

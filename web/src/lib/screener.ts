@@ -94,8 +94,6 @@ const UNITS: Record<string, UnitSpec> = {
   ratio: { unit: "%", prefix: "", suffix: "%", decimals: 1, scale: 100 },
 };
 
-const PERCENT: UnitSpec = UNITS.ratio;
-
 function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;

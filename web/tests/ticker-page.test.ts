@@ -44,14 +44,14 @@ describe("the ticker page", () => {
   it("has one page per report", async () => {
     process.env.TICKERS_DIR = tickersDir();
 
-    const paths = await getStaticPaths({} as never);
+    const paths = getStaticPaths();
 
     expect(paths.map((path) => path.params.ticker)).toEqual(["AAPL"]);
   });
 
   it("shows the fundamentals of the ticker with links to its filings", async () => {
     process.env.TICKERS_DIR = tickersDir();
-    const [path] = await getStaticPaths({} as never);
+    const [path] = getStaticPaths();
 
     const container = await AstroContainer.create();
     const html = await container.renderToString(Page, {
@@ -73,7 +73,7 @@ describe("a report that carries figures worked out from prices", () => {
   it("shows none of them, nor the price", async () => {
     const priced = { ...report({ ticker: "AAA" }), ...PRICE_FIGURES };
     site({ scores: scores("demo30", ["AAA"]), reports: [priced] });
-    const [path] = await getStaticPaths({} as never);
+    const [path] = getStaticPaths();
 
     const container = await AstroContainer.create();
     const html = await container.renderToString(Page, {
@@ -94,7 +94,7 @@ describe("the build of the ticker pages", () => {
   it("makes a page for every scored ticker", async () => {
     site({ scores: scores("demo30", ["AAA", "BBB", "CCC"]), reports });
 
-    const paths = await getStaticPaths({} as never);
+    const paths = getStaticPaths();
 
     expect(paths.map((path) => path.params.ticker)).toEqual([
       "AAA",
@@ -106,7 +106,7 @@ describe("the build of the ticker pages", () => {
   it("makes a page for an unscored ticker too, so the screener can link it", async () => {
     site({ scores: scores("demo30", ["AAA"]), reports });
 
-    const paths = await getStaticPaths({} as never);
+    const paths = getStaticPaths();
 
     expect(paths).toHaveLength(3);
   });
@@ -114,7 +114,7 @@ describe("the build of the ticker pages", () => {
   it("fails the build when a scored ticker has no report", () => {
     site({ scores: scores("demo30", ["AAA", "ZZZ", "YYY"]), reports });
 
-    expect(() => getStaticPaths({} as never)).toThrow(
+    expect(() => getStaticPaths()).toThrow(
       /2 scored tickers have no ticker report.*ZZZ, YYY.*eq export/,
     );
   });
@@ -122,6 +122,6 @@ describe("the build of the ticker pages", () => {
   it("builds when there are no scores to check against", async () => {
     site({ reports });
 
-    expect(await getStaticPaths({} as never)).toHaveLength(3);
+    expect(getStaticPaths()).toHaveLength(3);
   });
 });

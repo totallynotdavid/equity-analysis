@@ -1,6 +1,6 @@
 ---
 import Layout from "@/layouts/Layout.astro";
-import { loadEvidence } from "@/lib/evidence";
+import { loadEvidence, loadLedgerStatus } from "@/lib/evidence";
 import { renderEvidence } from "@/lib/render-evidence";
 ---
 
@@ -14,6 +14,9 @@ import { renderEvidence } from "@/lib/render-evidence";
       recommendation to buy or sell a security.
     </p>
 
-    <div id="evidence-root" set:html={renderEvidence(loadEvidence())} />
+    <div
+      id="evidence-root"
+      set:html={renderEvidence(loadEvidence(), loadLedgerStatus())}
+    />
   </main>
 </Layout>
