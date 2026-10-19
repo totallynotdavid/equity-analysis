@@ -60,7 +60,7 @@ def test_a_universe_without_a_companies_file_has_no_sectors_or_ciks(
 
 @pytest.mark.parametrize(
     "line",
-    ["MSFT", "MSFT,Tech", "MSFT,notanumber,Tech", "MSFT,789019,", "MSFT,789019+,Tech"],
+    ["MSFT", "MSFT,Tech", "MSFT,notanumber,Tech", "MSFT,789019+,Tech"],
 )
 def test_a_malformed_companies_file_is_an_error_that_names_the_line(
     tmp_path: Path, line: str
@@ -70,6 +70,18 @@ def test_a_malformed_companies_file_is_an_error_that_names_the_line(
 
     with pytest.raises(ValueError, match=r"universe\.companies\.csv:2: expected"):
         read_universe(path)
+
+
+def test_a_company_without_a_sector_has_a_cik_and_no_sector(tmp_path: Path) -> None:
+    path = _file(tmp_path, "AAPL,2010-01-04\nGONE,2010-01-04,2015-01-04\n")
+    (tmp_path / "universe.companies.csv").write_text(
+        "AAPL,320193,Tech\nGONE,100+101,\n"
+    )
+
+    universe = read_universe(path)
+
+    assert universe.ciks == {"AAPL": (320193,), "GONE": (100, 101)}
+    assert universe.sectors == {"AAPL": "Tech"}
 
 
 def test_a_name_is_a_member_from_its_start_through_the_day_before_its_end(

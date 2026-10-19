@@ -25,10 +25,7 @@ USER_AGENT = (
 )
 FIXTURE = Path(__file__).parent / "fixtures" / "acme_companyfacts_handwritten.json"
 RECORDED = Path(__file__).parent / "fixtures" / "recorded_aapl_companyfacts.json"
-TICKERS = {
-    "0": {"cik_str": 1234567, "ticker": "ACME", "title": "Acme Corp"},
-    "1": {"cik_str": 1067983, "ticker": "BRK-B", "title": "Berkshire Hathaway"},
-}
+CIKS = {"ACME": (1234567,), "BRK-B": (1067983,)}
 SUBMISSIONS = {
     "cik": "1234567",
     "name": "Acme Corp",
@@ -158,15 +155,10 @@ def _edgar(
     requests: list[httpx2.Request] | None = None,
     min_interval: float = 0.0,
     ciks: dict[str, tuple[int, ...]] | None = None,
-    listing_status: int = 200,
 ) -> EdgarSource:
     def respond(request: httpx2.Request) -> httpx2.Response:
         if requests is not None:
             requests.append(request)
-        if request.url.path == "/files/company_tickers.json":
-            if listing_status != 200:
-                return httpx2.Response(listing_status, text="Forbidden")
-            return httpx2.Response(200, json=TICKERS)
         if request.url.path == "/api/xbrl/companyfacts/CIK0001234567.json":
             return httpx2.Response(200, content=FIXTURE.read_bytes())
         if request.url.path == "/submissions/CIK0001234567.json":
@@ -177,13 +169,13 @@ def _edgar(
         USER_AGENT,
         transport=httpx2.MockTransport(respond),
         min_interval=min_interval,
-        ciks=ciks,
+        ciks=CIKS if ciks is None else ciks,
     )
 
 
-def test_a_company_the_universe_names_is_found_without_the_sec_ticker_list() -> None:
+def test_a_company_is_found_by_the_cik_the_universe_gives_and_only_that() -> None:
     requests: list[httpx2.Request] = []
-    source = _edgar(requests, ciks={"acme": (1234567,)}, listing_status=403)
+    source = _edgar(requests, ciks={"acme": (1234567,)})
 
     facts = source.facts("ACME", date(2024, 12, 31))
     security = source.security("ACME")
@@ -196,21 +188,16 @@ def test_a_company_the_universe_names_is_found_without_the_sec_ticker_list() -> 
     }
 
 
-def test_a_ticker_the_universe_lacks_is_looked_up_in_the_sec_ticker_list() -> None:
+def test_a_ticker_the_universe_gives_no_cik_is_not_looked_up_anywhere() -> None:
     requests: list[httpx2.Request] = []
     source = _edgar(requests, ciks={"OTHER": (99,)})
 
-    security = source.security("acme")
-
-    assert security.cik == 1234567
-    assert requests[0].url.path == "/files/company_tickers.json"
-
-
-def test_a_ticker_in_neither_place_is_not_found_when_the_list_is_blocked() -> None:
-    source = _edgar(ciks={"OTHER": (99,)}, listing_status=403)
-
-    with pytest.raises(SourceError, match="HTTP 403"):
+    with pytest.raises(NotFoundError, match="no CIK is given for ticker ACME"):
         source.security("ACME")
+    with pytest.raises(NotFoundError, match="no CIK is given for ticker ACME"):
+        source.facts("ACME", date(2024, 1, 1))
+
+    assert requests == []
 
 
 def _filed_in_part(payload: dict[str, Any], cik: int, early: bool) -> bytes:
@@ -281,18 +268,14 @@ def test_a_security_is_named_by_the_submissions_of_its_company() -> None:
 def test_a_company_with_no_submissions_has_no_security() -> None:
     with pytest.raises(NotFoundError, match=r"no facts at .*CIK0001067983"):
         _edgar().security("BRK.B")
-    with pytest.raises(NotFoundError, match="no company for ticker NOPE"):
+    with pytest.raises(NotFoundError, match="no CIK is given for ticker NOPE"):
         _edgar().security("NOPE")
     nameless = EdgarSource(
         USER_AGENT,
         transport=httpx2.MockTransport(
-            lambda request: httpx2.Response(
-                200,
-                json=TICKERS
-                if request.url.path == "/files/company_tickers.json"
-                else {"sic": "1"},
-            )
+            lambda _: httpx2.Response(200, json={"sic": "1"})
         ),
+        ciks=CIKS,
     )
     with pytest.raises(SourceError, match="malformed submissions for ACME"):
         nameless.security("ACME")
@@ -312,10 +295,7 @@ def test_edgar_sends_the_contact_user_agent_and_a_padded_cik() -> None:
     _edgar(requests).facts("acme", date(2024, 12, 31))
 
     paths = [request.url.path for request in requests]
-    assert paths == [
-        "/files/company_tickers.json",
-        "/api/xbrl/companyfacts/CIK0001234567.json",
-    ]
+    assert paths == ["/api/xbrl/companyfacts/CIK0001234567.json"]
     assert {r.headers["User-Agent"] for r in requests} == {USER_AGENT}
 
 
@@ -329,23 +309,12 @@ def test_edgar_facts_stop_at_the_end_date() -> None:
     assert late["filed"].max() == pd.Timestamp("2024-02-15")
 
 
-def test_edgar_reads_the_ticker_list_once() -> None:
-    requests: list[httpx2.Request] = []
-    source = _edgar(requests)
-
-    source.facts("ACME", date(2024, 1, 1))
-    source.facts("ACME", date(2024, 1, 1))
-
-    listings = [r for r in requests if r.url.path == "/files/company_tickers.json"]
-    assert len(listings) == 1
-
-
 def test_an_unknown_ticker_or_a_company_without_facts_is_not_found() -> None:
     source = _edgar()
 
-    with pytest.raises(NotFoundError, match="no company for ticker NOPE"):
+    with pytest.raises(NotFoundError, match="no CIK is given for ticker NOPE"):
         source.facts("NOPE", date(2024, 1, 1))
-    # The ticker is listed, but its facts endpoint is empty.
+    # The ticker has a CIK, but its facts endpoint is empty.
     with pytest.raises(NotFoundError, match=r"no facts at .*CIK0001067983"):
         source.facts("BRK.B", date(2024, 1, 1))
 
@@ -354,10 +323,12 @@ def test_other_failures_are_plain_source_errors() -> None:
     server_error = EdgarSource(
         USER_AGENT,
         transport=httpx2.MockTransport(lambda _: httpx2.Response(503, text="busy")),
+        ciks=CIKS,
     )
     not_json = EdgarSource(
         USER_AGENT,
         transport=httpx2.MockTransport(lambda _: httpx2.Response(200, text="<")),
+        ciks=CIKS,
     )
 
     with pytest.raises(SourceError, match="HTTP 503") as raised:
@@ -371,7 +342,7 @@ def test_edgar_network_failure_is_a_source_error() -> None:
     def refuse(request: httpx2.Request) -> httpx2.Response:
         raise httpx2.ConnectError("no route", request=request)
 
-    source = EdgarSource(USER_AGENT, transport=httpx2.MockTransport(refuse))
+    source = EdgarSource(USER_AGENT, transport=httpx2.MockTransport(refuse), ciks=CIKS)
 
     with pytest.raises(SourceError, match="could not reach EDGAR"):
         source.facts("ACME", date(2024, 1, 1))
@@ -384,20 +355,19 @@ def test_requests_are_spaced_by_the_minimum_interval() -> None:
     def respond(request: httpx2.Request) -> httpx2.Response:
         times.append(time.monotonic())
         requests.append(request)
-        if request.url.path == "/files/company_tickers.json":
-            return httpx2.Response(200, json=TICKERS)
         return httpx2.Response(200, content=FIXTURE.read_bytes())
 
     source = EdgarSource(
         USER_AGENT,
         transport=httpx2.MockTransport(respond),
         min_interval=0.2,
+        ciks=CIKS,
     )
 
     source.facts("ACME", date(2024, 1, 1))
     source.facts("ACME", date(2024, 1, 1))
 
-    assert len(times) == 3
+    assert len(times) == 2
     assert all(later - earlier >= 0.19 for earlier, later in pairwise(times))
 
 
@@ -406,8 +376,6 @@ def test_cached_filings_cost_neither_a_request_nor_a_wait(tmp_path: Path) -> Non
 
     def respond(request: httpx2.Request) -> httpx2.Response:
         requests.append(request)
-        if request.url.path == "/files/company_tickers.json":
-            return httpx2.Response(200, json=TICKERS)
         return httpx2.Response(200, content=FIXTURE.read_bytes())
 
     def new_source() -> EdgarSource:
@@ -416,6 +384,7 @@ def test_cached_filings_cost_neither_a_request_nor_a_wait(tmp_path: Path) -> Non
             transport=httpx2.MockTransport(respond),
             min_interval=0.5,
             cache=tmp_path,
+            ciks=CIKS,
         )
 
     first = new_source().facts("ACME", date(2024, 12, 31))
@@ -423,7 +392,7 @@ def test_cached_filings_cost_neither_a_request_nor_a_wait(tmp_path: Path) -> Non
     again = new_source().facts("ACME", date(2024, 12, 31))
 
     assert time.monotonic() - started < 0.4
-    assert len(requests) == 2
+    assert len(requests) == 1
     pd.testing.assert_frame_equal(first, again)
 
 
@@ -432,7 +401,7 @@ def test_the_user_agent_is_read_from_the_environment(
 ) -> None:
     monkeypatch.delenv("SEC_USER_AGENT", raising=False)
     with pytest.raises(SourceError, match="SEC_USER_AGENT is not set"):
-        EdgarSource.from_env()
+        EdgarSource.from_env(None, CIKS)
 
     monkeypatch.setenv("SEC_USER_AGENT", USER_AGENT)
-    assert isinstance(EdgarSource.from_env(), EdgarSource)
+    assert isinstance(EdgarSource.from_env(None, CIKS), EdgarSource)
