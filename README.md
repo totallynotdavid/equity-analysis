@@ -97,7 +97,46 @@ TIINGO_API_KEY=... \
   reported in. [Ticker reports](docs/OUTPUTS.md#ticker-reports)
 - `scores.json` export, a read-only FastAPI service and an Astro page.
   [Outputs](docs/OUTPUTS.md)
+- An append-only forecast ledger with an OpenTimestamps proof and an independent
+  `eq audit` grader. [Ledger](docs/LEDGER.md)
 - Deterministic synthetic prices and filings for offline runs and tests.
+
+## Check it yourself
+
+The committed forecast ledger is checked from its published files, not from the
+model database:
+
+```bash
+uv run eq audit ledger
+```
+
+The command prints the chain, byte, timestamp and matured-track-record checks.
+To grade outcomes with your own realised prices, add `--prices prices.csv`.
+The repository starts with no forecasts committed. The first real
+`deploy:data` run creates the first ledger entry when the operator has working
+Tiingo and SEC sources. The following tamper demo is a synthetic ledger made
+by the test helpers; it is not a production forecast. This is the real audit
+output before tampering:
+
+```text
+PASS chain is unbroken: 1 entries
+PASS every file matches its hash: 1 scores and manifests
+PENDING timestamps: 1 proof(s) have no Bitcoin attestation
+PASS matured track record: none matured yet, not before 2025-04-01
+```
+
+After changing the synthetic entry's probability from `0.9` to `0.8`, the
+same command prints:
+
+```text
+FAIL edited bytes: ledger/000001-2025-01-02/scores.json expected 2bcecfb32ffdc1336ca2dcdcc4abcda532bda2a1f65afa9bfd5dbca7bf2f0338, got d8e273b61d3fd83998e0cec86deaee1df4b8473b6aa29b76bfa32595841c9e4a
+PENDING timestamps: 1 proof(s) have no Bitcoin attestation
+PASS matured track record: none matured yet, not before 2025-04-01
+eq: audit failed
+```
+
+Without `--prices`, `not before` is a weekday lower bound: market holidays can
+push the first actual maturity later.
 
 ## Documentation
 

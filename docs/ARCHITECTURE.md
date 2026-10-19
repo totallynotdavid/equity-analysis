@@ -14,6 +14,7 @@ Python packages and an Astro site.
 ├── web/        Astro site: the screener, the ticker pages, /evidence, /method
 ├── docs/       the manual
 ├── deploy/     the real scores, ticker reports and evidence the deployed site shows
+├── ledger/     immutable forecast entries and OpenTimestamps proofs
 ├── scripts/    deploy-data.sh refreshes deploy/, deploy-db.sh loads it
 ├── .github/    contributing guide and the CI workflow
 ├── pyproject.toml   workspace members, ruff, mypy and pytest settings
@@ -38,12 +39,20 @@ flowchart LR
     M --> R[ScoresReport]
     R --> S
     R --> J[scores.json]
+    J --> L[ledger publish]
+    L --> A[standalone audit]
 ```
 
 [`pipeline.run`](../packages/core/index_core/pipeline.py) is the whole path:
 `ingest` and `ingest_filings` write to the store, `score` reads it back, builds
 features, fits and predicts, and `Store.save_report` keeps the result.
 `eq backtest` and `eq coverage` read the same store and fetch nothing.
+
+`eq ledger publish` copies the published score bytes, writes a manifest with a
+hash of the previous manifest and the source-cache responses, and stamps the
+manifest with OpenTimestamps. [`audit.py`](../packages/core/index_core/audit.py)
+is a separate grader: it reads only ledger files and an optional realised-price
+file. It does not import the model or the producer.
 
 ## Boundaries
 
@@ -112,6 +121,8 @@ features, fits and predicts, and `Store.save_report` keeps the result.
 | `regression.py`                        | Least squares with Newey-West standard errors                        |
 | `report.py`                            | `ScoresReport`, `TickerReport` and `EvidenceReport`                  |
 | `evidence.py`                          | A backtest to its stored rows, and the stored rows to the proof page |
+| `ledger.py`                            | Immutable publication entries and OpenTimestamps proofs              |
+| `audit.py`                             | Independent chain, byte, stamp and track-record grader               |
 | `backtest_text.py`, `coverage_text.py` | The text that `eq backtest` and `eq coverage` print                  |
 
 For the model, fundamentals and backtest behavior, see [Model](MODEL.md),

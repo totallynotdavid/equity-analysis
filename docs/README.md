@@ -12,6 +12,8 @@
 7. [Backtest](BACKTEST.md): `eq backtest`, its method and its output.
 8. [Architecture](ARCHITECTURE.md): the packages, the modules and the data flow.
 9. [Deploy](DEPLOY.md): the live page and API, and how a push redeploys them.
+10. [Ledger](LEDGER.md): immutable forecasts, timestamps and the independent
+    audit.
 
 To set up a checkout, run the checks or change the code, read
 [Contributing](../.github/CONTRIBUTING.md). To install and run once, read the
