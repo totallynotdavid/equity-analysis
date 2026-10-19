@@ -9,7 +9,9 @@ A file `<name>.companies.csv` beside it, with one `ticker,cik,sector` per line,
 gives the SEC identifier and the current GICS sector of the tickers it lists. A
 company that moved to a new registrant lists the new CIK first and the
 registrants whose filings it continues after it, joined with `+`, as in
-`2115436+34088`. A universe with no such file has neither.
+`2115436+34088`. The sector is blank for a name that is not a member now. A
+ticker without a line has no identifier and so no filings, because a ticker
+alone can name another company today. A universe with no such file has neither.
 """
 
 from dataclasses import dataclass, field
@@ -123,14 +125,14 @@ def _read_companies(
             len(fields) != 3
             or not fields[0]
             or not all(cik.isdigit() for cik in fields[1].split("+"))
-            or not fields[2]
         ):
             raise ValueError(
                 f"{companies_path}:{number}: expected `ticker,cik,sector`, got `{text}`"
             )
         ticker = fields[0].upper()
         ciks[ticker] = tuple(int(cik) for cik in fields[1].split("+"))
-        sectors[ticker] = fields[2]
+        if fields[2]:
+            sectors[ticker] = fields[2]
     return sectors, ciks
 
 

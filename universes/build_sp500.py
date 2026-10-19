@@ -10,16 +10,31 @@ on a date was a member from then on, and a name removed was a member until then.
 Whoever is still a member when the walk reaches `--since` was a member since
 that date, as far as the table says.
 
-Beside it the script writes `sp500.companies.csv`, the SEC identifier and the
-GICS sector of today's members from the same table. The ticker pages show the
-sector, and the filings source takes the identifier from it. `PREDECESSORS`
-adds the earlier registrants of a company that moved to a new one.
+Beside it the script writes `sp500.companies.csv`: the SEC identifier (CIK) of
+every ticker in the file and the GICS sector of today's members. The filings
+source takes the identifier from it and the ticker pages show the sector. A
+current member's identifier is in the SEC's `company_tickers.json` and its
+sector in the constituents table. A current member the SEC file does not list
+has no identifier and is left out; the script names it. `PREDECESSORS` adds the
+earlier registrants of a company that moved to a new one. A name that
+left is no longer in the SEC's ticker list, and its ticker may name another
+company now, so its identifier comes from `sp500.former.csv`: a reviewed table
+of the changes table's `Security` name and the CIK of that company, with the
+ticker where two companies share a name. A former member whose name is not in
+it has no identifier and no filings; the script lists them.
+
+The SEC wants a declared `User-Agent` on every request. The SEC file is fetched
+with the `SEC_USER_AGENT` environment variable, which `mise.toml` sets, and with
+nothing else; the script stops when it is unset.
 
 Wikipedia's text is licensed CC BY-SA 4.0. The outputs carry the page URLs and
 the fetch date, and the same licence.
 """
 
 import argparse
+import csv
+import json
+import os
 import re
 import sys
 
@@ -33,6 +48,7 @@ import httpx2
 
 CURRENT_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 CHANGES_URL = "https://en.wikipedia.org/wiki/Historical_components_of_the_S%26P_500"
+SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 LICENCE = "https://creativecommons.org/licenses/by-sa/4.0/"
 USER_AGENT = (
     "equity-analysis-universe-builder/1.0 "
@@ -43,6 +59,7 @@ USER_AGENT = (
 # the new one in the companies file. XOM moved to ExxonMobil Holdings Corp in 2026.
 PREDECESSORS: dict[str, tuple[int, ...]] = {"XOM": (34088,)}
 DEFAULT_OUT = Path(__file__).with_name("sp500.txt")
+DEFAULT_FORMER = Path(__file__).with_name("sp500.former.csv")
 # The default starts in the first year with at least 16 rows in the changes
 # table. A member that joined earlier starts on this date.
 DEFAULT_SINCE = date(2011, 1, 1)
@@ -53,6 +70,7 @@ class Change:
     effective: date
     added: str | None
     removed: str | None
+    removed_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -179,18 +197,38 @@ def current_members(rows: list[list[str]]) -> dict[str, date | None]:
     return members
 
 
-def current_companies(rows: list[list[str]]) -> dict[str, tuple[int, str]]:
-    """Each current ticker with its SEC identifier and GICS sector.
+def sec_ciks(text: str) -> dict[str, int]:
+    """The CIK of each ticker in the SEC's `company_tickers.json`, whose entries
+    look like `{"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}`."""
+    ciks: dict[str, int] = {}
+    for entry in json.loads(text).values():
+        ticker = normalise(str(entry["ticker"]))
+        if ticker:
+            ciks[ticker] = int(entry["cik_str"])
+    return ciks
 
-    The sector is the third column and the identifier the seventh. A row
-    without either is not kept.
+
+def current_companies(
+    rows: list[list[str]], ciks: dict[str, int]
+) -> tuple[dict[str, tuple[int, str]], list[str]]:
+    """Each current ticker with its SEC identifier and GICS sector, and the
+    tickers the SEC file does not list.
+
+    The identifier is the ticker's in `ciks`. The sector is the third column of
+    the constituents table. A member the SEC file lacks is not kept, and neither
+    is a row without a sector.
     """
     companies: dict[str, tuple[int, str]] = {}
+    unlisted: list[str] = []
     for row in rows:
         ticker = normalise(row[0])
-        if ticker and row[2] and row[6].isdigit():
-            companies[ticker] = (int(row[6]), row[2])
-    return companies
+        if not ticker or not row[2]:
+            continue
+        if ticker in ciks:
+            companies[ticker] = (ciks[ticker], row[2])
+        else:
+            unlisted.append(ticker)
+    return companies, sorted(unlisted)
 
 
 def parse_changes(rows: list[list[str]]) -> tuple[list[Change], list[str]]:
@@ -212,7 +250,7 @@ def parse_changes(rows: list[list[str]]) -> tuple[list[Change], list[str]]:
             continue
         added, removed = normalise(row[1]), normalise(row[3])
         if added or removed:
-            changes.append(Change(effective, added, removed))
+            changes.append(Change(effective, added, removed, " ".join(row[4].split())))
     return changes, problems
 
 
@@ -260,6 +298,56 @@ def build_spans(
     return sorted(spans, key=lambda s: (s.ticker, s.start)), problems
 
 
+def former_securities(spans: list[Span], changes: list[Change]) -> dict[str, str]:
+    """The changes table's `Security` name of each ticker that is no longer a
+    member, from the row that removed it last."""
+    names = {(c.removed, c.effective): c.removed_name for c in changes if c.removed}
+    former: dict[str, str] = {}
+    for span in spans:
+        if span.end is None:
+            former.pop(span.ticker, None)
+        else:
+            former[span.ticker] = names[span.ticker, span.end]
+    return former
+
+
+def read_former(path: Path) -> dict[tuple[str, str], str]:
+    """The reviewed table, one `security,cik` or `security,cik,ticker` per line,
+    keyed by the name and the ticker (empty when the line has none). A company
+    that moved to a new registrant lists the new CIK first and the earlier ones
+    after it, joined with `+`. Two companies that share a name are told apart by
+    the ticker. `#` starts a comment line."""
+    table: dict[tuple[str, str], str] = {}
+    for number, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = next(csv.reader([line]))
+        if (
+            len(fields) not in (2, 3)
+            or not fields[0].strip()
+            or not all(cik.isdigit() for cik in fields[1].strip().split("+"))
+        ):
+            raise ValueError(
+                f"{path}:{number}: expected `security,cik[,ticker]`, got `{line}`"
+            )
+        ticker = fields[2].strip() if len(fields) == 3 else ""
+        table[" ".join(fields[0].split()), ticker] = fields[1].strip()
+    return table
+
+
+def former_ciks(
+    names: dict[str, str], table: dict[tuple[str, str], str]
+) -> dict[str, str]:
+    """The CIK of each former ticker the table has: the line for its name and
+    ticker, else the line for its name alone."""
+    found = {}
+    for ticker, name in names.items():
+        cik = table.get((name, ticker)) or table.get((name, ""))
+        if cik:
+            found[ticker] = cik
+    return found
+
+
 def changes_per_year(changes: list[Change]) -> dict[int, int]:
     """Rows of the changes table per year. A year with few is probably incomplete."""
     counts: dict[int, int] = {}
@@ -283,18 +371,28 @@ def render(spans: list[Span], since: date, fetched: date) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_companies(companies: dict[str, tuple[int, str]], fetched: date) -> str:
+def render_companies(
+    companies: dict[str, tuple[int, str]], former: dict[str, str], fetched: date
+) -> str:
+    """The companies file: today's members with their sector, then the former
+    members that have a CIK, with no sector."""
+    rows = {
+        ticker: ("+".join(str(c) for c in (cik, *PREDECESSORS.get(ticker, ()))), sector)
+        for ticker, (cik, sector) in companies.items()
+    }
+    rows.update({t: (cik, "") for t, cik in former.items() if t not in rows})
     lines = [
-        "# SEC identifier and current GICS sector of the S&P 500 members, generated "
-        "by universes/build_sp500.py. Do not edit.",
-        f"# Source: {CURRENT_URL}, fetched {fetched}.",
+        "# SEC identifier of every ticker in sp500.txt that has one and the current "
+        "GICS sector of the members, generated by universes/build_sp500.py. Do not "
+        "edit.",
+        f"# Source: {SEC_TICKERS_URL} and {CURRENT_URL}, fetched {fetched}, and "
+        "sp500.former.csv.",
         f"# Wikipedia text is CC BY-SA 4.0: {LICENCE}",
-        "# Format: ticker,cik,sector. A name that has left the index is not listed.",
+        "# Format: ticker,cik,sector. A name that has left the index has no sector. "
+        "A ticker not listed has no identifier.",
     ]
     lines.extend(
-        f"{ticker},{'+'.join(str(c) for c in (cik, *PREDECESSORS.get(ticker, ())))},"
-        f"{sector}"
-        for ticker, (cik, sector) in sorted(companies.items())
+        f"{ticker},{cik},{sector}" for ticker, (cik, sector) in sorted(rows.items())
     )
     return "\n".join(lines) + "\n"
 
@@ -311,8 +409,12 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--since", type=date.fromisoformat, default=DEFAULT_SINCE)
+    parser.add_argument("--former", type=Path, default=DEFAULT_FORMER)
     parser.add_argument("--user-agent", default=USER_AGENT)
     args = parser.parse_args(argv)
+    sec_user_agent = os.environ.get("SEC_USER_AGENT")
+    if not sec_user_agent:
+        parser.error("SEC_USER_AGENT is not set; the SEC refuses a request without one")
 
     constituents = read_tables(fetch(CURRENT_URL, args.user_agent), {"constituents"})[
         "constituents"
@@ -323,15 +425,41 @@ def main(argv: list[str] | None = None) -> None:
     )
     spans, walk_problems = build_spans(current, changes, args.since)
     args.out.write_text(render(spans, args.since, date.today()))
-    companies = current_companies(constituents)
+    companies, unlisted = current_companies(
+        constituents, sec_ciks(fetch(SEC_TICKERS_URL, sec_user_agent))
+    )
+    names = former_securities(spans, changes)
+    table = read_former(args.former)
+    former = former_ciks(names, table)
+    unresolved = {t: n for t, n in names.items() if t not in former}
     companies_out = args.out.with_suffix(".companies.csv")
-    companies_out.write_text(render_companies(companies, date.today()))
+    companies_out.write_text(render_companies(companies, former, date.today()))
 
     sys.stderr.write(
         f"wrote {len(spans)} spans for {len({s.ticker for s in spans})} tickers "
         f"to {args.out}; {len(current)} current members, {len(changes)} changes\n"
-        f"wrote {len(companies)} companies to {companies_out}\n"
+        f"wrote {len(companies)} current and {len(former)} former companies to "
+        f"{companies_out}\n"
     )
+    if unlisted:
+        sys.stderr.write(
+            f"{len(unlisted)} current members are not in the SEC's ticker file and "
+            f"have no CIK: {', '.join(unlisted)}\n"
+        )
+    if unresolved:
+        sys.stderr.write(
+            f"{len(unresolved)} former members have no CIK in {args.former}: "
+            + ", ".join(f"{t} ({n})" for t, n in sorted(unresolved.items()))
+            + "\n"
+        )
+    used = {(name, t) for t, name in names.items()} | {
+        (name, "") for name in names.values()
+    }
+    unused = sorted(name for name, ticker in set(table) - used)
+    if unused:
+        sys.stderr.write(
+            f"warning: {args.former} names no former member: {', '.join(unused)}\n"
+        )
     for problem in [*problems, *walk_problems]:
         sys.stderr.write(f"warning: {problem}\n")
     sys.stderr.write(

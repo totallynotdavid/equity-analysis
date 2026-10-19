@@ -1,0 +1,312 @@
+# Reviewed SEC identifier (CIK) of each company that left the S&P 500. Columns:
+# the changes table's `Security` name, the CIK when it left, and, only for two
+# companies with one name, the ticker. A company that moved to a new registrant
+# lists the new CIK first, then the earlier ones, joined with `+`. Each CIK
+# matches EDGAR's name, former names and filing dates for the years it was a
+# member.
+Abercrombie & Fitch,1018840
+Abiomed,815094
+Activision Blizzard,718877
+Acuity Brands,1144215
+ADT,1546640
+Advance Auto Parts,1158449
+Aetna,1122304
+Affiliated Managers Group,1004434
+AGL Resources,1004155
+Aimco,922864
+Airgas,804212
+AK Steel,918192
+Alaska Air Group,766421
+Alcoa,4281
+Alexion Pharmaceuticals,899866
+Allegheny Energy,3673
+Allegheny Technologies,1018963
+Allergan,1578845+850693
+Alliance Data Systems,1101215
+Alpha Natural Resources,1301063
+Altera,768251
+Amentum,2011286
+American Airlines Group,6201
+Anadarko Petroleum,773910
+Andeavor,50104
+Ansys,1013462
+Apollo Education Group,929887
+Arconic,4281
+AutoNation,350698
+AvalonBay Communities,915912
+Avon Products,8868
+Baker Hughes,808362
+"Bath & Body Works, Inc.",701985
+Baxalta,1620546
+Bed Bath & Beyond,886158
+Bemis,11199
+Big Lots,768835
+Bio-Rad Laboratories,12208
+BMC Software,835729
+BorgWarner,908255
+Brighthouse Financial,1685040
+Broadcom Corporation,1054374
+Builders FirstSource,1316835
+CA Technologies,356028
+Cablevision Systems,1053112
+Caesars Entertainment,1590895
+Cameron International,941548
+Campbell's,16732
+Capri Holdings,1530721
+Carefusion,1457543
+CarMax,1170010
+Catalent,1596783
+Celanese,1306830
+Celgene,816284
+Cephalon,873364
+Ceridian,1725057
+Cerner,804753
+Chesapeake Energy,895126
+Chubb,896159
+Cimarex Energy,1168054
+Citrix Systems,877890
+Cliffs Natural Resources,764065
+Coca-Cola Enterprises,1491675
+Columbia Pipeline Group,1629995
+Comcast Series K,1166691
+Comerica,28412
+Computer Sciences Corporation,23082
+Compuware,859014
+Conagra Brands,23217
+Concho Resources,1358071
+Consol Energy,1070412
+Cooper Industries,1141982
+Corteva,1755672
+Coterra Energy,858470
+Coty,1024305
+Coventry Health Care,1054833
+Covidien,1385187
+CR Bard,9892
+CSRA,1646383
+Dayforce,1725057
+Dean Foods,931336
+Denbury Resources,945764
+Dentsply Sirona,818479
+DeVry,730464
+Diamond Offshore Drilling,949039
+DirecTV,1465112
+Discover Financial,1393612
+"Discovery, Inc.",1437107
+Dish Network,1001082
+Dr Pepper Snapple Group,1418135
+Duke Realty,783280
+Dun & Bradstreet,1115222
+DuPont,1666700
+DXC Technology,1688568
+E-Trade,1015780
+Eastman Chemical Co.,915389
+El Paso Corporation,1066107
+Electronic Arts,712515
+EMC Corporation,790070
+Endo International,1593034
+Enphase Energy,1463101
+Ensco,314808
+Envision Healthcare,1678531
+EPAM Systems,1352010
+Etsy,1370637
+Express Scripts,1532063
+Family Dollar,34408
+Federated Investors,1056288
+First Horizon,36966
+First Republic Bank,1132979
+FLIR Systems,354908
+Flowserve,30625
+Fluor Corporation,1124198
+FMC Corporation,37785
+Foot Locker,850209
+Forest Laboratories,38074
+Fortune Brands Home & Security,1519751
+Fossil Group,883569
+Frontier Communications,20520
+GameStop,1326380
+Gap,39911
+Genworth Financial,1276520
+Genzyme,732485
+GGP Inc.,1496048
+Goodrich Corporation,42542
+Graham Holdings,104889
+H&R Block,12659
+Hanesbrands,1359841
+Harley-Davidson,793952
+Harman International,800459
+Heinz,46640
+Helmerich & Payne,46765
+Hess Corporation,4447
+HollyFrontier,48039
+Hologic,859737
+Hospira,1274057
+Hudson City Bancorp,921847
+IHS Markit,1598014
+Integrys Energy Group,916863
+International Game Technology,353944
+Interpublic Group,51644
+IPG Photonics,1111928
+ITT,216228
+Janus Capital Group,1065865
+JCPenney,1166126
+JDS Uniphase,912093
+Jefferies Financial Group,96223
+Joy Global,801898
+Juniper Networks,1043604
+Kansas City Southern,54480
+Kellanova,55067
+Keurig Green Mountain,909954
+Kohl's,885639
+Kraft Foods,1103982,KFT
+Kraft Foods,1545158,KRFT
+L3 Technologies,1039101
+Lamb Weston,1679273
+Legg Mason,704051
+Leggett & Platt,58492
+Level 3 Communications,794323
+Lexmark,1001288
+Life Technologies,1073431
+Lincoln National Corporation,59558
+Linear Technology,791907
+LKQ Corporation,1065696
+Lorillard Tobacco Company,1424847
+LSI Corporation,703360
+Lumen Technologies,18926
+Macerich,912242
+Macy's,794367
+Mallinckrodt,1567892
+Marathon Oil,101778
+MarketAxess,1278021
+Marshall & Ilsley,1399315
+Massey Energy,37748
+MasterBrand,1941365
+Match Group,891103
+Mattel,63276
+Maxim Integrated,743316
+McAfee,890801
+Mead Johnson,1452575
+Medco Health Solutions,1170650
+MEMC Electronic Materials,945436
+Meredith Corp,65011
+MetroPCS,1283699
+Mohawk Industries,851968
+Molex,67472
+Molina Healthcare,1179929
+Molson Coors,24545
+Monsanto,1110783
+Monster Worldwide,1020416
+Motorola Mobility,1495569
+Murphy Oil,717423
+Nabors Industries,1163739
+National Semiconductor,70530
+Navient,1593538
+Nektar Therapeutics,906709
+Newell Brands,814453
+Newfield Exploration,912750
+Nielsen Holdings,1492633
+Noble Corporation,1458891
+Noble Energy,72207
+Nordstrom,72333
+Nov,1021860
+Novell,758004
+Novellus Systems,836106
+NYSE Euronext,1368007
+Organon & Co.,1821825
+Owens-Illinois,812074
+Pall Corporation,75829
+Patterson Companies,891024
+Paycom,1590955
+Peabody Energy,1064728
+Penn Entertainment,921738
+People's United Financial,1378946
+Pepco Holdings,1135971
+Perrigo,1585364+820096
+PetSmart,863157
+Pioneer Natural Resources,1038357
+Pitney Bowes,78814
+Plum Creek Timber,849213
+Pool Corporation,945841
+Precision Castparts Corporation,79958
+Progress Energy,1094093
+PVH,78239
+QEP Resources,1108827
+Qorvo,1604778
+RadioShack,96289
+Range Resources,315852
+Raytheon Company,1047122
+Red Hat,1087423
+Reynolds American,1275283
+Robert Half,315213
+Rockwell Collins,1137411
+Rowan Companies,1549937+85408
+RR Donnelley,29669
+Ryder System,85961
+Safeway,86144
+SAIC,1336920
+Sara Lee Corporation,23666
+SCANA,754737
+Scripps Networks Interactive,1430602
+Sealed Air,1012100
+Sears Holdings,1310067
+Sigma-Aldrich,90185
+Signature Bank,1288784
+Signet Jewelers,832988
+SL Green Realty,1040971
+SLM Corporation,1032033
+SolarEdge,1419612
+Solstice Advanced Materials,2064953
+Southwestern Energy,7332
+Spectra Energy,1373835
+Sprint Nextel,101830
+St Jude Medical,203077
+Staples,791519
+Starwood Hotels and Resorts,316206
+Stericycle,861878
+Sunoco,95304
+Suntory Global Spirits,789073
+SunTrust Banks,750556
+Supervalu,95521
+SVB Financial Group,719739
+TechnipFMC,1681459+1135152
+TECO Energy,350563
+Tegna,39899
+Teleflex,96943
+Tellabs,317771
+Tenet Healthcare,70318
+Teradata,816761
+The Goodyear Tire & Rubber Company,42582
+The Trade Desk,1671933
+Tiffany & Co,98246
+Time Warner,1105705
+Time Warner Cable,1377013
+Titanium Metals,1011657
+Transocean,1451505
+TripAdvisor,1526520
+TSYS,721683
+Twitter,1418091
+Tyco International,1608109+100441
+Under Armour (Class A),1336917
+Under Armour (Class C),1336917
+United States Steel,1163302
+Unum,5513
+Urban Outfitters,912615
+Varian Medical Systems,203527
+VF Corporation,103379
+Viacom,1339947
+Vontier,1786842
+Vornado Realty Trust,899689
+Walgreens Boots Alliance,1618921+104207
+Warner Bros. Discovery,1437107
+WellCare,1279363
+Western Union,1365135
+Whirlpool Corporation,106640
+Whole Foods Market,865436
+Willis Towers Watson,1140536
+Windstream Communications,1282266
+WPX Energy,1518832
+Wyndham Worldwide,1361658
+Xerox,1770450+108772
+Xilinx,743988
+XL Group,875159
+Yahoo!,1011006
+Zions Bancorporation,109380

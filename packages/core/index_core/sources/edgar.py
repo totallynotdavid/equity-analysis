@@ -248,7 +248,8 @@ class EdgarSource:
         transport: httpx2.BaseTransport | None = None,
         min_interval: float = MIN_INTERVAL,
         cache: Path | None = None,
-        ciks: Mapping[str, tuple[int, ...]] | None = None,
+        *,
+        ciks: Mapping[str, tuple[int, ...]],
     ) -> None:
         paced: httpx2.BaseTransport = PacedTransport(
             transport or httpx2.HTTPTransport(), min_interval
@@ -258,14 +259,11 @@ class EdgarSource:
         self._client = httpx2.Client(
             headers={"User-Agent": user_agent}, timeout=30.0, transport=paced
         )
-        self._known = {normalise_ticker(t): cik for t, cik in (ciks or {}).items()}
-        self._listed: dict[str, int] | None = None
+        self._known = {normalise_ticker(t): cik for t, cik in ciks.items()}
 
     @classmethod
     def from_env(
-        cls,
-        cache: Path | None = None,
-        ciks: Mapping[str, tuple[int, ...]] | None = None,
+        cls, cache: Path | None, ciks: Mapping[str, tuple[int, ...]]
     ) -> EdgarSource:
         user_agent = os.environ.get(USER_AGENT_VARIABLE)
         if not user_agent:
@@ -312,28 +310,14 @@ class EdgarSource:
             ) from error
 
     def _ciks(self, ticker: str) -> tuple[int, ...]:
-        """The registrants of the company, current first: those given, else the
-        one in the SEC's ticker list, which is fetched on the first ticker that
-        needs it.
+        """The registrants of the company, current first, as the universe gave
+        them. The SEC's ticker list is not consulted: it holds today's tickers,
+        and one may name another company than the member it was.
         """
-        key = normalise_ticker(ticker)
-        if key in self._known:
-            return self._known[key]
-        if self._listed is None:
-            listing = self._get_json(f"{WWW_URL}/files/company_tickers.json")
-            if not isinstance(listing, dict):
-                raise SourceError("EDGAR sent no ticker list")
-            try:
-                self._listed = {
-                    str(entry["ticker"]).upper(): int(entry["cik_str"])
-                    for entry in listing.values()
-                }
-            except (KeyError, TypeError, ValueError) as error:
-                raise SourceError("EDGAR sent a malformed ticker list") from error
-        cik = self._listed.get(key)
-        if cik is None:
-            raise NotFoundError(f"EDGAR has no company for ticker {ticker}")
-        return (cik,)
+        try:
+            return self._known[normalise_ticker(ticker)]
+        except KeyError:
+            raise NotFoundError(f"no CIK is given for ticker {ticker}") from None
 
     def _get_json(self, url: str, *, per_company: bool = False) -> object:
         try:
