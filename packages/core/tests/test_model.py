@@ -28,21 +28,16 @@ def _without_openmp(monkeypatch: pytest.MonkeyPatch, platform: str = "linux") ->
     monkeypatch.setattr("index_core.model.sys", SimpleNamespace(platform=platform))
 
 
+@pytest.mark.parametrize(
+    ("platform", "install"),
+    [("linux", "apt-get install libgomp1"), ("darwin", "brew install libomp")],
+)
 def test_a_missing_openmp_runtime_names_the_package_to_install(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, platform: str, install: str
 ) -> None:
-    _without_openmp(monkeypatch)
+    _without_openmp(monkeypatch, platform)
 
-    with pytest.raises(MissingRuntimeError, match="apt-get install libgomp1"):
-        load_lightgbm()
-
-
-def test_a_missing_openmp_runtime_on_macos_names_libomp(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _without_openmp(monkeypatch, "darwin")
-
-    with pytest.raises(MissingRuntimeError, match="brew install libomp"):
+    with pytest.raises(MissingRuntimeError, match=install):
         load_lightgbm()
 
 

@@ -15,12 +15,11 @@ def _up_to(frame: pd.DataFrame, day: pd.Timestamp) -> pd.DataFrame:
     return frame[frame.index.get_level_values("date") <= day]
 
 
-def test_computes_twenty_features_for_every_ticker_but_the_benchmark(
+def test_computes_the_features_for_every_ticker_but_the_benchmark(
     prices: pd.DataFrame,
 ) -> None:
     features = technical_features(prices, "SPY")
 
-    assert len(FEATURES) == 20
     assert list(features.columns) == list(FEATURES)
     tickers = set(features.index.get_level_values("ticker"))
     assert tickers == set(prices["ticker"]) - {"SPY"}

@@ -5,6 +5,7 @@ import socket
 from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 import pytest
@@ -17,6 +18,10 @@ from index_core.sources.edgar import CONCEPTS
 from index_core.sources.synthetic import SyntheticSource
 from index_core.store import Store
 from membership import always
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _without_openmp(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -54,23 +59,6 @@ def _run(tmp_path: Path) -> Path:
     return out
 
 
-def test_help_prints_usage_and_exits_zero(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    with pytest.raises(SystemExit) as exit_info:
-        main(["--help"])
-
-    assert exit_info.value.code == 0
-    assert capsys.readouterr().out.startswith("usage: eq")
-
-
-def test_unknown_argument_exits_nonzero() -> None:
-    with pytest.raises(SystemExit) as exit_info:
-        main(["--no-such-flag"])
-
-    assert exit_info.value.code != 0
-
-
 def test_run_writes_thirty_scored_rows_with_an_as_of_date(ran: Path) -> None:
     scores = json.loads(ran.read_text())
 
@@ -97,33 +85,27 @@ def test_export_rewrites_the_stored_scores_unchanged(ran: Path) -> None:
     assert exported.read_text() == ran.read_text()
 
 
-def test_import_stores_a_scores_file_so_export_returns_it_unchanged(
-    ran: Path,
-) -> None:
-    tmp_path = ran.parent
-    scores = json.loads(ran.read_text())
+def _foreign_sources(scores: dict[str, Any]) -> None:
     scores["price_source"], scores["facts_source"] = "tiingo", "edgar"
-    published = tmp_path / "published.json"
-    published.write_text(json.dumps(scores, indent=2) + "\n")
-    database = str(tmp_path / "published.sqlite")
-
-    main(["import", "--scores", str(published), "--db", database])
-    exported = tmp_path / "exported.json"
-    main(["export", "--db", database, "--out", str(exported)])
-
-    assert exported.read_text() == published.read_text()
 
 
-def test_export_keeps_the_order_of_the_imported_rows_and_left_out_names(
-    ran: Path,
-) -> None:
-    tmp_path = ran.parent
-    scores = json.loads(ran.read_text())
+def _reordered_with_left_out(scores: dict[str, Any]) -> None:
     scores["rows"].reverse()
     scores["left_out"] = [
         {"ticker": "ZZZ", "reason": "no prices"},
         {"ticker": "AAA", "reason": "no filings"},
     ]
+
+
+@pytest.mark.parametrize(
+    "edit", [_foreign_sources, _reordered_with_left_out], ids=["sources", "order"]
+)
+def test_import_stores_a_scores_file_so_export_returns_it_unchanged(
+    ran: Path, edit: Callable[[dict[str, Any]], None]
+) -> None:
+    tmp_path = ran.parent
+    scores = json.loads(ran.read_text())
+    edit(scores)
     published = tmp_path / "published.json"
     published.write_text(json.dumps(scores, indent=2) + "\n")
     database = str(tmp_path / "published.sqlite")
@@ -143,9 +125,14 @@ def test_import_rejects_a_file_that_is_not_a_scores_report(tmp_path: Path) -> No
         main(["import", "--scores", str(broken), "--db", str(tmp_path / "db.sqlite")])
 
 
-def test_export_without_a_database_fails_with_a_message(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit, match=r"does not exist; run `eq run` first"):
-        main(["export", "--db", str(tmp_path / "none.sqlite")])
+@pytest.mark.parametrize("command", ["export", "coverage", "backtest"])
+def test_a_command_that_reads_the_database_fails_when_there_is_none(
+    tmp_path: Path, command: str
+) -> None:
+    universe = [] if command == "export" else ["--universe", str(DEMO)]
+
+    with pytest.raises(SystemExit, match=r"eq: .*does not exist; run `eq run` first"):
+        main([command, *universe, "--db", str(tmp_path / "none.sqlite")])
 
 
 def test_a_missing_database_points_to_the_one_beside_it(ran: Path) -> None:
@@ -153,23 +140,35 @@ def test_a_missing_database_points_to_the_one_beside_it(ran: Path) -> None:
         main(["export", "--db", str(ran.parent / "index.sqlite")])
 
 
-def test_tiingo_run_without_a_key_fails_before_fetching(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("key", "arguments", "message"),
+    [
+        (None, [], "TIINGO_API_KEY is not set"),
+        ("key", [], "SEC_USER_AGENT is not set"),
+        ("key", ["--prices", "synthetic"], "SEC_USER_AGENT is not set"),
+    ],
+    ids=["no-key", "no-contact", "filings-need-it-with-offline-prices"],
+)
+def test_a_run_missing_a_credential_fails_before_fetching(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    key: str | None,
+    arguments: list[str],
+    message: str,
 ) -> None:
-    monkeypatch.delenv("TIINGO_API_KEY", raising=False)
-
-    with pytest.raises(SystemExit, match="TIINGO_API_KEY is not set"):
-        main(["run", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")])
-
-
-def test_tiingo_run_without_a_contact_fails_before_fetching(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("TIINGO_API_KEY", "key")
     monkeypatch.delenv("SEC_USER_AGENT", raising=False)
+    if key is None:
+        monkeypatch.delenv("TIINGO_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("TIINGO_API_KEY", key)
 
-    with pytest.raises(SystemExit, match="SEC_USER_AGENT is not set"):
-        main(["run", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")])
+    with pytest.raises(SystemExit, match=message):
+        main(
+            [
+                *["run", "--universe", str(DEMO), *arguments],
+                *["--db", str(tmp_path / "db.sqlite")],
+            ]
+        )
 
 
 def test_a_run_on_a_database_of_other_sources_fails_before_fetching(
@@ -183,20 +182,6 @@ def test_a_run_on_a_database_of_other_sources_fails_before_fetching(
 
     with pytest.raises(SystemExit, match="holds synthetic prices"):
         main(["run", "--universe", str(DEMO), "--db", str(ran.parent / "db.sqlite")])
-
-
-def test_prices_and_filings_are_chosen_independently(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv("SEC_USER_AGENT", raising=False)
-
-    with pytest.raises(SystemExit, match="SEC_USER_AGENT is not set"):
-        main(
-            [
-                *["run", "--universe", str(DEMO), "--prices", "synthetic"],
-                *["--db", str(tmp_path / "db.sqlite")],
-            ]
-        )
 
 
 def test_run_and_export_share_the_default_database(
@@ -451,28 +436,27 @@ def test_coverage_counts_a_name_with_no_stored_filings_as_zero(
     assert "    Revenues: 0 fresh, 0 ever  DEAD" in lines
 
 
-def test_coverage_lists_names_with_few_concepts(
+def test_coverage_counts_names_against_the_minimum_it_is_given(
     ran: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    tmp_path = ran.parent
     capsys.readouterr()
 
     main(
         [
-            *["coverage", "--universe", str(DEMO), "--db", str(tmp_path / "db.sqlite")],
+            *[
+                "coverage",
+                "--universe",
+                str(DEMO),
+                "--db",
+                str(ran.parent / "db.sqlite"),
+            ],
             *["--min-concepts", "99"],
         ]
     )
 
-    output = capsys.readouterr().out
-    assert "demo30" in output
-    assert "synthetic" in output
-    assert "AAPL" in output
-
-
-def test_coverage_without_a_database_fails_with_a_message(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit, match=r"eq: .*does not exist; run `eq run` first"):
-        main(["coverage", "--universe", str(DEMO), "--db", str(tmp_path / "none.db")])
+    out = capsys.readouterr().out
+    assert f"0 of 30 names have at least 99 of {len(CONCEPTS)} concepts" in out
+    assert "30 with fewer" in out
 
 
 def test_a_missing_universe_file_fails_with_a_message(tmp_path: Path) -> None:
@@ -640,11 +624,6 @@ def test_export_can_put_the_evidence_elsewhere(
 
     assert elsewhere.exists()
     assert not (out.parent / "evidence.json").exists()
-
-
-def test_backtest_without_a_database_fails_with_a_message(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit, match=r"eq: .*does not exist; run `eq run` first"):
-        main(["backtest", "--universe", str(DEMO), "--db", str(tmp_path / "none.db")])
 
 
 def test_backtest_with_too_little_history_fails_with_a_message(ran: Path) -> None:

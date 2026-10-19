@@ -56,9 +56,8 @@ The tests run on synthetic prices and filings and on EDGAR payloads in
 [`packages/core/tests/fixtures`](../packages/core/tests/fixtures). They train
 real models, so they take minutes, and they make no network calls.
 
-The web tests in [`web/tests`](../web/tests) render the page for each pair of
-sources and start the dev server on a free port to check that it listens only on
-localhost. They run beside `mise run web`.
+The web tests in [`web/tests`](../web/tests) render the pages for each pair of
+sources.
 
 `acme_companyfacts_handwritten.json` holds edge cases with known answers. To
 record a real `companyfacts` response as a fixture, trimmed to the tags the

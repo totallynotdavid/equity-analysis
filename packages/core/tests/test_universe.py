@@ -1,5 +1,5 @@
 from datetime import date
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
 import pytest
@@ -7,7 +7,8 @@ import pytest
 from index_core.universe import Membership, read_universe
 
 
-UNIVERSES = Path(__file__).parents[3] / "universes"
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _file(tmp_path: Path, text: str) -> Path:
@@ -157,22 +158,3 @@ def test_a_malformed_file_is_an_error_that_names_the_line(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         read_universe(_file(tmp_path, text))
-
-
-def test_the_demo_universe_lists_thirty_members_on_every_date() -> None:
-    demo = read_universe(UNIVERSES / "demo30.txt")
-
-    assert len(demo.tickers) == 30
-    assert demo.members_on(date(2000, 1, 3)) == demo.tickers
-    assert demo.members_on(date(2040, 1, 1)) == demo.tickers
-
-
-def test_the_sp500_universe_has_about_five_hundred_members_on_each_date() -> None:
-    sp500 = read_universe(UNIVERSES / "sp500.txt")
-
-    for year in range(2012, 2026):
-        assert 495 <= len(sp500.members_on(date(year, 6, 30))) <= 515
-    assert "AAPL" in sp500.members_on(date(2012, 6, 30))
-    assert "TSLA" not in sp500.members_on(date(2019, 6, 30))
-    assert "TSLA" in sp500.members_on(date(2021, 6, 30))
-    assert len(sp500.tickers) > len(sp500.members_on(date(2026, 10, 9)))

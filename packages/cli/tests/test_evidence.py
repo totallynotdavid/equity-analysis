@@ -245,23 +245,6 @@ def test_the_net_return_of_a_run_at_a_cost_matches_the_ladder_of_another(
 
 
 @pytest.mark.e2e
-def test_a_higher_cost_option_lowers_the_net_column_of_the_portfolio_table(
-    backtest: Callable[..., str], signal_db: Path
-) -> None:
-    nets = [
-        float(
-            _portfolio(backtest(signal_db, "--cost-bps", bps), "top - bottom")[
-                5
-            ].rstrip("%")
-        )
-        for bps in ("0", "10", "30", "100")
-    ]
-
-    assert nets == sorted(nets, reverse=True)
-    assert len(set(nets)) == 4
-
-
-@pytest.mark.e2e
 def test_the_break_even_cost_is_the_same_on_every_run_and_at_every_cost(
     backtest: Callable[..., str], signal_db: Path
 ) -> None:

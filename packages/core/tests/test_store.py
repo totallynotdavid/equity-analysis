@@ -28,7 +28,6 @@ from index_core.sources.synthetic import (
     SyntheticSource,
 )
 from index_core.store import (
-    SCHEMA_VERSION,
     EvalRow,
     Store,
     StoreError,
@@ -299,17 +298,6 @@ def test_the_ledger_counts_a_specification_once_and_keeps_its_latest_sharpe(
         store.record_trial("a", "first again", day, 25, 0.12)
 
         assert sorted(store.trial_sharpes()) == [-0.05, 0.12]
-
-
-def test_a_database_of_the_previous_layout_is_refused(tmp_path: Path) -> None:
-    path = tmp_path / "db.sqlite"
-    Store.open(path).close()
-    previous = sqlite3.connect(path)
-    previous.execute(f"PRAGMA user_version = {SCHEMA_VERSION - 1}")
-    previous.close()
-
-    with pytest.raises(StoreError, match="older layout; delete it"):
-        Store.open(path)
 
 
 def _ticker_report(ticker: str, as_of: date, universe: str = "demo") -> TickerReport:

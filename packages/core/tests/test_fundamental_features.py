@@ -12,7 +12,7 @@ import pytest
 from index_core.features.fundamental import (
     FEATURES,
     INPUTS,
-    concept_coverage,
+    concept_matrix,
     fundamental_features,
     fundamental_inputs,
     tag_usage,
@@ -402,11 +402,11 @@ def test_coverage_counts_the_fresh_concepts_of_each_ticker() -> None:
 
     tickers = ["ACME", "SPARSE", "NOFILINGS"]
 
-    counts = concept_coverage(both, tickers, pd.Timestamp("2023-11-06"))
+    counts = concept_matrix(both, tickers, pd.Timestamp("2023-11-06")).sum(axis=1)
 
     assert counts.to_dict() == {"ACME": len(CONCEPTS), "SPARSE": 2, "NOFILINGS": 0}
     # On the filing day the two debt tags, equity and cash are not yet usable.
-    earlier = concept_coverage(both, ["ACME"], pd.Timestamp("2023-11-03"))
+    earlier = concept_matrix(both, ["ACME"], pd.Timestamp("2023-11-03")).sum(axis=1)
     assert earlier["ACME"] == len(CONCEPTS) - 4
 
 

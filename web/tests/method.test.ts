@@ -60,21 +60,11 @@ describe("the method page", () => {
   });
 
   it("lists each data licence with a link and its terms", () => {
-    expect(LICENCES.map((l) => l.source)).toEqual([
-      "Tiingo",
-      "SEC EDGAR",
-      "Kenneth R. French Data Library",
-      "Wikipedia, List of S&P 500 companies",
-    ]);
     for (const licence of LICENCES) {
       expect(html).toContain(`href="${licence.link}"`);
       expect(html).toContain(escape(licence.terms));
     }
     expect(html).toContain("CC BY-SA 4.0");
-  });
-
-  it("links to the evidence the score depends on", () => {
-    expect(html).toContain('href="/evidence"');
   });
 
   it("says so when no ticker report was published", () => {

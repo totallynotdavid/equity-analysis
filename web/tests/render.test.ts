@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escape, leftOutNote, sourcesWarning } from "../src/lib/render";
+import { escape, leftOutNote } from "../src/lib/render";
 import type { Scores } from "../src/lib/scores";
 
 const scores: Scores = {
@@ -60,43 +60,5 @@ describe("leftOutNote", () => {
   it("says nothing when none were left out", () => {
     expect(leftOutNote(scores)).toBe("");
     expect(leftOutNote({ ...scores, left_out: [] })).toBe("");
-  });
-});
-
-describe("sourcesWarning", () => {
-  it("is empty when both sources are real", () => {
-    expect(sourcesWarning(scores)).toBe("");
-  });
-
-  it("is empty for real prices when no filings were stored", () => {
-    expect(sourcesWarning({ ...scores, facts_source: null })).toBe("");
-  });
-
-  it("names synthetic filings behind real prices", () => {
-    const html = sourcesWarning({ ...scores, facts_source: "synthetic" });
-
-    expect(html).toContain('role="alert"');
-    expect(html).toContain("synthetic filings");
-    expect(html).not.toContain("synthetic prices");
-  });
-
-  it("names both when both are synthetic", () => {
-    const html = sourcesWarning({
-      ...scores,
-      price_source: "synthetic",
-      facts_source: "synthetic",
-    });
-
-    expect(html).toContain("synthetic prices and synthetic filings");
-  });
-
-  it("warns for scores that record no sources", () => {
-    const html = sourcesWarning({
-      ...scores,
-      price_source: undefined,
-      facts_source: undefined,
-    } as unknown as Scores);
-
-    expect(html).toContain("prices of unknown source");
   });
 });

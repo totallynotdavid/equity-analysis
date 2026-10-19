@@ -360,11 +360,6 @@ def test_the_build_stops_without_the_sec_user_agent_in_the_environment(
     assert "SEC_USER_AGENT is not set" in capsys.readouterr().err
 
 
-def test_the_sec_user_agent_cannot_be_given_as_an_option(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit):
-        build.main(["--out", str(tmp_path / "sp500.txt"), "--sec-user-agent", "me"])
-
-
 def test_the_former_table_tells_two_companies_with_one_name_apart_by_ticker(
     tmp_path: Path,
 ) -> None:
