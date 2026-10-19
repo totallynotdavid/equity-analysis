@@ -1,7 +1,15 @@
-"""Tiingo end-of-day prices."""
+"""Tiingo end-of-day prices, and the public list of what traded under each ticker.
 
+Prices are not cached on disk: the store is the cache, and `pipeline.ingest`
+asks only for what it lacks.
+"""
+
+import csv
+import io
 import os
+import zipfile
 
+from datetime import date
 from typing import TYPE_CHECKING
 
 import httpx2
@@ -9,19 +17,21 @@ import pandas as pd
 
 from index_core.sources.base import (
     PRICE_COLUMNS,
+    Listing,
     NotFoundError,
     SourceError,
     check_range,
     normalise_ticker,
 )
-from index_core.sources.transport import CachingTransport, PacedTransport
+from index_core.sources.transport import PacedTransport
 
 
 if TYPE_CHECKING:
-    from datetime import date
-    from pathlib import Path
+    from collections.abc import Mapping
 
 BASE_URL = "https://api.tiingo.com"
+# The list needs no key and is not an API call, so it is not paced.
+LISTINGS_URL = "https://apimedia.tiingo.com/docs/tiingo/daily/supported_tickers.zip"
 KEY_VARIABLE = "TIINGO_API_KEY"
 # Seconds between requests. A free key allows 50 requests an hour.
 MIN_INTERVAL = 3600 / 50
@@ -47,26 +57,47 @@ class TiingoSource:
         api_key: str,
         transport: httpx2.BaseTransport | None = None,
         min_interval: float = MIN_INTERVAL,
-        cache: Path | None = None,
     ) -> None:
-        paced: httpx2.BaseTransport = PacedTransport(
-            transport or httpx2.HTTPTransport(), min_interval
-        )
-        if cache is not None:
-            paced = CachingTransport(paced, cache)
+        network = transport or httpx2.HTTPTransport()
         self._client = httpx2.Client(
             base_url=BASE_URL,
             headers={"Authorization": f"Token {api_key}"},
             timeout=30.0,
-            transport=paced,
+            transport=PacedTransport(network, min_interval),
         )
+        self._public = httpx2.Client(timeout=60.0, transport=network)
 
     @classmethod
-    def from_env(cls, cache: Path | None = None) -> TiingoSource:
+    def from_env(cls) -> TiingoSource:
         api_key = os.environ.get(KEY_VARIABLE)
         if not api_key:
             raise SourceError(f"{KEY_VARIABLE} is not set")
-        return cls(api_key, cache=cache)
+        return cls(api_key)
+
+    def listings(self) -> Mapping[str, list[Listing]]:
+        try:
+            response = self._public.get(LISTINGS_URL)
+        except httpx2.HTTPError as error:
+            raise SourceError(
+                f"could not reach Tiingo for its tickers: {error!r}"
+            ) from error
+        if response.status_code != 200:
+            raise SourceError(
+                f"Tiingo returned HTTP {response.status_code} for its ticker list"
+            )
+        try:
+            with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+                text = archive.read(archive.namelist()[0]).decode()
+            rows = list(csv.DictReader(io.StringIO(text)))
+            listings: dict[str, list[Listing]] = {}
+            for row in rows:
+                if row["assetType"] == "Stock":
+                    listings.setdefault(normalise_ticker(row["ticker"]), []).append(
+                        Listing(_day(row["startDate"]), _day(row["endDate"]))
+                    )
+        except (zipfile.BadZipFile, IndexError, KeyError, ValueError) as error:
+            raise SourceError("Tiingo sent a malformed ticker list") from error
+        return listings
 
     def fetch(self, ticker: str, start: date, end: date) -> pd.DataFrame:
         check_range(start, end)
@@ -87,9 +118,9 @@ class TiingoSource:
             raise NotFoundError(f"Tiingo has no ticker {ticker}")
         if response.status_code == 429:
             raise SourceError(
-                f"Tiingo refused {ticker}: {response.text[:200]} Responses "
-                "already fetched are cached, so run the same command again "
-                "once the limit has reset."
+                f"Tiingo refused {ticker}: {response.text[:200]} Prices already "
+                "fetched are stored, so run the same command again once the "
+                "limit has reset."
             )
         if response.status_code != 200:
             raise SourceError(
@@ -119,3 +150,7 @@ class TiingoSource:
         if traded.empty:
             raise NotFoundError(f"Tiingo has no trades for {ticker} in {start}..{end}")
         return frame.loc[: traded[-1]]
+
+
+def _day(text: str) -> date | None:
+    return date.fromisoformat(text) if text else None

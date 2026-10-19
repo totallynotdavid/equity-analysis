@@ -4,6 +4,7 @@ import hashlib
 import json
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
@@ -44,7 +45,12 @@ from index_core.report import (
 from index_core.risk import assess, daily_returns
 from index_core.scoring import decile_scores
 from index_core.significance import Alpha, Deflated, deflated_sharpe, factor_alpha
-from index_core.sources.base import NotFoundError, empty_facts
+from index_core.sources.base import (
+    ListedSource,
+    NotFoundError,
+    empty_facts,
+    normalise_ticker,
+)
 from index_core.statements import ticker_report
 from index_core.universe import BENCHMARK
 from index_core.valuation import Company, betas, risk_free_rate, valuate
@@ -56,10 +62,20 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import date
 
-    from index_core.sources.base import FactorSource, FilingsSource, PriceSource
+    from index_core.sources.base import (
+        FactorSource,
+        FilingsSource,
+        Listing,
+        PriceSource,
+    )
     from index_core.store import Store
     from index_core.universe import Universe
 
+# `ingest` compares this many stored bars with the source's before it trusts them.
+OVERLAP_BARS = 5
+# Calendar days that hold the `LABEL_SPAN` bars a label reads after a member's
+# last day, with room for holidays.
+LABEL_DAYS = 100
 # Backtests reserve these months until `final`.
 HOLDOUT_MONTHS = 24
 # DEFAULT_COST is an assumed large-cap trading cost.
@@ -98,11 +114,37 @@ class Backtest:
     predictions: pd.DataFrame
     members: int
     unpriced: list[str]
+    years: YearCoverage | None
 
     @property
     def evaluation(self) -> Evaluation:
         """The ranking metrics of LightGBM, the model that scores."""
         return self.models["lightgbm"].evaluation
+
+
+@dataclass(frozen=True)
+class YearCoverage:
+    """How much of a universe's history the store holds, in member-years.
+
+    A member-year is a ticker that is a member on some day of a calendar year
+    inside the stored `SPY` window. It is priced when the store has a bar of
+    that ticker in the year, and has filings when a fact of the ticker was
+    filed by the year's end.
+    """
+
+    first: date
+    last: date
+    member_years: int
+    priced: int
+    filed: int
+
+    @property
+    def priced_share(self) -> float:
+        return self.priced / self.member_years if self.member_years else 0.0
+
+    @property
+    def filed_share(self) -> float:
+        return self.filed / self.member_years if self.member_years else 0.0
 
 
 @dataclass(frozen=True)
@@ -120,27 +162,127 @@ class Coverage:
     tags: pd.DataFrame
     no_company: list[str]
     facts_source: str | None
+    years: YearCoverage | None
 
 
 def ingest(
-    source: PriceSource, store: Store, tickers: list[str], start: date, end: date
+    source: PriceSource, store: Store, universe: Universe, start: date, end: date
 ) -> None:
-    """Ask the source for the whole range on every run: adjusted prices change
-    after a dividend or split, so stored history can go stale. A source with a
-    response cache answers a repeat run inside the cache window from it, so that
-    run sees the prices of the first.
+    """Fill the store with the bars of `SPY` and of the members between `start`
+    and `end`, asking the source only for what the store lacks. The store is the
+    cache, so a run that stopped carries on where it did and a repeat run asks
+    for nothing.
+
+    A ticker the store already holds through `end`, from `start` on, is not
+    asked for. Neither is a former member held through the label window after
+    its last day as a member, since no later bar is read. One it holds through
+    an earlier date is asked for from `OVERLAP_BARS` bars before its last stored
+    bar. Adjusted prices change after a split or dividend, so when the overlap
+    differs from what is stored the ticker is asked for whole.
+
+    Tickers never asked for come before those to bring up to date.
 
     A ticker the source does not know is skipped, because a source can lack a
     delisted company. `missing_prices` lists the skipped tickers. Every label
     needs the benchmark, so a missing `SPY` stops the run.
+
+    A source that lists what traded under each ticker is asked only when a
+    ticker needs bars. A member whose listings all fall outside its membership
+    dates is another company that reused the ticker. It is not asked for, and
+    `Store.other_company_tickers` lists it.
     """
-    store.upsert_prices(source.name, BENCHMARK, source.fetch(BENCHMARK, start, end))
-    for ticker in tickers:
-        try:
-            bars = source.fetch(ticker, start, end)
-        except NotFoundError:
+    listings: Mapping[str, list[Listing]] | None = None
+    # A ticker never asked for goes before one to bring up to date, so a plan
+    # with a monthly cap on symbols spends it on the gaps first.
+    members = sorted(
+        universe.members_between(start, end), key=lambda t: store.asked(t) is not None
+    )
+    for ticker in [BENCHMARK, *members]:
+        spans = [
+            (max(m.start, start), end if m.end is None else min(end, m.end))
+            for m in universe.memberships
+            if m.ticker == ticker
+            and m.start <= end
+            and (m.end is None or start < m.end)
+        ]
+        needed = end
+        if spans:
+            needed = min(end, max(last for _, last in spans) + timedelta(LABEL_DAYS))
+        asked = store.asked(ticker)
+        if asked is not None and asked[0] <= start and needed <= asked[1]:
             continue
-        store.upsert_prices(source.name, ticker, bars)
+        if ticker != BENCHMARK and isinstance(source, ListedSource):
+            if listings is None:
+                listings = source.listings()
+            if _is_other_company(listings.get(normalise_ticker(ticker)), spans):
+                store.record_asked(source.name, ticker, start, end, other_company=True)
+                continue
+        try:
+            _fetch_missing(source, store, ticker, start, end, asked)
+        except NotFoundError:
+            if ticker == BENCHMARK:
+                raise
+            store.record_asked(source.name, ticker, *_reach(start, end, asked))
+
+
+def _reach(
+    start: date, end: date, asked: tuple[date, date] | None
+) -> tuple[date, date]:
+    """The dates a whole fetch covers: those asked for and those already held."""
+    if asked is None:
+        return start, end
+    return min(start, asked[0]), max(end, asked[1])
+
+
+def _fetch_missing(
+    source: PriceSource,
+    store: Store,
+    ticker: str,
+    start: date,
+    end: date,
+    asked: tuple[date, date] | None,
+) -> None:
+    since, through = _reach(start, end, asked)
+    stored = store.recent_adj_close(ticker, OVERLAP_BARS)
+    if asked is not None and start >= asked[0] and not stored.empty:
+        try:
+            fresh = source.fetch(ticker, stored.index[0].date(), end)
+        except NotFoundError:
+            pass
+        else:
+            if _repeats(stored, fresh):
+                store.upsert_prices(source.name, ticker, fresh)
+                store.record_asked(source.name, ticker, since, through)
+                return
+    bars = source.fetch(ticker, since, through)
+    store.upsert_prices(source.name, ticker, bars)
+    store.record_asked(source.name, ticker, since, through)
+
+
+def _repeats(stored: pd.Series, fresh: pd.DataFrame) -> bool:
+    """True when `fresh` holds every stored bar with the same adjusted close."""
+    if not stored.index.isin(fresh.index).all():
+        return False
+    return bool(
+        np.isclose(
+            stored, fresh.loc[stored.index, "adj_close"], rtol=1e-6, atol=0
+        ).all()
+    )
+
+
+def _is_other_company(
+    listed: list[Listing] | None, spans: list[tuple[date, date]]
+) -> bool:
+    """True when the ticker has listings and none was trading on a day of
+    `spans`. A ticker with no listing is not judged: the list can lag."""
+    if not listed:
+        return False
+    return not any(
+        (row.end is None or row.end >= first)
+        and (row.start is None or row.start <= last)
+        for row in listed
+        for first, last in spans
+    )
 
 
 def ingest_filings(
@@ -235,6 +377,42 @@ def coverage(store: Store, universe: Universe, as_of: date | None = None) -> Cov
         tags=tag_usage(facts, tickers, known),
         no_company=[t for t in tickers if t not in companies],
         facts_source=store.facts_source(),
+        years=year_coverage(store, universe),
+    )
+
+
+def year_coverage(store: Store, universe: Universe) -> YearCoverage | None:
+    """Count the member-years of `universe` over the stored `SPY` window and
+    how many of them are priced and have filings. A store with no `SPY` has no
+    window."""
+    days = store.read_prices([BENCHMARK])["date"]
+    if days.empty:
+        return None
+    first, last = days.min(), days.max()
+    member_years: set[tuple[str, int]] = set()
+    for m in universe.memberships:
+        begin = max(pd.Timestamp(m.start), first)
+        # The membership ends the day before `m.end`.
+        finish = (
+            last
+            if m.end is None
+            else min(pd.Timestamp(m.end) - pd.Timedelta(days=1), last)
+        )
+        member_years.update(
+            (m.ticker, year) for year in range(begin.year, finish.year + 1)
+        )
+    priced = store.priced_years()
+    first_filed = store.first_filed()
+    return YearCoverage(
+        first=first.date(),
+        last=last.date(),
+        member_years=len(member_years),
+        priced=len(member_years & priced),
+        filed=sum(
+            1
+            for ticker, year in member_years
+            if ticker in first_filed and first_filed[ticker].year <= year
+        ),
     )
 
 
@@ -541,6 +719,7 @@ def backtest(
         predictions=chosen,
         members=len(required),
         unpriced=unpriced,
+        years=year_coverage(store, universe),
     )
     store.save_backtest(*backtest_record(backtested, universe.name))
     return backtested
@@ -645,17 +824,24 @@ def run(
     """Fetch what the members of `start` to `end` need, then score the latest day.
 
     A name that left before `start` is not fetched. A member with no prices, or
-    with no filings, is left out of the whole run and listed in
+    with no filings, or whose ticker the price source lists for another company
+    (see `ingest`), is left out of the whole run and listed in
     `ScoresReport.left_out`.
     """
     load_lightgbm()
     store.require_sources(source.name, filings.name)
     tickers = universe.members_between(start, end)
-    ingest(source, store, tickers, start, end)
+    ingest(source, store, universe, start, end)
     ingest_filings(filings, store, tickers, end, universe.sectors)
-    unpriced = missing_prices(store, tickers)
-    unfiled = [t for t in missing_filings(store, tickers) if t not in unpriced]
+    reused = store.other_company_tickers()
+    unpriced = [t for t in missing_prices(store, tickers) if t not in reused]
+    unfiled = [
+        t
+        for t in missing_filings(store, tickers)
+        if t not in unpriced and t not in reused
+    ]
     left_out = [
+        *(LeftOut(ticker=t, reason="other company") for t in tickers if t in reused),
         *(LeftOut(ticker=t, reason="no prices") for t in unpriced),
         *(LeftOut(ticker=t, reason="no filings") for t in unfiled),
     ]

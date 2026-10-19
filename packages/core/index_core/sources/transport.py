@@ -1,7 +1,8 @@
 """HTTP transports shared by the sources: pacing and an on-disk response cache.
 
-A source stacks them as `CachingTransport(PacedTransport(network))`, so a
-response served from disk costs neither a wait nor a request.
+A source that keeps responses stacks them as
+`CachingTransport(PacedTransport(network))`, so a response served from disk
+costs neither a wait nor a request. Tiingo only paces: the store is its cache.
 """
 
 import hashlib

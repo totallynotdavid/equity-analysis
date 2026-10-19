@@ -6,7 +6,18 @@ from index_core.sources.edgar import CONCEPTS
 
 
 if TYPE_CHECKING:
-    from index_core.pipeline import Coverage
+    from index_core.pipeline import Coverage, YearCoverage
+
+
+def years_lines(years: YearCoverage | None) -> list[str]:
+    """The share of member-years that are priced and that have filings. Nothing
+    when the store holds no prices to bound the years."""
+    if years is None:
+        return []
+    return [
+        f"Member-years {years.first} to {years.last}: {years.member_years}, "
+        f"{years.priced_share:.1%} priced, {years.filed_share:.1%} with filings."
+    ]
 
 
 def render(result: Coverage, universe: str, minimum: int) -> str:
@@ -16,6 +27,7 @@ def render(result: Coverage, universe: str, minimum: int) -> str:
     lines = [
         f"Fundamentals coverage, {universe} universe, {source} filings, "
         f"as of {result.as_of}",
+        *years_lines(result.years),
         f"{len(counts) - len(short)} of {len(counts)} names have at least "
         f"{minimum} of {len(CONCEPTS)} concepts with a fresh filed value.",
     ]

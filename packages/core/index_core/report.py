@@ -27,7 +27,7 @@ class ModelInfo(BaseModel):
 
 class LeftOut(BaseModel):
     ticker: str
-    reason: Literal["no prices", "no filings"]
+    reason: Literal["no prices", "no filings", "other company"]
 
 
 class ScoresReport(BaseModel):

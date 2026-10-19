@@ -42,12 +42,24 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+-- div_cash is stored for reference only: no feature reads it. A dividend
+-- reaches the model through the adjusted prices.
 CREATE TABLE IF NOT EXISTS prices (
     ticker TEXT NOT NULL,
     date TEXT NOT NULL,
     {", ".join(f"{column} REAL NOT NULL" for column in PRICE_COLUMNS)},
     PRIMARY KEY (ticker, date)
 ) WITHOUT ROWID;
+-- The dates a source was asked for, so that `ingest` asks for what is missing.
+-- A ticker the source had nothing for has a row and no prices. other_company is
+-- 1 for a ticker whose listings do not overlap its membership: the source lists
+-- another company under it, so it was not asked for.
+CREATE TABLE IF NOT EXISTS price_asked (
+    ticker TEXT PRIMARY KEY,
+    since TEXT NOT NULL,
+    through TEXT NOT NULL,
+    other_company INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS facts (
     ticker TEXT NOT NULL,
     concept TEXT NOT NULL,
@@ -338,6 +350,66 @@ class Store:
                 ),
             )
 
+    def record_asked(
+        self,
+        source: str,
+        ticker: str,
+        since: date,
+        through: date,
+        *,
+        other_company: bool = False,
+    ) -> None:
+        """Record that `source` was asked for `ticker` from `since` through
+        `through`, whether or not it had bars. `other_company` records that it
+        was not asked, because the source lists another company under it."""
+        with self._db:
+            self._require("price_source", "prices", source)
+            self._db.execute(
+                "INSERT OR IGNORE INTO meta (key, value) VALUES ('price_source', ?)",
+                (source,),
+            )
+            self._db.execute(
+                "INSERT OR REPLACE INTO price_asked "
+                "(ticker, since, through, other_company) VALUES (?, ?, ?, ?)",
+                (ticker, since.isoformat(), through.isoformat(), int(other_company)),
+            )
+
+    def other_company_tickers(self) -> set[str]:
+        return {
+            str(row[0])
+            for row in self._db.execute(
+                "SELECT ticker FROM price_asked WHERE other_company = 1"
+            )
+        }
+
+    def asked(self, ticker: str) -> tuple[date, date] | None:
+        """The `since` and `through` dates `ticker` was last asked for, or None."""
+        row = self._db.execute(
+            "SELECT since, through FROM price_asked WHERE ticker = ?", (ticker,)
+        ).fetchone()
+        return (
+            None
+            if row is None
+            else (
+                date.fromisoformat(row[0]),
+                date.fromisoformat(row[1]),
+            )
+        )
+
+    def recent_adj_close(self, ticker: str, bars: int) -> pd.Series:
+        """The adjusted close of the last `bars` stored bars, indexed by date."""
+        rows = self._db.execute(
+            "SELECT date, adj_close FROM prices WHERE ticker = ? "
+            "ORDER BY date DESC LIMIT ?",
+            (ticker, bars),
+        ).fetchall()
+        return pd.Series(
+            [float(close) for _, close in rows],
+            index=pd.DatetimeIndex([day for day, _ in rows], name="date"),
+            name="adj_close",
+            dtype=float,
+        ).sort_index()
+
     def price_source(self) -> str | None:
         """The source of the stored prices, or None before any were stored."""
         stored = self._db.execute(
@@ -356,6 +428,25 @@ class Store:
         """Every ticker with at least one stored fact."""
         return {
             str(row[0]) for row in self._db.execute("SELECT DISTINCT ticker FROM facts")
+        }
+
+    def priced_years(self) -> set[tuple[str, int]]:
+        """Every (ticker, calendar year) with at least one stored bar."""
+        return {
+            (str(ticker), int(year))
+            for ticker, year in self._db.execute(
+                "SELECT DISTINCT ticker, CAST(substr(date, 1, 4) AS INTEGER) "
+                "FROM prices"
+            )
+        }
+
+    def first_filed(self) -> dict[str, date]:
+        """The day each ticker's earliest stored fact was filed."""
+        return {
+            str(ticker): date.fromisoformat(filed)
+            for ticker, filed in self._db.execute(
+                "SELECT ticker, MIN(filed) FROM facts GROUP BY ticker"
+            )
         }
 
     def read_prices(self, tickers: list[str]) -> pd.DataFrame:

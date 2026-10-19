@@ -47,11 +47,12 @@ MIN_CONCEPTS = 10
 MISSING_SHOWN = 10
 DB_HELP = "SQLite file (default: $INDEX_DB or data/index.sqlite)"
 DEFAULT_CACHE = Path("data/cache")
-# Each factory takes the directory where a source keeps its responses. A
-# filings factory also takes the SEC identifiers the universe lists.
-PRICES: dict[str, Callable[[Path], PriceSource]] = {
+# The filings and factors factories take the directory where the source keeps
+# its responses. A filings factory also takes the SEC identifiers the universe
+# lists. Prices keep no responses: the store is their cache.
+PRICES: dict[str, Callable[[], PriceSource]] = {
     "tiingo": TiingoSource.from_env,
-    "synthetic": lambda _: SyntheticSource(),
+    "synthetic": SyntheticSource,
 }
 FILINGS: dict[str, Callable[[Path, Mapping[str, tuple[int, ...]]], FilingsSource]] = {
     "edgar": EdgarSource.from_env,
@@ -95,8 +96,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--cache",
         type=Path,
         default=DEFAULT_CACHE,
-        help="directory where Tiingo and EDGAR responses are kept for a day, so "
-        "a run that stops can resume (default: %(default)s)",
+        help="directory where EDGAR responses are kept for a day, so a run that "
+        "stops can resume (default: %(default)s)",
     )
     _add_db_and_out(run_command)
     _add_tickers(run_command)
@@ -305,7 +306,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 def _run(args: argparse.Namespace) -> None:
     universe = read_universe(args.universe)
-    source = PRICES[args.prices](args.cache)
+    source = PRICES[args.prices]()
     filings = FILINGS[args.filings](args.cache, universe.ciks)
     fake = [
         kind
@@ -326,6 +327,18 @@ def _run(args: argparse.Namespace) -> None:
     for reason in ("prices", "filings"):
         tickers = [i.ticker for i in report.left_out if i.reason == f"no {reason}"]
         _warn_missing(reason, tickers, "they are left out")
+    reused = [i.ticker for i in report.left_out if i.reason == "other company"]
+    if reused:
+        shown = ", ".join(reused[:MISSING_SHOWN])
+        more = (
+            f" and {len(reused) - MISSING_SHOWN} more"
+            if len(reused) > MISSING_SHOWN
+            else ""
+        )
+        sys.stderr.write(
+            f"eq: Tiingo lists another company under {len(reused)} tickers "
+            f"({shown}{more}) at no time they were members; they are left out\n"
+        )
     _write(report, args.out)
     _write_tickers(reports, _tickers_dir(args))
     _write_evidence(evidence, args.out.parent / "evidence.json")

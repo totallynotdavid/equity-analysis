@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 
+from index_core.coverage_text import years_lines
 from index_core.feature_ic import HURDLE_T
 from index_core.labels import HORIZON, LABEL_SPAN
 from index_core.model import SNAPSHOT_STEP
@@ -43,6 +44,7 @@ def render(result: Backtest, universe: str) -> str:
         f"Effective sample: about {ev.independent_windows} independent "
         f"{HORIZON}-day windows. Snapshots a week apart share most of their "
         "outcome, so the row count overstates the evidence.",
+        *years_lines(result.years),
         *_unpriced(result),
         "",
         f"Base rate, share of stocks beating SPY: {ev.base_rate:.1%}",

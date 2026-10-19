@@ -1,12 +1,13 @@
 """The source interfaces. Network I/O lives behind them and nowhere else."""
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import pandas as pd
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import date
 
 
@@ -147,4 +148,23 @@ class PriceSource(Protocol):
         no prices unless it is the benchmark. A `start` after `end`, or any
         other failure, is a `SourceError` and stops the run.
         """
+        ...
+
+
+@dataclass(frozen=True)
+class Listing:
+    """One security that traded under a ticker, from `start` to `end`. A date
+    the source leaves out is None."""
+
+    start: date | None
+    end: date | None
+
+
+@runtime_checkable
+class ListedSource(PriceSource, Protocol):
+    """A price source that also says who traded under each ticker and when."""
+
+    def listings(self) -> Mapping[str, list[Listing]]:
+        """Every stock listing by normalised ticker. A ticker with several was
+        reused. Any failure is a `SourceError`."""
         ...
