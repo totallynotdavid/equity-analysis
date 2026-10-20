@@ -1,42 +1,41 @@
 version: 2
 updates:
-  # === Python Workspace (uv) ===
-
-  - package-ecosystem: "uv"
-    directory: "/"
+  - package-ecosystem: bun
+    directories:
+      - /web
     schedule:
-      interval: "weekly"
-    target-branch: "master"
-    commit-message:
-      prefix: "chore(deps)"
-      include: "scope"
-    labels:
-      - "dependencies"
+      interval: weekly
+    cooldown:
+      default-days: 7
     groups:
-      python-workspace:
-        patterns: ["*"]
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: uv
+    directories:
+      - /
     schedule:
-      interval: "weekly"
-    target-branch: "master"
-    labels:
-      - "dependencies"
-
-  # === Frontend Package (Bun) ===
-
-  - package-ecosystem: "bun"
-    directory: "/web/"
-    schedule:
-      interval: "weekly"
-    target-branch: "master"
-    commit-message:
-      prefix: "chore(deps-js)"
-      include: "scope"
-    labels:
-      - "dependencies"
-      - "javascript"
+      interval: weekly
+    cooldown:
+      default-days: 7
     groups:
-      frontend:
-        patterns: ["*"]
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directories:
+      - /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      all:
+        update-types:
+          - major
+          - minor
+          - patch
