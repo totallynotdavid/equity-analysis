@@ -14,7 +14,7 @@ import httpx2
 import pandas as pd
 
 from index_core.sources.base import FACTOR_COLUMNS, SourceError
-from index_core.sources.transport import CachingTransport
+from index_core.sources.transport import CachingTransport, NetworkTransport
 
 
 if TYPE_CHECKING:
@@ -82,7 +82,7 @@ class FamaFrenchSource:
     def __init__(
         self, transport: httpx2.BaseTransport | None = None, cache: Path | None = None
     ) -> None:
-        inner: httpx2.BaseTransport = transport or httpx2.HTTPTransport()
+        inner: httpx2.BaseTransport = transport or NetworkTransport()
         if cache is not None:
             inner = CachingTransport(inner, cache)
         self._client = httpx2.Client(timeout=60.0, transport=inner)

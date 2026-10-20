@@ -1,14 +1,17 @@
-"""HTTP transports shared by the sources: pacing and an on-disk response cache.
+"""HTTP transports shared by the sources: network access, pacing, and caching.
 
 A source that keeps responses stacks them as
-`CachingTransport(PacedTransport(network))`, so a response served from disk
-costs neither a wait nor a request. Tiingo only paces: the store is its cache.
+`CachingTransport(PacedTransport(NetworkTransport()))`, so a response served
+from disk costs neither a wait nor a request. Tiingo only paces: the store is
+its cache.
 """
 
 import hashlib
+import ipaddress
 import os
 import tempfile
 import time
+import urllib.request
 
 from datetime import timedelta
 from typing import TYPE_CHECKING
@@ -17,11 +20,56 @@ import httpx2
 
 
 if TYPE_CHECKING:
+    from ipaddress import IPv4Network, IPv6Network
     from pathlib import Path
 
 DEFAULT_MAX_AGE = timedelta(days=1)
 # A 200 body is kept as `.json`, a 404 as `.404`.
 _KEPT = {200: ".json", 404: ".404"}
+
+
+class NetworkTransport(httpx2.BaseTransport):
+    """Sends a request the way a default `httpx2.Client` would, through the proxy
+    that `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` name.
+
+    A client given its own transport applies none of them. This transport hands
+    each request to a default client, which owns the proxy routing. That client
+    matches a `NO_PROXY` entry only as a host name or a single address, so a CIDR
+    range such as `10.0.0.0/8` is checked here first.
+    """
+
+    def __init__(self) -> None:
+        self._client = httpx2.Client()
+        self._direct = httpx2.HTTPTransport()
+        self._unproxied = _no_proxy_networks()
+
+    def handle_request(self, request: httpx2.Request) -> httpx2.Response:
+        if _in_any(request.url.host, self._unproxied):
+            return self._direct.handle_request(request)
+        return self._client.send(request, stream=True)
+
+    def close(self) -> None:
+        self._client.close()
+        self._direct.close()
+
+
+def _no_proxy_networks() -> list[IPv4Network | IPv6Network]:
+    networks: list[IPv4Network | IPv6Network] = []
+    for entry in urllib.request.getproxies().get("no", "").split(","):
+        if "/" in entry:
+            try:
+                networks.append(ipaddress.ip_network(entry.strip(), strict=False))
+            except ValueError:
+                continue
+    return networks
+
+
+def _in_any(host: str, networks: list[IPv4Network | IPv6Network]) -> bool:
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(address in network for network in networks)
 
 
 class PacedTransport(httpx2.BaseTransport):

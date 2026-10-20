@@ -21,7 +21,11 @@ from index_core.sources.base import (
     empty_facts,
     normalise_ticker,
 )
-from index_core.sources.transport import CachingTransport, PacedTransport
+from index_core.sources.transport import (
+    CachingTransport,
+    NetworkTransport,
+    PacedTransport,
+)
 
 
 if TYPE_CHECKING:
@@ -252,7 +256,7 @@ class EdgarSource:
         ciks: Mapping[str, tuple[int, ...]],
     ) -> None:
         paced: httpx2.BaseTransport = PacedTransport(
-            transport or httpx2.HTTPTransport(), min_interval
+            transport or NetworkTransport(), min_interval
         )
         if cache is not None:
             paced = CachingTransport(paced, cache)

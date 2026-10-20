@@ -23,7 +23,7 @@ from index_core.sources.base import (
     check_range,
     normalise_ticker,
 )
-from index_core.sources.transport import PacedTransport
+from index_core.sources.transport import NetworkTransport, PacedTransport
 
 
 if TYPE_CHECKING:
@@ -58,7 +58,7 @@ class TiingoSource:
         transport: httpx2.BaseTransport | None = None,
         min_interval: float = MIN_INTERVAL,
     ) -> None:
-        network = transport or httpx2.HTTPTransport()
+        network = transport or NetworkTransport()
         self._client = httpx2.Client(
             base_url=BASE_URL,
             headers={"Authorization": f"Token {api_key}"},
