@@ -12,23 +12,26 @@ page.
 otherwise ([CLI](CLI.md)). The deployed page and API serve a file of this shape
 ([Deploy](DEPLOY.md)). `eq import` loads such a file into a database.
 
-| Field                | Meaning                                                    |
-| -------------------- | ---------------------------------------------------------- |
-| `status`             | Always `experimental, not validated`                       |
-| `as_of`              | The trading day the scores are for                         |
-| `universe`           | The universe file's name without its extension             |
-| `price_source`       | Where the prices came from: `tiingo` or `synthetic`        |
-| `facts_source`       | Where the filings came from: `edgar` or `synthetic`        |
-| `horizon_days`       | The label horizon, 63 trading days                         |
-| `model.train_rows`   | Rows the model was fitted on                               |
-| `model.holdout_rows` | Rows in the later holdout the model was measured on        |
-| `model.holdout_auc`  | AUC on that holdout, `null` when it holds only one outcome |
-| `rows[].ticker`      | The ticker                                                 |
-| `rows[].rank`        | 1 is the highest probability. Ranks are unique             |
-| `rows[].score`       | Decile from 1 to 10. 10 is the top tenth                   |
-| `rows[].prob`        | The model's probability of beating SPY over `horizon_days` |
-| `left_out[].ticker`  | A member of the run that is not in `rows`                  |
-| `left_out[].reason`  | `no prices`, `no filings` or `other company`               |
+| Field                             | Meaning                                                                       |
+| --------------------------------- | ----------------------------------------------------------------------------- |
+| `status`                          | Always `experimental, not validated`                                          |
+| `as_of`                           | The trading day the scores are for                                            |
+| `universe`                        | The universe file's name without its extension                                |
+| `price_source`                    | Where the prices came from: `tiingo` or `synthetic`                           |
+| `facts_source`                    | Where the filings came from: `edgar` or `synthetic`                           |
+| `horizon_days`                    | The label horizon, 63 trading days                                            |
+| `model.train_rows`                | Rows the model was fitted on                                                  |
+| `model.holdout_rows`              | Rows in the later holdout the model was measured on                           |
+| `model.holdout_auc`               | Pooled AUC on the holdout, `null` when it holds only one outcome              |
+| `model.holdout_auc_per_date`      | Equal-weighted mean cross-sectional AUC by holdout date, when measured        |
+| `model.holdout_auc_per_date_low`  | Lower end of the 95% date-block bootstrap interval for `holdout_auc_per_date` |
+| `model.holdout_auc_per_date_high` | Upper end of the 95% date-block bootstrap interval for `holdout_auc_per_date` |
+| `rows[].ticker`                   | The ticker                                                                    |
+| `rows[].rank`                     | 1 is the highest probability. Ranks are unique                                |
+| `rows[].score`                    | Decile from 1 to 10. 10 is the top tenth                                      |
+| `rows[].prob`                     | The model's probability of beating SPY over `horizon_days`                    |
+| `left_out[].ticker`               | A member of the run that is not in `rows`                                     |
+| `left_out[].reason`               | `no prices`, `no filings` or `other company`                                  |
 
 Rows are ordered by rank. How the score derives from `prob` is in
 [Model](MODEL.md#the-score).

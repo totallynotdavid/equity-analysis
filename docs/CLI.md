@@ -335,9 +335,9 @@ tables of the latest metrics.
   between `synthetic` and `tiingo`, pass a new `--db` file. A mismatch stops
   with `this database holds synthetic prices; use a new database for tiingo`.
   Factors are the same, with `french` and `synthetic`.
-- A database written by an older version fails to open with
-  `has an older layout; delete it and run again`. Databases are rebuilt, not
-  migrated.
+- An additive database layout change upgrades in place. Other changes fail to
+  open with `has an older layout; delete it and run again`; those databases
+  must be rebuilt.
 - Prices include each day's cash dividend and split factor. The fundamental
   features read the split factor to correct a filed share count.
 - A ticker with a dot, such as `BRK.B`, is looked up as `BRK-B` at Tiingo and

@@ -59,14 +59,23 @@ The 14 fundamental features come from SEC filings. See
   model is measured on them. Training dates whose label window reaches the first
   holdout day are dropped, so no training label reads a price the holdout has
   seen.
+- **AUC.** `holdout_auc` remains the pooled AUC stored by existing published
+  artifacts. New runs also store the equal-weighted mean cross-sectional AUC on
+  each holdout date in `holdout_auc_per_date`. Its 95% interval is a moving
+  block bootstrap over dates. A block spans 13 snapshots, the 63-trading-day
+  label horizon at a five-day snapshot step. AUC 0.5 is chance. The per-date
+  figure is the ranking diagnostic the screener needs; a pooled AUC also
+  compares scores from different dates.
 - **Settings.** 150 boosting rounds with the fixed `PARAMS` in `model.py`: small
   trees (5 leaves, depth 3), a learning rate of 0.05 and L2 of 10. The seed is
   fixed and nothing tunes them.
 - **Minimum.** Fewer than 20 labelled snapshot dates is an error.
 
-`model.holdout_auc` in `scores.json` is the AUC on that holdout. It is the only
-quality figure a run stores. [`eq backtest`](BACKTEST.md) measures the model
-walk-forward.
+`model.holdout_auc` in `scores.json` is the pooled AUC. New reports may include
+`holdout_auc_per_date`, `holdout_auc_per_date_low` and
+`holdout_auc_per_date_high`. The latter two hold the 95% block-bootstrap
+interval for the per-date figure. These are diagnostics, not validation claims.
+[`eq backtest`](BACKTEST.md) measures the model walk-forward.
 
 ## The score
 
