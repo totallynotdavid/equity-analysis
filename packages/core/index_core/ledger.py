@@ -66,7 +66,16 @@ def _commit() -> str:
 def _worktree_dirty() -> bool:
     try:
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
+            [
+                "git",
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+                "--",
+                ".",
+                ":(exclude)ledger/**",
+                ":(exclude)deploy/**",
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -141,10 +150,6 @@ def publish(
     """Publish the exact bytes in ``scores`` as one chained ledger entry."""
     from index_core.audit import audit
 
-    if ledger.exists():
-        existing = audit(ledger)
-        if not existing.ok:
-            raise LedgerError("ledger audit failed; refusing to publish")
     try:
         report = json.loads(scores.read_bytes())
         as_of = date.fromisoformat(report["as_of"])
@@ -152,6 +157,19 @@ def publish(
         horizon = int(report["horizon_days"])
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise LedgerError(f"scores is not a forecast report: {error}") from error
+
+    horizon_start = _next_weekday(as_of)
+    publication_date = datetime.now(UTC).date()
+    if publication_date >= horizon_start:
+        raise LedgerError(
+            f"publication date {publication_date.isoformat()} is on or after "
+            f"horizon start {horizon_start.isoformat()}"
+        )
+
+    if ledger.exists():
+        existing = audit(ledger)
+        if not existing.ok:
+            raise LedgerError("ledger audit failed; refusing to publish")
 
     entries = _entries(ledger)
     if any(
@@ -167,20 +185,19 @@ def publish(
     try:
         scores_bytes = scores.read_bytes()
         (pending / "scores.json").write_bytes(scores_bytes)
-        submitted = datetime.now(UTC).date().isoformat()
         manifest = {
             "format": "equity-analysis-ledger-v1",
             "sequence": sequence,
             "as_of": as_of.isoformat(),
             "universe": universe,
             "horizon_days": horizon,
-            "horizon_start": _next_weekday(as_of).isoformat(),
+            "horizon_start": horizon_start.isoformat(),
             "code_commit": _commit(),
             "model_settings": model_settings or {},
             "scores_sha256": sha256_bytes(scores_bytes),
             "previous_manifest_sha256": previous,
             "source_response_sha256": _source_digests(cache),
-            "timestamp_submitted_at": submitted,
+            "timestamp_submitted_at": publication_date.isoformat(),
         }
         if not manifest["source_response_sha256"]:
             manifest["source_response_note"] = (

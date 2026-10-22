@@ -14,7 +14,7 @@ db=${DEPLOY_DB:-data/real.sqlite}
 cache=${DEPLOY_CACHE:-data/cache}
 universe=${DEPLOY_UNIVERSE:-universes/demo30.txt}
 factors_source=${DEPLOY_FACTORS_SOURCE:-french}
-staging_dir=$(mktemp -d "${TMPDIR:-.}/equity-analysis-deploy.XXXXXX")
+staging_dir=$(mktemp -d -t equity-analysis-deploy.XXXXXX)
 trap 'rm -rf "$staging_dir"' EXIT
 
 uv sync --all-packages --locked
