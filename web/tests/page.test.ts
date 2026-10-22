@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Evidence } from "../src/lib/evidence";
@@ -122,6 +125,30 @@ describe("the screener page", () => {
     const html = await render(Index);
 
     expect(tickersOf(html).sort()).toEqual(["AAA", "BBB", "CCC"]);
+  });
+
+  it("shows the per-date holdout diagnostic and its interval", async () => {
+    site({ scores: scores("demo30", ["AAA"]), reports });
+
+    const html = await render(Index);
+
+    expect(html).toContain('id="model-note"');
+    expect(html).toContain("pooled holdout AUC 0.480");
+    expect(html).toContain("Mean per-date holdout AUC 0.470");
+    expect(html).toContain("95% block-bootstrap interval 0.400–0.560");
+  });
+
+  it("labels the unchanged deploy artifact as pooled and omits new metrics", async () => {
+    const legacy = JSON.parse(
+      readFileSync(resolve(process.cwd(), "../deploy/scores.json"), "utf8"),
+    );
+    site({ scores: legacy, reports });
+
+    const html = await render(Index);
+
+    expect(html).toContain("pooled holdout AUC 0.432");
+    expect(html).not.toContain("Mean per-date holdout AUC");
+    expect(html).not.toContain("no interval");
   });
 
   it("carries its data to the browser, with markup made inert", async () => {

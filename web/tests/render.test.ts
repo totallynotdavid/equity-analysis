@@ -9,6 +9,14 @@ const scores: Scores = {
   price_source: "tiingo",
   facts_source: "edgar",
   horizon_days: 63,
+  model: {
+    train_rows: 10,
+    holdout_rows: 4,
+    holdout_auc: 0.48,
+    holdout_auc_per_date: 0.47,
+    holdout_auc_per_date_low: 0.4,
+    holdout_auc_per_date_high: 0.56,
+  },
   rows: [{ ticker: "AAPL", rank: 1, score: 10, prob: 0.6 }],
 };
 

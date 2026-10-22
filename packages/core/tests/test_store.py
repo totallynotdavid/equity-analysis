@@ -28,6 +28,7 @@ from index_core.sources.synthetic import (
     SyntheticSource,
 )
 from index_core.store import (
+    _SCHEMA,
     EvalRow,
     Store,
     StoreError,
@@ -185,6 +186,111 @@ def test_a_database_from_before_the_current_layout_is_refused(tmp_path: Path) ->
     Store.open(tmp_path / "new.sqlite").close()
     Store.open(tmp_path / "new.sqlite", read_only=True).close()
     Store.open(tmp_path / "new.sqlite").close()
+
+
+def test_a_version_8_database_upgrades_additive_run_columns_in_place(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "version-8.sqlite"
+    old_schema = _SCHEMA.replace(
+        "    holdout_auc REAL,\n"
+        "    holdout_auc_per_date REAL,\n"
+        "    holdout_auc_per_date_low REAL,\n"
+        "    holdout_auc_per_date_high REAL,\n",
+        "    holdout_auc REAL,\n",
+    )
+    bars = _bars()
+    with sqlite3.connect(path) as connection:
+        connection.executescript(old_schema)
+        columns = ", ".join(PRICE_COLUMNS)
+        marks = ", ".join("?" for _ in range(2 + len(PRICE_COLUMNS)))
+        connection.executemany(
+            f"INSERT INTO prices (ticker, date, {columns}) VALUES ({marks})",
+            (
+                ("AAA", day.date().isoformat(), *values)
+                for day, values in zip(
+                    bars.index, bars.itertuples(index=False, name=None), strict=True
+                )
+            ),
+        )
+        connection.execute("INSERT INTO meta VALUES ('price_source', 'synthetic')")
+        connection.execute(
+            "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("2024-01-31", "demo", "tiingo", "synthetic", 63, 10, 4, 0.48),
+        )
+        connection.execute(
+            "INSERT INTO scores VALUES (?, ?, ?, ?, ?, ?)",
+            ("2024-01-31", "demo", "AAA", 1, 10, 0.6),
+        )
+        connection.execute("PRAGMA user_version = 8")
+
+    with pytest.raises(StoreError, match=r"version 8.*eq run.*upgrade"):
+        Store.open(path, read_only=True)
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+
+    with Store.open(path) as store:
+        old = store.latest_report()
+        assert old is not None
+        assert old.model.holdout_auc == 0.48
+        assert old.model.holdout_auc_per_date is None
+        assert old.rows == [ScoreRow(ticker="AAA", rank=1, score=10, prob=0.6)]
+        assert len(store.read_prices(["AAA"])) == len(bars)
+
+        new = _report(date(2024, 2, 1), ["AAA"]).model_copy(
+            update={
+                "model": ModelInfo(
+                    train_rows=10,
+                    holdout_rows=4,
+                    holdout_auc=0.48,
+                    holdout_auc_per_date=0.47,
+                    holdout_auc_per_date_low=0.4,
+                    holdout_auc_per_date_high=0.56,
+                )
+            }
+        )
+        store.save_report(new)
+        assert store.latest_report() == new
+
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
+
+
+def test_a_version_8_database_with_the_wrong_runs_layout_is_untouched(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "bad-version-8.sqlite"
+    bad_schema = (
+        _SCHEMA.replace(
+            "CREATE TABLE IF NOT EXISTS runs (\n    as_of TEXT NOT NULL,",
+            "CREATE TABLE IF NOT EXISTS runs (\n    missing_as_of TEXT NOT NULL,",
+        )
+        .replace(
+            "REFERENCES runs (as_of, universe)",
+            "REFERENCES runs (missing_as_of, universe)",
+        )
+        .replace(
+            "    PRIMARY KEY (as_of, universe)\n);\nCREATE TABLE IF NOT EXISTS scores",
+            "    PRIMARY KEY (missing_as_of, universe)\n);\nCREATE TABLE IF NOT EXISTS scores",
+        )
+    )
+    with sqlite3.connect(path) as connection:
+        connection.executescript(bad_schema)
+        connection.execute("PRAGMA user_version = 8")
+        expected_columns = [
+            row[1] for row in connection.execute("PRAGMA table_info(runs)")
+        ]
+    before = path.read_bytes()
+
+    with pytest.raises(StoreError, match="older layout; delete it"):
+        Store.open(path)
+
+    assert path.read_bytes() == before
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert [
+            row[1] for row in connection.execute("PRAGMA table_info(runs)")
+        ] == expected_columns
 
 
 def test_the_default_database_follows_the_environment(
