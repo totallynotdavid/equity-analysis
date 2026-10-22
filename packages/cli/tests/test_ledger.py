@@ -8,11 +8,12 @@ import subprocess
 import threading
 import zipfile
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import index_core.ledger as ledger_module
 import pytest
 
 from index_cli.main import main
@@ -62,6 +63,21 @@ class _Calendar:
     def close(self) -> None:
         self.server.shutdown()
         self.thread.join()
+
+
+class _FixedDatetime:
+    current = datetime(2025, 1, 2, tzinfo=UTC)
+
+    @classmethod
+    def now(cls, tz: object) -> datetime:
+        return cls.current
+
+
+@pytest.fixture(autouse=True)
+def fixed_clock(monkeypatch: pytest.MonkeyPatch) -> type[_FixedDatetime]:
+    _FixedDatetime.current = datetime(2025, 1, 2, tzinfo=UTC)
+    monkeypatch.setattr(ledger_module, "datetime", _FixedDatetime)
+    return _FixedDatetime
 
 
 class _Bundle:
@@ -142,6 +158,16 @@ def _publish(scores: Path, ledger: Path, calendar: _Calendar) -> None:
             calendar.url,
         ]
     )
+
+
+def _deploy_test_ends() -> tuple[date, date]:
+    first = datetime.now(UTC).date()
+    while first.weekday() >= 5:
+        first -= timedelta(days=1)
+    second = first + timedelta(days=1)
+    while second.weekday() >= 5:
+        second += timedelta(days=1)
+    return first, second
 
 
 def test_a_clean_ledger_passes_through_eq_audit(
@@ -267,6 +293,79 @@ def test_duplicate_as_of_is_refused(tmp_path: Path, calendar: _Calendar) -> None
     _publish(scores, ledger, calendar)
     with pytest.raises(SystemExit, match="already exists"):
         _publish(scores, ledger, calendar)
+
+
+def test_publish_refuses_on_the_horizon_date(
+    tmp_path: Path,
+    calendar: _Calendar,
+    fixed_clock: type[_FixedDatetime],
+) -> None:
+    fixed_clock.current = datetime(2025, 1, 3, tzinfo=UTC)
+    scores = tmp_path / "scores.json"
+    _scores(scores, "2025-01-02")
+    ledger = tmp_path / "ledger"
+
+    with pytest.raises(
+        SystemExit,
+        match="publication date 2025-01-03 is on or after horizon start 2025-01-03",
+    ):
+        _publish(scores, ledger, calendar)
+
+    assert not ledger.exists()
+
+
+def test_publish_accepts_the_day_before_the_horizon(
+    tmp_path: Path, calendar: _Calendar
+) -> None:
+    scores = tmp_path / "scores.json"
+    _scores(scores, "2025-01-02")
+    ledger = tmp_path / "ledger"
+
+    _publish(scores, ledger, calendar)
+
+    assert (ledger / "000001-2025-01-02").is_dir()
+
+
+def test_code_worktree_dirty_ignores_ledger_and_deploy_outputs(
+    tmp_path: Path, calendar: _Calendar, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "ledger").mkdir()
+    (repo / "deploy").mkdir()
+    (repo / "ledger" / ".gitkeep").write_text("clean\n")
+    (repo / "deploy" / "status.json").write_text("clean\n")
+    (repo / "source.py").write_text("clean\n")
+    subprocess.run(["git", "init", "--quiet"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "--quiet", "-m", "initial"], cwd=repo, check=True)
+    monkeypatch.chdir(repo)
+
+    (repo / "ledger" / ".gitkeep").write_text("changed\n")
+    (repo / "deploy" / "status.json").write_text("changed\n")
+    scores = tmp_path / "scores.json"
+    _scores(scores, "2025-01-02")
+    ledger = repo / "ledger"
+    _publish(scores, ledger, calendar)
+    first_manifest = json.loads(
+        (ledger / "000001-2025-01-02" / "manifest.json").read_text()
+    )
+    assert first_manifest["code_worktree_dirty"] is False
+
+    (repo / "source.py").write_text("changed\n")
+    second_scores = tmp_path / "second.json"
+    _scores(second_scores, "2025-01-03")
+    _publish(second_scores, ledger, calendar)
+    second_manifest = json.loads(
+        (ledger / "000002-2025-01-03" / "manifest.json").read_text()
+    )
+    assert second_manifest["code_worktree_dirty"] is True
 
 
 def test_empty_source_digests_need_an_explanation(
@@ -434,7 +533,7 @@ def test_deploy_data_appends_a_second_pending_entry(tmp_path: Path) -> None:
         "OTS_CALENDAR": calendar.url,
     }
     try:
-        for end in ("2025-06-30", "2025-07-31"):
+        for end in _deploy_test_ends():
             result = subprocess.run(
                 [
                     "scripts/deploy-data.sh",
@@ -445,7 +544,7 @@ def test_deploy_data_appends_a_second_pending_entry(tmp_path: Path) -> None:
                     "--start",
                     "2020-01-01",
                     "--end",
-                    end,
+                    str(end),
                 ],
                 cwd=repo,
                 env=environment,
