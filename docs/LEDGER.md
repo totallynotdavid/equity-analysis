@@ -20,7 +20,8 @@ commit, model settings, and SHA-256 digests of raw response files in the source
 cache. If no cache was supplied, it records a `source_response_note` explaining
 why the digest map is empty. `manifest.ots` is an OpenTimestamps detached proof
 of the manifest bytes. The sequence and previous digest make the directories an
-append-only chain.
+append-only chain. The `code_worktree_dirty` flag describes source changes. It
+ignores files under `ledger/` and `deploy/`.
 
 ## Publish
 
@@ -51,9 +52,10 @@ attestation arrives:
 uv run eq ledger upgrade --ledger ledger
 ```
 
-The publisher refuses a duplicate `as_of` and refuses to append when the
-existing chain does not audit. It writes a temporary directory and renames it
-only after the score bytes, manifest, and timestamp proof exist.
+The publisher refuses a duplicate `as_of`, refuses a publication whose UTC date
+is on or after `horizon_start`, and refuses to append when the existing chain
+does not audit. It writes a temporary directory and renames it only after the
+score bytes, manifest, and timestamp proof exist.
 
 ## Audit
 
