@@ -196,10 +196,11 @@ fail without it.
 `INDEX_DB` selects the database ([below](#the-database)). `SCORES_JSON` is read
 by the web page ([Outputs](OUTPUTS.md#web-page)).
 
-The SEC refuses a request without a `User-Agent`. [`mise.toml`](../mise.toml)
-sets `SEC_USER_AGENT` to a browser string with no name or email address, so
-every `mise run` task, and every shell where mise is active in this directory,
-has it. Outside mise, export the same value.
+The SEC refuses a request without a declared `User-Agent`, and `www.sec.gov`
+also refuses a browser string. [`mise.toml`](../mise.toml) sets
+`SEC_USER_AGENT` to `equity-analysis research bot`, with no name or email
+address, so every `mise run` task, and every shell where mise is active in this
+directory, has it. Outside mise, export the same value.
 
 The client waits 0.12 seconds between requests to stay under the SEC's limit of
 10 a second.

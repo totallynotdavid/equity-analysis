@@ -147,7 +147,7 @@ def test_a_missing_database_points_to_the_one_beside_it(ran: Path) -> None:
         ("key", [], "SEC_USER_AGENT is not set"),
         ("key", ["--prices", "synthetic"], "SEC_USER_AGENT is not set"),
     ],
-    ids=["no-key", "no-contact", "filings-need-it-with-offline-prices"],
+    ids=["no-key", "no-user-agent", "filings-need-it-with-offline-prices"],
 )
 def test_a_run_missing_a_credential_fails_before_fetching(
     tmp_path: Path,
@@ -175,7 +175,7 @@ def test_a_run_on_a_database_of_other_sources_fails_before_fetching(
     ran: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("TIINGO_API_KEY", "key")
-    monkeypatch.setenv("SEC_USER_AGENT", "Mozilla/5.0 Chrome/155.0.0.0 Safari/537.36")
+    monkeypatch.setenv("SEC_USER_AGENT", "equity-analysis test bot")
     monkeypatch.setattr(
         "index_core.sources.tiingo.BASE_URL", "http://127.0.0.1:1", raising=True
     )
@@ -468,7 +468,7 @@ def test_a_network_failure_ends_with_a_message_not_a_traceback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("TIINGO_API_KEY", "key")
-    monkeypatch.setenv("SEC_USER_AGENT", "Mozilla/5.0 Chrome/155.0.0.0 Safari/537.36")
+    monkeypatch.setenv("SEC_USER_AGENT", "equity-analysis test bot")
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         unused_port = probe.getsockname()[1]

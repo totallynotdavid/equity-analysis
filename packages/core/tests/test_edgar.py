@@ -19,10 +19,7 @@ from index_core.sources.edgar import (
 )
 
 
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
-)
+USER_AGENT = "equity-analysis test bot"
 FIXTURE = Path(__file__).parent / "fixtures" / "acme_companyfacts_handwritten.json"
 RECORDED = Path(__file__).parent / "fixtures" / "recorded_aapl_companyfacts.json"
 CIKS = {"ACME": (1234567,), "BRK-B": (1067983,)}
@@ -289,7 +286,7 @@ def test_a_filing_is_linked_by_its_accession_number() -> None:
     )
 
 
-def test_edgar_sends_the_contact_user_agent_and_a_padded_cik() -> None:
+def test_edgar_sends_the_declared_user_agent_and_a_padded_cik() -> None:
     requests: list[httpx2.Request] = []
 
     _edgar(requests).facts("acme", date(2024, 12, 31))

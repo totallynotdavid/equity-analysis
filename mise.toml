@@ -7,7 +7,7 @@ uv = "0.13.1"
 bun = "1.4.3"
 
 [env]
-SEC_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+SEC_USER_AGENT = "equity-analysis research bot"
 
 [tasks.install]
 description = "Install all workspace packages and dependencies from the lockfiles"
