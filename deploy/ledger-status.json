@@ -1,8 +1,8 @@
 {
-  "chain_verified_up_to": "2026-10-21",
+  "chain_verified_up_to": null,
   "earliest_stamp": null,
-  "forecasts_committed": 1,
-  "live_record": "none matured yet, not before 2027-01-18",
+  "forecasts_committed": 0,
+  "live_record": "no forecasts committed",
   "track_record": {
     "deciles": [],
     "matured": 0,
