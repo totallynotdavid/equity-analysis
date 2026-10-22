@@ -578,6 +578,9 @@ def score(store: Store, universe: Universe) -> ScoresReport:
             train_rows=model.train_rows,
             holdout_rows=model.holdout_rows,
             holdout_auc=model.holdout_auc,
+            holdout_auc_per_date=model.holdout_auc_per_date,
+            holdout_auc_per_date_low=model.holdout_auc_per_date_low,
+            holdout_auc_per_date_high=model.holdout_auc_per_date_high,
         ),
         rows=[
             ScoreRow(ticker=ticker, rank=rank, score=score, prob=prob)

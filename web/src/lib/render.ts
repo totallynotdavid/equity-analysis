@@ -48,3 +48,27 @@ export function leftOutNote(scores: Scores): string {
       : "";
   return `<p class="text-muted-foreground mt-2 text-sm" id="left-out">Left out of the scores: ${shown}${more}.</p>`;
 }
+
+function auc(value: number | null): string {
+  return value === null ? "not available" : value.toFixed(3);
+}
+
+export function modelNote(scores: Scores): string {
+  if (scores.model === undefined) return "";
+  const pooled = auc(scores.model.holdout_auc ?? null);
+  const value = scores.model.holdout_auc_per_date;
+  const low = scores.model.holdout_auc_per_date_low;
+  const high = scores.model.holdout_auc_per_date_high;
+  const perDate =
+    typeof value === "number" &&
+    typeof low === "number" &&
+    typeof high === "number"
+      ? ` Mean per-date holdout AUC ${auc(value)} (95% block-bootstrap interval ${auc(low)}–${auc(high)}).`
+      : "";
+  return (
+    `<p class="text-muted-foreground mt-2 text-sm" id="model-note">` +
+    `Latest fit: pooled holdout AUC ${pooled}.${perDate} ` +
+    "AUC 0.5 is chance; this is an experimental diagnostic, not validation." +
+    "</p>"
+  );
+}

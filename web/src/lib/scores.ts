@@ -20,6 +20,14 @@ export interface Scores {
   price_source: string;
   facts_source: string | null;
   horizon_days: number;
+  model?: {
+    train_rows: number;
+    holdout_rows: number;
+    holdout_auc: number | null;
+    holdout_auc_per_date?: number | null;
+    holdout_auc_per_date_low?: number | null;
+    holdout_auc_per_date_high?: number | null;
+  };
   rows: ScoreRow[];
   left_out?: LeftOut[];
 }

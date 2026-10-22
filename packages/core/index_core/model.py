@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 SNAPSHOT_STEP = 5
 HOLDOUT_FRACTION = 0.2
 MIN_HOLDOUT_DATES = 5
+AUC_BLOCK_DATES = -(-LABEL_SPAN // SNAPSHOT_STEP)
+BOOTSTRAP_DRAWS = 2000
+BOOTSTRAP_SEED = 0
 
 NUM_ROUNDS = 150
 PARAMS = {
@@ -70,6 +73,9 @@ class FittedModel:
     train_rows: int
     holdout_rows: int
     holdout_auc: float | None
+    holdout_auc_per_date: float | None
+    holdout_auc_per_date_low: float | None
+    holdout_auc_per_date_high: float | None
 
     def predict(self, features: pd.DataFrame) -> pd.Series:
         """Probability of beating the benchmark, indexed like `features`."""
@@ -141,11 +147,18 @@ def fit(
     holdout_probabilities = pd.Series(
         np.asarray(booster.predict(holdout[columns])), index=holdout.index
     )
+    holdout_auc = auc(holdout["label"], holdout_probabilities)
+    holdout_auc_per_date, holdout_auc_per_date_low, holdout_auc_per_date_high = (
+        mean_auc_estimate(holdout["label"], holdout_probabilities)
+    )
     return FittedModel(
         booster,
         train_rows=len(train),
         holdout_rows=len(holdout),
-        holdout_auc=auc(holdout["label"], holdout_probabilities),
+        holdout_auc=holdout_auc,
+        holdout_auc_per_date=holdout_auc_per_date,
+        holdout_auc_per_date_low=holdout_auc_per_date_low,
+        holdout_auc_per_date_high=holdout_auc_per_date_high,
     )
 
 
@@ -157,6 +170,42 @@ def auc(truth: pd.Series, score: pd.Series) -> float | None:
         return None
     ranks = score.rank()
     return auc_from_ranks(float(ranks[truth == 1].sum()), positives, negatives)
+
+
+def mean_auc_estimate(
+    truth: pd.Series, score: pd.Series
+) -> tuple[float | None, float | None, float | None]:
+    """Compute equal-weighted per-date AUC and its block-bootstrap interval.
+
+    A block spans the label horizon in snapshot dates, so overlapping labels
+    stay in the same resampled block. Per-date AUCs have equal weight because the
+    screener ranks names within each date.
+    """
+    dates = pd.DatetimeIndex(sorted(truth.index.get_level_values("date").unique()))
+    values = np.asarray(
+        [
+            auc(
+                truth[truth.index.get_level_values("date") == day],
+                score[score.index.get_level_values("date") == day],
+            )
+            for day in dates
+        ],
+        dtype=float,
+    )
+    values = values[~np.isnan(values)]
+    if len(values) == 0:
+        return None, None, None
+
+    block = min(AUC_BLOCK_DATES, len(values))
+    starts = np.arange(len(values) - block + 1)
+    blocks = int(np.ceil(len(values) / block))
+    rng = np.random.default_rng(BOOTSTRAP_SEED)
+    draws = rng.choice(starts, size=(BOOTSTRAP_DRAWS, blocks), replace=True)
+    offsets = np.arange(block)
+    selected = (draws[..., None] + offsets).reshape(BOOTSTRAP_DRAWS, -1)
+    resampled = values[selected[:, : len(values)]].mean(axis=1)
+    low, high = np.percentile(resampled, [2.5, 97.5])
+    return float(values.mean()), float(low), float(high)
 
 
 def auc_from_ranks[T: (float, pd.Series)](rank_sum: T, positives: T, negatives: T) -> T:

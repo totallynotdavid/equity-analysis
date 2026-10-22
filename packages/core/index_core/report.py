@@ -23,6 +23,9 @@ class ModelInfo(BaseModel):
     train_rows: int
     holdout_rows: int
     holdout_auc: float | None
+    holdout_auc_per_date: float | None = None
+    holdout_auc_per_date_low: float | None = None
+    holdout_auc_per_date_high: float | None = None
 
 
 class LeftOut(BaseModel):

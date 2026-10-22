@@ -34,8 +34,18 @@ if TYPE_CHECKING:
 
 DB_VARIABLE = "INDEX_DB"
 
-# Raise it when `_SCHEMA` changes. A database is rebuilt, never migrated.
-SCHEMA_VERSION = 8
+# Additive layout changes upgrade in place. Any other layout change raises.
+SCHEMA_VERSION = 9
+_VERSION_8_RUN_COLUMNS = (
+    "as_of",
+    "universe",
+    "price_source",
+    "facts_source",
+    "horizon_days",
+    "train_rows",
+    "holdout_rows",
+    "holdout_auc",
+)
 
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS meta (
@@ -193,6 +203,9 @@ CREATE TABLE IF NOT EXISTS runs (
     train_rows INTEGER NOT NULL,
     holdout_rows INTEGER NOT NULL,
     holdout_auc REAL,
+    holdout_auc_per_date REAL,
+    holdout_auc_per_date_low REAL,
+    holdout_auc_per_date_high REAL,
     PRIMARY KEY (as_of, universe)
 );
 CREATE TABLE IF NOT EXISTS scores (
@@ -256,16 +269,54 @@ def _iso_days(dates: pd.Series | pd.Index) -> list[str]:
     return text
 
 
-def _require_current_layout(connection: sqlite3.Connection, path: Path) -> None:
-    """Close `connection` and raise `StoreError` if it holds tables made by a
-    layout other than `_SCHEMA`."""
+def _require_current_layout(
+    connection: sqlite3.Connection, path: Path, *, read_only: bool
+) -> None:
+    """Upgrade the additive version, or close and reject an older layout."""
     has_tables = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE name = 'prices'"
     ).fetchone()
     version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if has_tables and version != SCHEMA_VERSION:
+    if not has_tables or version == SCHEMA_VERSION:
+        return
+    if version == 8:
+        if read_only:
+            connection.close()
+            raise StoreError(
+                f"{path} has version 8; open it once writable (eq run) "
+                "to upgrade it in place"
+            )
+        _upgrade_v8_runs(connection, path)
+        return
+    connection.close()
+    raise StoreError(f"{path} has an older layout; delete it and run again")
+
+
+def _upgrade_v8_runs(connection: sqlite3.Connection, path: Path) -> None:
+    """Add the nullable score diagnostics to a version-8 database atomically."""
+    columns = tuple(
+        row[1] for row in connection.execute("PRAGMA table_info(runs)").fetchall()
+    )
+    new_columns = (
+        "holdout_auc_per_date",
+        "holdout_auc_per_date_low",
+        "holdout_auc_per_date_high",
+    )
+    if columns != _VERSION_8_RUN_COLUMNS:
         connection.close()
         raise StoreError(f"{path} has an older layout; delete it and run again")
+    try:
+        connection.execute("BEGIN")
+        for column in new_columns:
+            if column in columns:
+                continue
+            connection.execute(f"ALTER TABLE runs ADD COLUMN {column} REAL")
+        connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        connection.commit()
+    except sqlite3.DatabaseError:
+        connection.rollback()
+        connection.close()
+        raise
 
 
 class Store:
@@ -276,15 +327,15 @@ class Store:
     def open(cls, path: Path, *, read_only: bool = False) -> Self:
         if read_only:
             connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
-            _require_current_layout(connection, path)
+            _require_current_layout(connection, path, read_only=True)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
             connection = sqlite3.connect(path)
+            _require_current_layout(connection, path, read_only=False)
             connection.execute("PRAGMA journal_mode=WAL")
             # A power cut can lose the last commits but never corrupts the
             # file, and a run can be repeated.
             connection.execute("PRAGMA synchronous=NORMAL")
-            _require_current_layout(connection, path)
             connection.executescript(_SCHEMA)
             connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         return cls(connection)
@@ -773,7 +824,7 @@ class Store:
                 )
             self._db.execute("DELETE FROM runs WHERE as_of = ? AND universe = ?", key)
             self._db.execute(
-                "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     *key,
                     report.price_source,
@@ -782,6 +833,9 @@ class Store:
                     report.model.train_rows,
                     report.model.holdout_rows,
                     report.model.holdout_auc,
+                    report.model.holdout_auc_per_date,
+                    report.model.holdout_auc_per_date_low,
+                    report.model.holdout_auc_per_date_high,
                 ),
             )
             self._db.executemany(
@@ -803,7 +857,8 @@ class Store:
         """
         run = self._db.execute(
             "SELECT as_of, universe, price_source, facts_source, horizon_days, "
-            "train_rows, holdout_rows, holdout_auc FROM runs "
+            "train_rows, holdout_rows, holdout_auc, holdout_auc_per_date, "
+            "holdout_auc_per_date_low, holdout_auc_per_date_high FROM runs "
             "WHERE ?1 IS NULL OR universe = ?1 "
             "ORDER BY as_of DESC, rowid DESC LIMIT 1",
             (universe,),
@@ -826,7 +881,14 @@ class Store:
             price_source=run[2],
             facts_source=run[3],
             horizon_days=run[4],
-            model=ModelInfo(train_rows=run[5], holdout_rows=run[6], holdout_auc=run[7]),
+            model=ModelInfo(
+                train_rows=run[5],
+                holdout_rows=run[6],
+                holdout_auc=run[7],
+                holdout_auc_per_date=run[8],
+                holdout_auc_per_date_low=run[9],
+                holdout_auc_per_date_high=run[10],
+            ),
             rows=[
                 ScoreRow(ticker=t, rank=rank, score=score, prob=prob)
                 for t, rank, score, prob in rows

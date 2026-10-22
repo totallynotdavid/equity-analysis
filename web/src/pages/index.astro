@@ -1,7 +1,7 @@
 ---
 import Layout from "@/layouts/Layout.astro";
 import { loadEvidence } from "@/lib/evidence";
-import { leftOutNote, sourcesWarning } from "@/lib/render";
+import { leftOutNote, modelNote, sourcesWarning } from "@/lib/render";
 import {
   buildScreener,
   parseState,
@@ -37,7 +37,11 @@ const json = JSON.stringify(data).replaceAll("<", "\\u003c");
     </p>
 
     {scores !== null && (
-      <Fragment set:html={sourcesWarning(scores) + leftOutNote(scores)} />
+      <Fragment
+        set:html={
+          sourcesWarning(scores) + leftOutNote(scores) + modelNote(scores)
+        }
+      />
     )}
     <Fragment set:html={renderScoreNote(data)} />
 
