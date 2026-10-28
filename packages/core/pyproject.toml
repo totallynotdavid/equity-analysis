@@ -6,7 +6,7 @@ dependencies = [
     "httpx2",
     "lightgbm",
     "numpy",
-    "opentimestamps-client>=0.7.2",
+    "opentimestamps-client>=0.8.0",
     "pandas",
     "pydantic",
 ]
