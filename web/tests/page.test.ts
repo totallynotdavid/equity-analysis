@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Evidence } from "../src/lib/evidence";
@@ -8,6 +5,7 @@ import Evidence_ from "../src/pages/evidence.astro";
 import Index from "../src/pages/index.astro";
 import Method from "../src/pages/method.astro";
 import held from "./fixtures/evidence.json";
+import legacy from "./fixtures/legacy-scores.json";
 import { clearSite, report, scores, site, verdictOf } from "./support";
 
 const HELD = held as unknown as Evidence;
@@ -139,10 +137,7 @@ describe("the screener page", () => {
   });
 
   it("labels the unchanged deploy artifact as pooled and omits new metrics", async () => {
-    const legacy = JSON.parse(
-      readFileSync(resolve(process.cwd(), "../deploy/scores.json"), "utf8"),
-    );
-    site({ scores: legacy, reports });
+    site({ scores: legacy as never, reports });
 
     const html = await render(Index);
 
