@@ -84,7 +84,9 @@ class FakeTiingo:
             adjusted = ["adj_open", "adj_high", "adj_low", "adj_close"]
             bars[adjusted] = bars[adjusted].mul(restate, axis=0)
         bars.insert(0, "date", [f"{day.date()}T00:00:00.000Z" for day in bars.index])
-        body = bars.rename(columns=WIRE_NAMES).to_json(orient="records")
+        body = bars.rename(columns=WIRE_NAMES).to_json(
+            orient="records", date_format="iso"
+        )
         return httpx2.Response(200, content=body)
 
     def _listing_zip(self) -> bytes:
