@@ -247,6 +247,32 @@ def test_a_company_that_moved_registrants_has_the_facts_of_both_with_their_own_c
     assert source.security("ACME").cik == 1234567
 
 
+def test_a_fact_both_registrants_report_is_kept_once_under_the_current_one() -> None:
+    payload = _payload()
+    served = {
+        1234567: json.dumps({**payload, "cik": 1234567}).encode(),
+        7654321: json.dumps({**payload, "cik": 7654321}).encode(),
+    }
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        for cik, content in served.items():
+            if request.url.path == f"/api/xbrl/companyfacts/CIK{cik:010d}.json":
+                return httpx2.Response(200, content=content)
+        return httpx2.Response(404, text="Not Found")
+
+    source = EdgarSource(
+        USER_AGENT,
+        transport=httpx2.MockTransport(respond),
+        min_interval=0.0,
+        ciks={"ACME": (1234567, 7654321)},
+    )
+
+    facts = source.facts("ACME", date(2024, 12, 31))
+
+    assert len(facts) == len(parse_companyfacts(payload, "ACME"))
+    assert set(facts["cik"]) == {1234567}
+
+
 def test_a_security_is_named_by_the_submissions_of_its_company() -> None:
     requests: list[httpx2.Request] = []
 

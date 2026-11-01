@@ -42,6 +42,8 @@ MIN_INTERVAL = 0.12
 # Amendments restate the original, so they count as filings.
 # Other forms do not carry the audited periods these features need.
 FORMS = frozenset({"10-K", "10-K/A", "10-KT", "10-Q", "10-Q/A", "10-QT"})
+# These columns identify one stored fact.
+FACT_KEY = ["concept", "start", "end", "filed", "priority"]
 
 
 @dataclass(frozen=True)
@@ -234,9 +236,7 @@ def parse_companyfacts(payload: object, ticker: str = "?") -> pd.DataFrame:
         .assign(start=pd.NaT)
     )
     frame = pd.concat([frame[~is_shares], per_filing])
-    frame = frame.drop_duplicates(
-        subset=["concept", "start", "end", "filed", "priority"], keep="last"
-    )
+    frame = frame.drop_duplicates(subset=FACT_KEY, keep="last")
     ordered: pd.DataFrame = frame[list(FACT_COLUMNS)].sort_values(
         ["concept", "end", "start", "filed", "priority"]
     )
@@ -289,6 +289,8 @@ class EdgarSource:
             for cik in self._ciks(ticker)
         ]
         frame = frames[0] if len(frames) == 1 else pd.concat(frames)
+        # The first registrant is current and wins duplicate facts.
+        frame = frame.drop_duplicates(FACT_KEY)
         frame = frame.sort_values(["concept", "end", "start", "filed", "priority"])
         frame = frame[frame["filed"] <= pd.Timestamp(end)]
         return frame.reset_index(drop=True)
