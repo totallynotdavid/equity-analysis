@@ -1,7 +1,7 @@
 [project]
-name = "index"
+name = "market-studies"
 version = "1.0.0"
-description = "A monorepo containing the core library, CLI, and API of index."
+description = "Market studies: a US stock scorer and a study of the Lima Stock Exchange on SMV open data."
 requires-python = ">=3.14"
 dependencies = ["index-api"]
 
@@ -12,7 +12,8 @@ index-api = { workspace = true }
 members = [
     "packages/core",
     "packages/cli",
-    "packages/api"
+    "packages/api",
+    "packages/bvl",
 ]
 
 # ==========================================================
@@ -66,7 +67,7 @@ strict = true
 namespace_packages = true
 explicit_package_bases = true
 
-mypy_path = "packages/core:packages/core/tests:packages/cli:packages/api"
+mypy_path = "packages/core:packages/core/tests:packages/cli:packages/api:packages/bvl"
 
 enable_error_code = [
     "ignore-without-code",
@@ -83,7 +84,8 @@ pythonpath = [
   "packages/core",
   "packages/core/tests",
   "packages/cli",
-  "packages/api"
+  "packages/api",
+  "packages/bvl"
 ]
 
 [dependency-groups]

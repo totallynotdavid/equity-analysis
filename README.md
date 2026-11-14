@@ -1,4 +1,19 @@
-# index
+# market-studies
+
+Two market projects in one workspace:
+
+- **bvl** studies the Lima Stock Exchange on the SMV's open data: daily quotes
+  since 1996 and every material event filed since 2010. Each study is a folder
+  with its report, figures and numbers:
+  - [BVL liquidity since 1996](studies/bvl-liquidity/README.md), and the MSCI
+    review of 2015-16.
+  - [Do BVL prices move before a material event is filed?](studies/bvl-disclosure/README.md)
+
+  [docs/BVL.md](docs/BVL.md) describes the data and the `bvl` command.
+
+- **index** scores US stocks. The rest of this page is about index.
+
+## index
 
 index ranks US stocks with a daily score from 1 to 10. The score is the decile
 of a LightGBM model's estimated probability that a stock beats SPY over the next
@@ -32,8 +47,8 @@ brew install libomp             # macOS (not verified)
 Install the workspace once:
 
 ```bash
-git clone https://github.com/totallynotdavid/equity-analysis
-cd equity-analysis
+git clone https://github.com/totallynotdavid/market-studies
+cd market-studies
 uv sync --all-packages
 ```
 

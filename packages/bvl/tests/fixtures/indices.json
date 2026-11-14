@@ -1,0 +1,32 @@
+{
+ "ResponseCode": "0",
+ "Message": "Consulta generada",
+ "Resultado": [
+  {
+   "Fecha": "03/01/2005 04:47:00 p.m.",
+   "Clase": "De Mercado",
+   "Tipo": "IGBVL",
+   "Indice": "Indice General BVL",
+   "ClaseIndice": null,
+   "anterior": 3710.39,
+   "ultimo": 3774.37,
+   "variacion": 1.72,
+   "apertura": 3709.92,
+   "maxima": 3774.7,
+   "minima": 3709.92
+  },
+  {
+   "Fecha": "03/01/2005 04:47:00 p.m.",
+   "Clase": "De Mercado",
+   "Tipo": "ISBVL",
+   "Indice": "Indice Selectivo BVL",
+   "ClaseIndice": null,
+   "anterior": 6159.63,
+   "ultimo": 6290.66,
+   "variacion": 2.13,
+   "apertura": 6158.38,
+   "maxima": 6296.63,
+   "minima": 6158.38
+  }
+ ]
+}

@@ -1,0 +1,48 @@
+{
+ "ResponseCode": "0",
+ "Message": "Consulta generada",
+ "Resultado": [
+  {
+   "FechaCotizacion": "07/11/2025 12:00:00 a.m.",
+   "Valor": "AMD",
+   "Descripcion": "Advanced Micro Devices, Inc.",
+   "FechaAnterior": "06/11/2025",
+   "Cierre_Anterior": 236.1,
+   "Cierre_Actual": 229.0,
+   "Apertura_Actual": 229.0,
+   "Maxima_Actual": 229.0,
+   "Minima_Actual": 229.0,
+   "Promedio_Actual": 229.0,
+   "Monto_Negociado": 38632.3,
+   "FechaRegistro": "07/11/2025 09:59:48 p.m."
+  },
+  {
+   "FechaCotizacion": "07/11/2025 12:00:00 a.m.",
+   "Valor": "CREDITC1",
+   "Descripcion": "Banco De Credito Del Peru",
+   "FechaAnterior": "06/11/2025",
+   "Cierre_Anterior": 4.6,
+   "Cierre_Actual": 4.58,
+   "Apertura_Actual": 4.6,
+   "Maxima_Actual": 4.6,
+   "Minima_Actual": 4.58,
+   "Promedio_Actual": 4.59,
+   "Monto_Negociado": 68319.27,
+   "FechaRegistro": "07/11/2025 09:59:48 p.m."
+  },
+  {
+   "FechaCotizacion": "06/11/2025 12:00:00 a.m.",
+   "Valor": "AMD",
+   "Descripcion": "Advanced Micro Devices, Inc.",
+   "FechaAnterior": "04/11/2025",
+   "Cierre_Anterior": 248.0,
+   "Cierre_Actual": 236.1,
+   "Apertura_Actual": 239.88,
+   "Maxima_Actual": 241.02,
+   "Minima_Actual": 236.1,
+   "Promedio_Actual": 240.84,
+   "Monto_Negociado": 1764401.31072,
+   "FechaRegistro": "07/11/2025 12:01:44 a.m."
+  }
+ ]
+}

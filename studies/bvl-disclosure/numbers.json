@@ -1,0 +1,574 @@
+{
+  "filings": 125068,
+  "filings_in_events": 17653,
+  "events": 13906,
+  "issuers": 147,
+  "tickers": 171,
+  "first_event": "2010-01-04",
+  "last_event": "2026-11-13",
+  "placebo_days": 223920,
+  "measures": {
+    "abs_car_pre5": "|abnormal return|, days -5 to -1",
+    "abs_car_pre1": "|abnormal return|, day -1",
+    "abs_car_event": "|abnormal return|, days 0 to 1",
+    "signed_pre5": "days -5 to -1 return in the direction of days 0 to 1",
+    "signed_pre1": "day -1 return in the direction of days 0 to 1",
+    "log_volume_pre5": "log(1 + amount / baseline), days -5 to -1",
+    "log_volume_event": "log(1 + amount / baseline), days 0 to 1",
+    "traded_pre5": "share of days -5 to -1 with a trade",
+    "traded_event": "share of days 0 to 1 with a trade"
+  },
+  "overall": {
+    "events": 13906,
+    "abs_car_pre5": {
+      "events": 0.02979,
+      "placebo": 0.03132,
+      "excess": -0.00153,
+      "low": -0.00287,
+      "high": -4e-05
+    },
+    "abs_car_pre1": {
+      "events": 0.01171,
+      "placebo": 0.01169,
+      "excess": 2e-05,
+      "low": -0.00087,
+      "high": 0.00123
+    },
+    "abs_car_event": {
+      "events": 0.02034,
+      "placebo": 0.01757,
+      "excess": 0.00277,
+      "low": 0.00171,
+      "high": 0.00407
+    },
+    "signed_pre5": {
+      "events": -0.0004,
+      "placebo": 0.00156,
+      "excess": -0.00196,
+      "low": -0.0037,
+      "high": -0.00044
+    },
+    "signed_pre1": {
+      "events": -0.00024,
+      "placebo": 0.00082,
+      "excess": -0.00106,
+      "low": -0.0023,
+      "high": -0.00019
+    },
+    "log_volume_pre5": {
+      "events": 0.43887,
+      "placebo": 0.44369,
+      "excess": -0.00482,
+      "low": -0.02407,
+      "high": 0.01452
+    },
+    "log_volume_event": {
+      "events": 0.4093,
+      "placebo": 0.35859,
+      "excess": 0.0507,
+      "low": 0.03227,
+      "high": 0.06873
+    },
+    "traded_pre5": {
+      "events": 0.44456,
+      "placebo": 0.39342,
+      "excess": 0.05113,
+      "low": 0.0434,
+      "high": 0.05947
+    },
+    "traded_event": {
+      "events": 0.45689,
+      "placebo": 0.39581,
+      "excess": 0.06109,
+      "low": 0.05159,
+      "high": 0.07027
+    }
+  },
+  "by_topic": {
+    "results": {
+      "events": 4958,
+      "abs_car_event": {
+        "events": 0.02269,
+        "placebo": 0.0175,
+        "excess": 0.0052,
+        "low": 0.00271,
+        "high": 0.00825
+      },
+      "signed_pre5": {
+        "events": -0.00044,
+        "placebo": 0.00245,
+        "excess": -0.00289,
+        "low": -0.00552,
+        "high": -0.00037
+      },
+      "log_volume_pre5": {
+        "events": 0.38518,
+        "placebo": 0.43243,
+        "excess": -0.04725,
+        "low": -0.0775,
+        "high": -0.01857
+      }
+    },
+    "dividends": {
+      "events": 1006,
+      "abs_car_event": {
+        "events": 0.02276,
+        "placebo": 0.01682,
+        "excess": 0.00594,
+        "low": 0.00301,
+        "high": 0.00926
+      },
+      "signed_pre5": {
+        "events": -0.00241,
+        "placebo": 0.00312,
+        "excess": -0.00553,
+        "low": -0.00936,
+        "high": -0.00201
+      },
+      "log_volume_pre5": {
+        "events": 0.43532,
+        "placebo": 0.45556,
+        "excess": -0.02024,
+        "low": -0.07685,
+        "high": 0.03852
+      }
+    },
+    "capital": {
+      "events": 425,
+      "abs_car_event": {
+        "events": 0.0171,
+        "placebo": 0.01751,
+        "excess": -0.00041,
+        "low": -0.00411,
+        "high": 0.00369
+      },
+      "signed_pre5": {
+        "events": -0.00392,
+        "placebo": 0.00259,
+        "excess": -0.00651,
+        "low": -0.01417,
+        "high": 0.00162
+      },
+      "log_volume_pre5": {
+        "events": 0.52347,
+        "placebo": 0.43975,
+        "excess": 0.08372,
+        "low": -0.04265,
+        "high": 0.22402
+      }
+    },
+    "debt": {
+      "events": 406,
+      "abs_car_event": {
+        "events": 0.01783,
+        "placebo": 0.01638,
+        "excess": 0.00145,
+        "low": -0.00142,
+        "high": 0.00461
+      },
+      "signed_pre5": {
+        "events": 0.00238,
+        "placebo": 0.00134,
+        "excess": 0.00103,
+        "low": -0.0036,
+        "high": 0.0059
+      },
+      "log_volume_pre5": {
+        "events": 0.46565,
+        "placebo": 0.51766,
+        "excess": -0.052,
+        "low": -0.12781,
+        "high": 0.02386
+      }
+    },
+    "legal": {
+      "events": 140,
+      "abs_car_event": {
+        "events": 0.02009,
+        "placebo": 0.01816,
+        "excess": 0.00192,
+        "low": -0.00427,
+        "high": 0.00972
+      },
+      "signed_pre5": {
+        "events": 0.00127,
+        "placebo": 0.00186,
+        "excess": -0.0006,
+        "low": -0.01256,
+        "high": 0.01153
+      },
+      "log_volume_pre5": {
+        "events": 0.48757,
+        "placebo": 0.4261,
+        "excess": 0.06147,
+        "low": -0.0631,
+        "high": 0.17978
+      }
+    },
+    "governance": {
+      "events": 3616,
+      "abs_car_event": {
+        "events": 0.02003,
+        "placebo": 0.01733,
+        "excess": 0.0027,
+        "low": 0.00127,
+        "high": 0.00417
+      },
+      "signed_pre5": {
+        "events": -0.0003,
+        "placebo": 0.00287,
+        "excess": -0.00317,
+        "low": -0.00523,
+        "high": -0.00111
+      },
+      "log_volume_pre5": {
+        "events": 0.45833,
+        "placebo": 0.43157,
+        "excess": 0.02676,
+        "low": -0.00797,
+        "high": 0.06063
+      }
+    },
+    "news": {
+      "events": 129,
+      "abs_car_event": {
+        "events": 0.02323,
+        "placebo": 0.01729,
+        "excess": 0.00595,
+        "low": -0.00212,
+        "high": 0.01486
+      },
+      "signed_pre5": {
+        "events": 0.00212,
+        "placebo": 0.00246,
+        "excess": -0.00033,
+        "low": -0.01255,
+        "high": 0.01241
+      },
+      "log_volume_pre5": {
+        "events": 0.53088,
+        "placebo": 0.46625,
+        "excess": 0.06463,
+        "low": -0.10565,
+        "high": 0.23988
+      }
+    },
+    "other": {
+      "events": 5350,
+      "abs_car_event": {
+        "events": 0.02078,
+        "placebo": 0.01823,
+        "excess": 0.00255,
+        "low": 0.00064,
+        "high": 0.00523
+      },
+      "signed_pre5": {
+        "events": -0.00155,
+        "placebo": 0.00034,
+        "excess": -0.0019,
+        "low": -0.00487,
+        "high": 0.00087
+      },
+      "log_volume_pre5": {
+        "events": 0.46854,
+        "placebo": 0.45006,
+        "excess": 0.01848,
+        "low": -0.01062,
+        "high": 0.04841
+      }
+    }
+  },
+  "by_period": {
+    "2010-14": {
+      "events": 4298,
+      "abs_car_event": {
+        "events": 0.01999,
+        "placebo": 0.01803,
+        "excess": 0.00197,
+        "low": 0.00059,
+        "high": 0.00345
+      },
+      "signed_pre5": {
+        "events": -0.00096,
+        "placebo": 0.00054,
+        "excess": -0.0015,
+        "low": -0.00568,
+        "high": 0.00182
+      },
+      "log_volume_pre5": {
+        "events": 0.45671,
+        "placebo": 0.43249,
+        "excess": 0.02423,
+        "low": -0.00696,
+        "high": 0.0596
+      }
+    },
+    "2015-19": {
+      "events": 4514,
+      "abs_car_event": {
+        "events": 0.0199,
+        "placebo": 0.01704,
+        "excess": 0.00286,
+        "low": 0.00046,
+        "high": 0.00593
+      },
+      "signed_pre5": {
+        "events": 0.00098,
+        "placebo": 0.00224,
+        "excess": -0.00125,
+        "low": -0.00332,
+        "high": 0.0008
+      },
+      "log_volume_pre5": {
+        "events": 0.40816,
+        "placebo": 0.42502,
+        "excess": -0.01686,
+        "low": -0.05186,
+        "high": 0.01637
+      }
+    },
+    "2020-26": {
+      "events": 5094,
+      "abs_car_event": {
+        "events": 0.02111,
+        "placebo": 0.01752,
+        "excess": 0.0036,
+        "low": 0.00211,
+        "high": 0.00525
+      },
+      "signed_pre5": {
+        "events": -0.00108,
+        "placebo": 0.00216,
+        "excess": -0.00324,
+        "low": -0.00563,
+        "high": -0.00088
+      },
+      "log_volume_pre5": {
+        "events": 0.44976,
+        "placebo": 0.47478,
+        "excess": -0.02503,
+        "low": -0.05579,
+        "high": 0.00954
+      }
+    }
+  },
+  "by_gap": {
+    "same day": {
+      "events": 10782,
+      "abs_car_event": {
+        "events": 0.0206,
+        "placebo": 0.01726,
+        "excess": 0.00335,
+        "low": 0.00207,
+        "high": 0.00484
+      },
+      "signed_pre5": {
+        "events": -0.00102,
+        "placebo": 0.00194,
+        "excess": -0.00296,
+        "low": -0.005,
+        "high": -0.00117
+      },
+      "log_volume_pre5": {
+        "events": 0.43324,
+        "placebo": 0.44054,
+        "excess": -0.0073,
+        "low": -0.02957,
+        "high": 0.01228
+      }
+    },
+    "next day": {
+      "events": 1869,
+      "abs_car_event": {
+        "events": 0.01892,
+        "placebo": 0.01826,
+        "excess": 0.00066,
+        "low": -0.00122,
+        "high": 0.00252
+      },
+      "signed_pre5": {
+        "events": 0.00102,
+        "placebo": -0.00026,
+        "excess": 0.00128,
+        "low": -0.00268,
+        "high": 0.00468
+      },
+      "log_volume_pre5": {
+        "events": 0.47377,
+        "placebo": 0.44938,
+        "excess": 0.02439,
+        "low": -0.02502,
+        "high": 0.07671
+      }
+    },
+    "2 to 7 days": {
+      "events": 677,
+      "abs_car_event": {
+        "events": 0.02007,
+        "placebo": 0.01894,
+        "excess": 0.00112,
+        "low": -0.00217,
+        "high": 0.0045
+      },
+      "signed_pre5": {
+        "events": 0.00138,
+        "placebo": 0.0009,
+        "excess": 0.00048,
+        "low": -0.00498,
+        "high": 0.00584
+      },
+      "log_volume_pre5": {
+        "events": 0.40122,
+        "placebo": 0.44832,
+        "excess": -0.04709,
+        "low": -0.12135,
+        "high": 0.0315
+      }
+    },
+    "8+ days": {
+      "events": 492,
+      "abs_car_event": {
+        "events": 0.02307,
+        "placebo": 0.01937,
+        "excess": 0.00369,
+        "low": -0.00039,
+        "high": 0.00754
+      },
+      "signed_pre5": {
+        "events": 0.00317,
+        "placebo": 0.00299,
+        "excess": 0.00017,
+        "low": -0.00658,
+        "high": 0.00661
+      },
+      "log_volume_pre5": {
+        "events": 0.48418,
+        "placebo": 0.4815,
+        "excess": 0.00268,
+        "low": -0.10347,
+        "high": 0.10544
+      }
+    }
+  },
+  "gap_shares_by_year": [
+    {
+      "year": 2010,
+      "same day": 0.38,
+      "next day": 0.414,
+      "2 to 7 days": 0.157,
+      "8+ days": 0.05
+    },
+    {
+      "year": 2011,
+      "same day": 0.351,
+      "next day": 0.428,
+      "2 to 7 days": 0.17,
+      "8+ days": 0.051
+    },
+    {
+      "year": 2012,
+      "same day": 0.362,
+      "next day": 0.449,
+      "2 to 7 days": 0.138,
+      "8+ days": 0.051
+    },
+    {
+      "year": 2013,
+      "same day": 0.394,
+      "next day": 0.437,
+      "2 to 7 days": 0.121,
+      "8+ days": 0.048
+    },
+    {
+      "year": 2014,
+      "same day": 0.64,
+      "next day": 0.251,
+      "2 to 7 days": 0.086,
+      "8+ days": 0.023
+    },
+    {
+      "year": 2015,
+      "same day": 0.914,
+      "next day": 0.036,
+      "2 to 7 days": 0.019,
+      "8+ days": 0.03
+    },
+    {
+      "year": 2016,
+      "same day": 0.934,
+      "next day": 0.026,
+      "2 to 7 days": 0.018,
+      "8+ days": 0.022
+    },
+    {
+      "year": 2017,
+      "same day": 0.933,
+      "next day": 0.025,
+      "2 to 7 days": 0.01,
+      "8+ days": 0.032
+    },
+    {
+      "year": 2018,
+      "same day": 0.953,
+      "next day": 0.007,
+      "2 to 7 days": 0.008,
+      "8+ days": 0.033
+    },
+    {
+      "year": 2019,
+      "same day": 0.952,
+      "next day": 0.018,
+      "2 to 7 days": 0.003,
+      "8+ days": 0.026
+    },
+    {
+      "year": 2020,
+      "same day": 0.951,
+      "next day": 0.017,
+      "2 to 7 days": 0.007,
+      "8+ days": 0.025
+    },
+    {
+      "year": 2021,
+      "same day": 0.932,
+      "next day": 0.016,
+      "2 to 7 days": 0.014,
+      "8+ days": 0.038
+    },
+    {
+      "year": 2022,
+      "same day": 0.943,
+      "next day": 0.016,
+      "2 to 7 days": 0.013,
+      "8+ days": 0.028
+    },
+    {
+      "year": 2023,
+      "same day": 0.947,
+      "next day": 0.012,
+      "2 to 7 days": 0.004,
+      "8+ days": 0.037
+    },
+    {
+      "year": 2024,
+      "same day": 0.943,
+      "next day": 0.015,
+      "2 to 7 days": 0.009,
+      "8+ days": 0.033
+    },
+    {
+      "year": 2025,
+      "same day": 0.943,
+      "next day": 0.016,
+      "2 to 7 days": 0.009,
+      "8+ days": 0.033
+    },
+    {
+      "year": 2026,
+      "same day": 0.921,
+      "next day": 0.018,
+      "2 to 7 days": 0.014,
+      "8+ days": 0.047
+    }
+  ]
+}
