@@ -1,0 +1,199 @@
+{
+  "status": "experimental, not validated",
+  "as_of": "2026-11-13",
+  "universe": "demo30",
+  "price_source": "tiingo",
+  "facts_source": "edgar",
+  "horizon_days": 63,
+  "model": {
+    "train_rows": 15981,
+    "holdout_rows": 4110,
+    "holdout_auc": 0.4893677334666086,
+    "holdout_auc_per_date": 0.4940872798986445,
+    "holdout_auc_per_date_low": 0.4331882340986972,
+    "holdout_auc_per_date_high": 0.550390964969708
+  },
+  "rows": [
+    {
+      "ticker": "ADBE",
+      "rank": 1,
+      "score": 10,
+      "prob": 0.7320250388207157
+    },
+    {
+      "ticker": "PEP",
+      "rank": 2,
+      "score": 10,
+      "prob": 0.7313737773923256
+    },
+    {
+      "ticker": "V",
+      "rank": 3,
+      "score": 10,
+      "prob": 0.6296258463901475
+    },
+    {
+      "ticker": "META",
+      "rank": 4,
+      "score": 9,
+      "prob": 0.6180380959119779
+    },
+    {
+      "ticker": "CRM",
+      "rank": 5,
+      "score": 9,
+      "prob": 0.6156022193429436
+    },
+    {
+      "ticker": "MCD",
+      "rank": 6,
+      "score": 9,
+      "prob": 0.6060984026526651
+    },
+    {
+      "ticker": "CSCO",
+      "rank": 7,
+      "score": 8,
+      "prob": 0.5917682542203818
+    },
+    {
+      "ticker": "HD",
+      "rank": 8,
+      "score": 8,
+      "prob": 0.5814101615103023
+    },
+    {
+      "ticker": "AAPL",
+      "rank": 9,
+      "score": 8,
+      "prob": 0.5771755727580555
+    },
+    {
+      "ticker": "MA",
+      "rank": 10,
+      "score": 7,
+      "prob": 0.5706970852309715
+    },
+    {
+      "ticker": "MRK",
+      "rank": 11,
+      "score": 7,
+      "prob": 0.566881604003705
+    },
+    {
+      "ticker": "DIS",
+      "rank": 12,
+      "score": 7,
+      "prob": 0.5619739687487728
+    },
+    {
+      "ticker": "UNH",
+      "rank": 13,
+      "score": 6,
+      "prob": 0.560157273441825
+    },
+    {
+      "ticker": "NKE",
+      "rank": 14,
+      "score": 6,
+      "prob": 0.547378490812575
+    },
+    {
+      "ticker": "WMT",
+      "rank": 15,
+      "score": 6,
+      "prob": 0.542506560721225
+    },
+    {
+      "ticker": "CVX",
+      "rank": 16,
+      "score": 5,
+      "prob": 0.5251371069516939
+    },
+    {
+      "ticker": "XOM",
+      "rank": 17,
+      "score": 5,
+      "prob": 0.5093335966429092
+    },
+    {
+      "ticker": "GOOGL",
+      "rank": 18,
+      "score": 5,
+      "prob": 0.5039619392622487
+    },
+    {
+      "ticker": "TMO",
+      "rank": 19,
+      "score": 4,
+      "prob": 0.5031318566618556
+    },
+    {
+      "ticker": "LLY",
+      "rank": 20,
+      "score": 4,
+      "prob": 0.4998413440372374
+    },
+    {
+      "ticker": "PG",
+      "rank": 21,
+      "score": 4,
+      "prob": 0.49797394924767996
+    },
+    {
+      "ticker": "BAC",
+      "rank": 22,
+      "score": 3,
+      "prob": 0.4839108673322014
+    },
+    {
+      "ticker": "MSFT",
+      "rank": 23,
+      "score": 3,
+      "prob": 0.48075941546277967
+    },
+    {
+      "ticker": "COST",
+      "rank": 24,
+      "score": 3,
+      "prob": 0.45905350375643506
+    },
+    {
+      "ticker": "ABBV",
+      "rank": 25,
+      "score": 2,
+      "prob": 0.43172276927846004
+    },
+    {
+      "ticker": "KO",
+      "rank": 26,
+      "score": 2,
+      "prob": 0.4311453125655409
+    },
+    {
+      "ticker": "AMZN",
+      "rank": 27,
+      "score": 2,
+      "prob": 0.41478650909444664
+    },
+    {
+      "ticker": "JNJ",
+      "rank": 28,
+      "score": 1,
+      "prob": 0.4094929254505254
+    },
+    {
+      "ticker": "NVDA",
+      "rank": 29,
+      "score": 1,
+      "prob": 0.3891108746689343
+    },
+    {
+      "ticker": "JPM",
+      "rank": 30,
+      "score": 1,
+      "prob": 0.379473390036685
+    }
+  ],
+  "left_out": []
+}
