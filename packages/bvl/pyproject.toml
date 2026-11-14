@@ -1,0 +1,17 @@
+[project]
+name = "bvl"
+version = "0.1.0"
+description = "Lima Stock Exchange (BVL) data from the SMV open API, and the studies built on it."
+dependencies = [
+    "httpx2",
+    "matplotlib",
+    "numpy",
+    "pandas",
+]
+
+[project.scripts]
+bvl = "bvl.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

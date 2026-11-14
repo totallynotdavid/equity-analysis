@@ -1,0 +1,58 @@
+{
+ "ResponseCode": "0",
+ "Message": "Consulta generada",
+ "Resultado": [
+  {
+   "RPJ": "B80077",
+   "RUC": "20101045995",
+   "Numero_Expediente": "2026048582",
+   "Empresa": "INVERSIONES CENTENARIO S.A.A.",
+   "Tipo_Hecho": "1. CONVOCATORIA A JUNTAS DE ACCIONISTAS, JUNTA DE ACREEDORES O ASAMBLEA DE OBLIGACIONISTAS, Y ACUERDOS ADOPTADOS.",
+   "Fecha_Acuerdo_Hecho": "30/10/2026",
+   "Fecha_Presentacion": "30/10/2026 16:45",
+   "Descripcion_Hecho": "En Sesión de Directorio se acordó la distribución de dividendos",
+   "Sector": "DIVERSOS",
+   "SubSector": "INMOBILIARIA",
+   "Tipo_Empresa": "EMPRESAS EMISORAS"
+  },
+  {
+   "RPJ": "B80077",
+   "RUC": "20101045995",
+   "Numero_Expediente": "2026048582",
+   "Empresa": "INVERSIONES CENTENARIO S.A.A.",
+   "Tipo_Hecho": "14. DISTRIBUCIÓN O APLICACIÓN DE UTILIDADES.",
+   "Fecha_Acuerdo_Hecho": "30/10/2026",
+   "Fecha_Presentacion": "30/10/2026 16:45",
+   "Descripcion_Hecho": "En Sesión de Directorio se acordó la distribución de dividendos",
+   "Sector": "DIVERSOS",
+   "SubSector": "INMOBILIARIA",
+   "Tipo_Empresa": "EMPRESAS EMISORAS"
+  },
+  {
+   "RPJ": "B80077",
+   "RUC": "20101045995",
+   "Numero_Expediente": "2026048582",
+   "Empresa": "INVERSIONES CENTENARIO S.A.A.",
+   "Tipo_Hecho": "14. DISTRIBUCIÓN O APLICACIÓN DE UTILIDADES.",
+   "Fecha_Acuerdo_Hecho": "30/10/2026",
+   "Fecha_Presentacion": "30/10/2026 16:45",
+   "Descripcion_Hecho": "En Sesión de Directorio se acordó la distribución de dividendos",
+   "Sector": "DIVERSOS",
+   "SubSector": "INMOBILIARIA",
+   "Tipo_Empresa": "EMPRESAS EMISORAS"
+  },
+  {
+   "RPJ": "CI0003",
+   "RUC": "20370146994",
+   "Numero_Expediente": "2026048824",
+   "Empresa": "CORPORACION ACEROS AREQUIPA S.A.",
+   "Tipo_Hecho": "OTROS HECHOS DE IMPORTANCIA",
+   "Fecha_Acuerdo_Hecho": "31/10/2026",
+   "Fecha_Presentacion": "31/10/2026 00:19",
+   "Descripcion_Hecho": "Reporte de Resultados Consolidados 3T 2026",
+   "Sector": "INDUSTRIALES",
+   "SubSector": "MANUFACTURA METÁLICA Y MECÁNICA",
+   "Tipo_Empresa": "EMPRESAS EMISORAS"
+  }
+ ]
+}
