@@ -1,0 +1,349 @@
+{
+  "first_day": "1996-01-02",
+  "last_day": "2026-11-13",
+  "local_tickers": 619,
+  "stock_months": 19029,
+  "coverage_by_year": [
+    {
+      "year": 1996,
+      "stocks": 239,
+      "median_coverage": 0.263,
+      "daily_share": 0.213,
+      "rare_share": 0.435
+    },
+    {
+      "year": 1997,
+      "stocks": 235,
+      "median_coverage": 0.301,
+      "daily_share": 0.196,
+      "rare_share": 0.434
+    },
+    {
+      "year": 1998,
+      "stocks": 205,
+      "median_coverage": 0.184,
+      "daily_share": 0.176,
+      "rare_share": 0.507
+    },
+    {
+      "year": 1999,
+      "stocks": 208,
+      "median_coverage": 0.209,
+      "daily_share": 0.216,
+      "rare_share": 0.49
+    },
+    {
+      "year": 2000,
+      "stocks": 176,
+      "median_coverage": 0.068,
+      "daily_share": 0.108,
+      "rare_share": 0.693
+    },
+    {
+      "year": 2001,
+      "stocks": 163,
+      "median_coverage": 0.057,
+      "daily_share": 0.061,
+      "rare_share": 0.748
+    },
+    {
+      "year": 2002,
+      "stocks": 165,
+      "median_coverage": 0.058,
+      "daily_share": 0.061,
+      "rare_share": 0.715
+    },
+    {
+      "year": 2003,
+      "stocks": 161,
+      "median_coverage": 0.108,
+      "daily_share": 0.099,
+      "rare_share": 0.596
+    },
+    {
+      "year": 2004,
+      "stocks": 158,
+      "median_coverage": 0.116,
+      "daily_share": 0.101,
+      "rare_share": 0.601
+    },
+    {
+      "year": 2005,
+      "stocks": 163,
+      "median_coverage": 0.139,
+      "daily_share": 0.135,
+      "rare_share": 0.583
+    },
+    {
+      "year": 2006,
+      "stocks": 162,
+      "median_coverage": 0.198,
+      "daily_share": 0.198,
+      "rare_share": 0.5
+    },
+    {
+      "year": 2007,
+      "stocks": 158,
+      "median_coverage": 0.317,
+      "daily_share": 0.272,
+      "rare_share": 0.405
+    },
+    {
+      "year": 2008,
+      "stocks": 162,
+      "median_coverage": 0.191,
+      "daily_share": 0.204,
+      "rare_share": 0.506
+    },
+    {
+      "year": 2009,
+      "stocks": 155,
+      "median_coverage": 0.206,
+      "daily_share": 0.187,
+      "rare_share": 0.49
+    },
+    {
+      "year": 2010,
+      "stocks": 147,
+      "median_coverage": 0.185,
+      "daily_share": 0.204,
+      "rare_share": 0.503
+    },
+    {
+      "year": 2011,
+      "stocks": 148,
+      "median_coverage": 0.181,
+      "daily_share": 0.182,
+      "rare_share": 0.534
+    },
+    {
+      "year": 2012,
+      "stocks": 151,
+      "median_coverage": 0.159,
+      "daily_share": 0.185,
+      "rare_share": 0.556
+    },
+    {
+      "year": 2013,
+      "stocks": 130,
+      "median_coverage": 0.124,
+      "daily_share": 0.162,
+      "rare_share": 0.615
+    },
+    {
+      "year": 2014,
+      "stocks": 125,
+      "median_coverage": 0.105,
+      "daily_share": 0.16,
+      "rare_share": 0.64
+    },
+    {
+      "year": 2015,
+      "stocks": 123,
+      "median_coverage": 0.077,
+      "daily_share": 0.146,
+      "rare_share": 0.691
+    },
+    {
+      "year": 2016,
+      "stocks": 132,
+      "median_coverage": 0.098,
+      "daily_share": 0.174,
+      "rare_share": 0.674
+    },
+    {
+      "year": 2017,
+      "stocks": 137,
+      "median_coverage": 0.108,
+      "daily_share": 0.204,
+      "rare_share": 0.613
+    },
+    {
+      "year": 2018,
+      "stocks": 127,
+      "median_coverage": 0.072,
+      "daily_share": 0.142,
+      "rare_share": 0.654
+    },
+    {
+      "year": 2019,
+      "stocks": 117,
+      "median_coverage": 0.064,
+      "daily_share": 0.137,
+      "rare_share": 0.675
+    },
+    {
+      "year": 2020,
+      "stocks": 109,
+      "median_coverage": 0.051,
+      "daily_share": 0.128,
+      "rare_share": 0.697
+    },
+    {
+      "year": 2021,
+      "stocks": 106,
+      "median_coverage": 0.076,
+      "daily_share": 0.16,
+      "rare_share": 0.632
+    },
+    {
+      "year": 2022,
+      "stocks": 94,
+      "median_coverage": 0.097,
+      "daily_share": 0.17,
+      "rare_share": 0.606
+    },
+    {
+      "year": 2023,
+      "stocks": 93,
+      "median_coverage": 0.093,
+      "daily_share": 0.108,
+      "rare_share": 0.677
+    },
+    {
+      "year": 2024,
+      "stocks": 102,
+      "median_coverage": 0.091,
+      "daily_share": 0.157,
+      "rare_share": 0.667
+    },
+    {
+      "year": 2025,
+      "stocks": 100,
+      "median_coverage": 0.132,
+      "daily_share": 0.16,
+      "rare_share": 0.63
+    }
+  ],
+  "illiquidity_by_year": [
+    {
+      "year": 1996,
+      "effect": 0.077
+    },
+    {
+      "year": 1997,
+      "effect": -0.141
+    },
+    {
+      "year": 1998,
+      "effect": 0.548
+    },
+    {
+      "year": 1999,
+      "effect": -0.151
+    },
+    {
+      "year": 2000,
+      "effect": 0.399
+    },
+    {
+      "year": 2001,
+      "effect": 0.912
+    },
+    {
+      "year": 2002,
+      "effect": 1.032
+    },
+    {
+      "year": 2003,
+      "effect": 0.641
+    },
+    {
+      "year": 2004,
+      "effect": 0.509
+    },
+    {
+      "year": 2005,
+      "effect": 0.244
+    },
+    {
+      "year": 2006,
+      "effect": -0.144
+    },
+    {
+      "year": 2007,
+      "effect": -0.861
+    },
+    {
+      "year": 2008,
+      "effect": -0.152
+    },
+    {
+      "year": 2009,
+      "effect": 0.024
+    },
+    {
+      "year": 2010,
+      "effect": -0.674
+    },
+    {
+      "year": 2011,
+      "effect": -0.467
+    },
+    {
+      "year": 2012,
+      "effect": -0.723
+    },
+    {
+      "year": 2013,
+      "effect": -0.464
+    },
+    {
+      "year": 2014,
+      "effect": -0.528
+    },
+    {
+      "year": 2015,
+      "effect": 0.205
+    },
+    {
+      "year": 2016,
+      "effect": 0.109
+    },
+    {
+      "year": 2017,
+      "effect": -0.408
+    },
+    {
+      "year": 2018,
+      "effect": -0.209
+    },
+    {
+      "year": 2019,
+      "effect": -0.081
+    },
+    {
+      "year": 2020,
+      "effect": 0.112
+    },
+    {
+      "year": 2021,
+      "effect": 0.084
+    },
+    {
+      "year": 2022,
+      "effect": 0.265
+    },
+    {
+      "year": 2023,
+      "effect": 0.273
+    },
+    {
+      "year": 2024,
+      "effect": -0.044
+    },
+    {
+      "year": 2025,
+      "effect": -0.239
+    },
+    {
+      "year": 2026,
+      "effect": -0.147
+    }
+  ],
+  "msci": {
+    "before_2014_08_to_2015_07": -0.269,
+    "review_2015_08_to_2016_06": 0.504,
+    "after_2016_07_to_2017_06": -0.218
+  }
+}
