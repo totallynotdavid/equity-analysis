@@ -1,5 +1,7 @@
 # Manual
 
+Documents 1 to 10 cover index, the US stock scorer. Document 11 covers bvl.
+
 1. [CLI](CLI.md): the `eq` commands, universe files, API keys and the database.
 2. [Outputs](OUTPUTS.md): `scores.json`, `evidence.json`, the API and the web
    page.
@@ -14,6 +16,8 @@
 9. [Deploy](DEPLOY.md): the live page and API, and how a push redeploys them.
 10. [Ledger](LEDGER.md): immutable forecasts, timestamps and the independent
     audit.
+11. [bvl](BVL.md): the Lima Stock Exchange panel from SMV open data, the `bvl`
+    command and its studies.
 
 To set up a checkout, run the checks or change the code, read
 [Contributing](../.github/CONTRIBUTING.md). To install and run once, read the

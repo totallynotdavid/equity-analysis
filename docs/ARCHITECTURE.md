@@ -1,14 +1,19 @@
 # Architecture
 
-index is a
-[uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) of three
-Python packages and an Astro site.
+market-studies is a
+[uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) of four
+Python packages and an Astro site. Two projects share it: index, a US stock
+scorer with its API, page and ledger, and bvl, studies of the Lima Stock
+Exchange on SMV open data. They share tooling and import nothing from each
+other.
 
 ```text
 ├── packages/
 │   ├── core/   index-core: sources, store, features, model, backtest
 │   ├── cli/    index-cli: the `eq` command
-│   └── api/    index-api: read-only FastAPI over the SQLite file
+│   ├── api/    index-api: read-only FastAPI over the SQLite file
+│   └── bvl/    bvl: the SMV client, the BVL panel and the `bvl` command
+├── studies/    one folder per bvl study: README, figures and numbers.json
 ├── api/        Vercel entrypoint that serves index-api under /api
 ├── universes/  universe files (ticker, start, end) and build_sp500.py
 ├── web/        Astro site: the screener, the ticker pages, /evidence, /method
@@ -21,6 +26,8 @@ Python packages and an Astro site.
 ├── vercel.json      how Vercel builds the page and routes /api
 └── mise.toml        tool versions and tasks
 ```
+
+[bvl](BVL.md) describes the bvl package. The rest of this document is index.
 
 `index-core` holds all the logic as functions over data and has no interface.
 `index-cli` and `index-api` call into it and add arguments, formatting and HTTP.
